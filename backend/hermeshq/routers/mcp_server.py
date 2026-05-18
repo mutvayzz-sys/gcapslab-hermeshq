@@ -191,9 +191,15 @@ async def _list_allowed_agents(
 async def _wait_for_task_completion(
     db: AsyncSession, task_id: str, max_wait: float = 60.0, poll_interval: float = 1.0,
 ) -> Task | None:
-    """Poll the task until it reaches a terminal state or *max_wait* expires."""
+    """Poll the task until it reaches a terminal state or *max_wait* expires.
+
+    Uses ``db.expire_all()`` before each read to bypass SQLAlchemy's identity
+    map cache so that updates committed by the supervisor in a separate session
+    are visible.
+    """
     deadline = time.monotonic() + max_wait
     while time.monotonic() < deadline:
+        await db.expire_all()
         task = await db.get(Task, task_id)
         if task is None:
             return None
@@ -204,6 +210,7 @@ async def _wait_for_task_completion(
             break
         await asyncio.sleep(min(poll_interval, remaining))
     # One final read
+    await db.expire_all()
     return await db.get(Task, task_id)
 
 # ---------------------------------------------------------------------------
