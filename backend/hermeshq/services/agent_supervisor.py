@@ -583,10 +583,14 @@ class AgentSupervisor:
         task: Task,
         target_agent_id: str,
     ) -> None:
-        """Find generated image in operator workspace and apply as avatar."""
+        """Find generated image in operator workspace and apply as avatar.
+
+        Uses the avatar service layer (save_avatar_bytes) instead of
+        writing directly to the database or filesystem.
+        """
         from pathlib import Path
         from hermeshq.config import get_settings
-        from hermeshq.services.avatar import build_avatar_dir, ALLOWED_AVATAR_TYPES, AVATAR_MEDIA_TYPES
+        from hermeshq.services.avatar import save_avatar_bytes, AVATAR_MEDIA_TYPES
 
         settings = get_settings()
 
@@ -608,30 +612,21 @@ class AgentSupervisor:
         # Take the most recent image
         source = candidates[0]
 
-        # Copy to target agent's avatar directory
-        avatar_base = Path(settings.agent_assets_root) if settings.agent_assets_root else Path(settings.workspaces_root) / "_agent_assets"
-        avatar_dir = build_avatar_dir(avatar_base, target_agent_id)
-        avatar_dir.mkdir(parents=True, exist_ok=True)
-
-        # Clean existing avatars
-        for existing in avatar_dir.iterdir():
-            if existing.is_file() or existing.is_symlink():
-                existing.unlink()
-
-        # Determine filename with proper extension
+        # Resolve content type from extension
         ext = source.suffix.lower()
-        if ext in (".jpeg",):
+        if ext == ".jpeg":
             ext = ".jpg"
-        dest = avatar_dir / f"avatar{ext}"
+        content_type = AVATAR_MEDIA_TYPES.get(ext, "image/png")
 
-        # Copy file
-        import shutil
-        shutil.copy2(source, dest)
+        # Use the avatar service layer to save
+        avatar_base = Path(settings.agent_assets_root) if settings.agent_assets_root else Path(settings.workspaces_root) / "_agent_assets"
+        content = source.read_bytes()
+        filename = save_avatar_bytes(avatar_base, target_agent_id, content, content_type)
 
         # Update target agent in DB
         target_agent = await session.get(Agent, target_agent_id)
         if target_agent:
-            target_agent.avatar_filename = dest.name
+            target_agent.avatar_filename = filename
             await session.commit()
 
             await self._log(
@@ -639,7 +634,7 @@ class AgentSupervisor:
                 "agent.avatar.generated",
                 agent=target_agent,
                 task=task,
-                message=f"AI avatar applied from operator task",
+                message="AI avatar applied from operator task",
             )
 
         # Publish event so frontend refreshes

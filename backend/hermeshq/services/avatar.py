@@ -93,6 +93,30 @@ async def validate_and_save_avatar(
     return filename
 
 
+def save_avatar_bytes(
+    base_path: Path,
+    entity_id: str,
+    content: bytes,
+    content_type: str = "image/png",
+) -> str:
+    """Save raw bytes as an avatar file (no UploadFile dependency).
+
+    Returns the filename (e.g. ``avatar.png``) of the saved file.
+    """
+    extension = ALLOWED_AVATAR_TYPES.get(content_type, ".png")
+    avatar_dir = build_avatar_dir(base_path, entity_id)
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove any existing avatar files before saving the new one
+    for existing in avatar_dir.iterdir():
+        if existing.is_file() or existing.is_symlink():
+            existing.unlink()
+
+    filename = f"avatar{extension}"
+    (avatar_dir / filename).write_bytes(content)
+    return filename
+
+
 def resolve_media_type(avatar_path: Path) -> str:
     """Return the MIME type for an avatar path based on extension."""
     return AVATAR_MEDIA_TYPES.get(avatar_path.suffix.lower(), "application/octet-stream")
