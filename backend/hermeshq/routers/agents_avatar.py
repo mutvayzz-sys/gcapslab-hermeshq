@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import select as sql_select
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from hermeshq.models.task import Task
+from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
@@ -18,6 +22,7 @@ from hermeshq.services.avatar import (
     resolve_media_type,
     validate_and_save_avatar,
 )
+from hermeshq.services.avatar_generator import generate_avatar
 
 from hermeshq.routers.agents_shared import (
     _agent_avatar_base,
@@ -37,6 +42,101 @@ async def get_agent_avatar(agent_id: str, db: AsyncSession = Depends(get_db_sess
     if not avatar_path or not avatar_path.exists():
         raise HTTPException(status_code=404, detail="Avatar not found")
     return FileResponse(avatar_path, media_type=resolve_media_type(avatar_path))
+
+
+@router.post("/{agent_id}/avatar/generate-ai")
+async def generate_ai_avatar(
+    agent_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Request the HQ Operator to generate an AI avatar for the agent."""
+    agent = await ensure_agent_access(db, current_user, agent_id)
+
+    # Find HQ Operator agent
+    operator_result = await db.execute(
+        sql_select(Agent).where(Agent.slug == "hq-operator").limit(1)
+    )
+    operator = operator_result.scalar_one_or_none()
+    if not operator:
+        raise HTTPException(
+            status_code=404,
+            detail="HQ Operator agent not found. Create an agent with slug 'hq-operator' first.",
+        )
+
+    agent_name = agent.friendly_name or agent.name or "Agent"
+    agent_desc = agent.description or ""
+
+    prompt = (
+        f"Generate a unique avatar image for the agent named '{agent_name}'."
+        f"{' Description: ' + agent_desc + '.' if agent_desc else ''}"
+        f" The image should be a simple, clean, modern icon-style avatar"
+        f" suitable for a chatbot or AI assistant."
+        f" Use warm, professional colors."
+        f" Save the image to the agent's avatar directory."
+        f" Target agent ID: {agent_id}"
+    )
+
+    task = Task(
+        agent_id=operator.id,
+        title=f"Generate AI avatar for {agent_name}",
+        prompt=prompt,
+        priority=3,
+        metadata_json={
+            "avatar_generation": True,
+            "target_agent_id": agent_id,
+        },
+    )
+    task.board_column = runtime_status_to_board_column(task.status)
+    task.board_order = next_board_order()
+    task.board_manual = False
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    # Submit task if operator is running
+    if operator.status == "running":
+        try:
+            await request.app.state.supervisor.submit_task(task.id)
+        except Exception:
+            pass  # Task will be picked up on next start
+
+    return {
+        "status": "submitted",
+        "task_id": task.id,
+        "operator_id": operator.id,
+        "operator_status": operator.status,
+    }
+
+
+@router.post("/{agent_id}/avatar/generate", response_model=AgentRead)
+async def generate_agent_avatar(
+    agent_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> AgentRead:
+    """Generate a deterministic avatar from the agent's name (gradient + initials)."""
+    agent = await ensure_agent_access(db, current_user, agent_id)
+    avatar_base = _agent_avatar_base()
+    content, filename = generate_avatar(agent.friendly_name or agent.name or "Agent")
+    
+    from hermeshq.services.avatar import build_avatar_dir
+    avatar_dir = build_avatar_dir(avatar_base, agent_id)
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Remove existing avatar files
+    for existing in avatar_dir.iterdir():
+        if existing.is_file() or existing.is_symlink():
+            existing.unlink()
+    
+    (avatar_dir / filename).write_bytes(content)
+    agent.avatar_filename = filename
+    await db.commit()
+    await db.refresh(agent)
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
+    return _serialize_agent(request, result.scalar_one())
 
 
 @router.post("/{agent_id}/avatar", response_model=AgentRead)

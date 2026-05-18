@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { useAgent, useAgentAction, useDeleteAgent, useDeleteAgentAvatar, useRunAgentIntegrationAction, useTestAgentIntegration, useUpdateAgent, useUploadAgentAvatar } from "../api/agents";
+import { useAgent, useAgentAction, useDeleteAgent, useDeleteAgentAvatar, useGenerateAIAgentAvatar, useGenerateAgentAvatar, useRunAgentIntegrationAction, useTestAgentIntegration, useUpdateAgent, useUploadAgentAvatar } from "../api/agents";
 import { useHermesVersions } from "../api/hermesVersions";
 import { useLogs } from "../api/logs";
 import { useManagedIntegrations } from "../api/managedIntegrations";
@@ -186,6 +186,8 @@ export function AgentDetailPage() {
   const deleteAgent = useDeleteAgent();
   const uploadAgentAvatar = useUploadAgentAvatar();
   const deleteAgentAvatar = useDeleteAgentAvatar();
+  const generateAvatar = useGenerateAgentAvatar();
+  const generateAIAvatar = useGenerateAIAgentAvatar();
   const testAgentIntegration = useTestAgentIntegration();
   const runAgentIntegrationAction = useRunAgentIntegrationAction();
   const updateAgent = useUpdateAgent();
@@ -550,6 +552,25 @@ export function AgentDetailPage() {
     }
   }
 
+  async function onGenerateAvatar() {
+    try {
+      await generateAvatar.mutateAsync(currentAgent.id);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Avatar generation failed");
+    }
+  }
+
+  async function onGenerateAIAvatar() {
+    try {
+      const result = await generateAIAvatar.mutateAsync(currentAgent.id);
+      if (result.task_id) {
+        window.alert(t("agent.avatarAISubmitted").replace("{taskId}", result.task_id));
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "AI avatar generation failed");
+    }
+  }
+
   async function onRemoveAvatar() {
     try {
       await deleteAgentAvatar.mutateAsync(currentAgent.id);
@@ -578,6 +599,23 @@ export function AgentDetailPage() {
             <div className="flex flex-col items-end gap-3">
               <AgentAvatar agent={agent} sizeClass="h-28 w-28" />
               <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="panel-button-secondary"
+                  onClick={() => void onGenerateAvatar()}
+                  disabled={generateAvatar.isPending}
+                >
+                  {generateAvatar.isPending ? t("agent.avatarGenerating") : t("agent.generateAvatar")}
+                </button>
+                <button
+                  type="button"
+                  className="panel-button-secondary"
+                  onClick={() => void onGenerateAIAvatar()}
+                  disabled={generateAIAvatar.isPending}
+                  title={t("agent.generateAvatarAIHint")}
+                >
+                  {generateAIAvatar.isPending ? t("agent.avatarGenerating") : t("agent.generateAvatarAI")}
+                </button>
                 <label className="panel-button-secondary cursor-pointer">
                   {t("agent.uploadAvatar")}
                   <input

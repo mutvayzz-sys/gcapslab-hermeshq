@@ -11,6 +11,7 @@ ALLOWED_AVATAR_TYPES: dict[str, str] = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/webp": ".webp",
+    "image/svg+xml": ".svg",
 }
 MAX_AVATAR_BYTES: int = 2 * 1024 * 1024  # 2 MB
 
@@ -19,6 +20,7 @@ AVATAR_MEDIA_TYPES: dict[str, str] = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
+    ".svg": "image/svg+xml",
 }
 
 

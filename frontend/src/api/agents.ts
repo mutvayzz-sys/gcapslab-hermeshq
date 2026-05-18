@@ -203,6 +203,35 @@ export function useUploadAgentAvatar() {
   });
 }
 
+export function useGenerateAgentAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (agentId: string) => {
+      const { data } = await apiClient.post<Agent>(`/agents/${agentId}/avatar/generate`);
+      return data;
+    },
+    onSuccess: async (_, agentId) => {
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      await queryClient.invalidateQueries({ queryKey: ["agents", agentId] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useGenerateAIAgentAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (agentId: string) => {
+      const { data } = await apiClient.post<{ status: string; task_id: string; operator_status: string }>(`/agents/${agentId}/avatar/generate-ai`);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useDeleteAgentAvatar() {
   const queryClient = useQueryClient();
   return useMutation({
