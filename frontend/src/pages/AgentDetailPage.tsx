@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useAgent, useAgentAction, useDeleteAgent, useDeleteAgentAvatar, useGenerateAIAgentAvatar, useGenerateAgentAvatar, useRunAgentIntegrationAction, useTestAgentIntegration, useUpdateAgent, useUploadAgentAvatar } from "../api/agents";
 import { useHermesVersions } from "../api/hermesVersions";
@@ -17,6 +18,7 @@ import { AgentTerminal } from "../components/AgentTerminal";
 import { WorkspacePanel } from "../components/WorkspacePanel";
 import { useI18n } from "../lib/i18n";
 import { useSessionStore } from "../stores/sessionStore";
+import { useRealtimeStore } from "../stores/realtimeStore";
 import type { ActivityLogEntry } from "../types/api";
 
 const DEFAULT_SECTION_STATE = {
@@ -163,6 +165,7 @@ const gatewayNotificationsModeOptions = [
 export function AgentDetailPage() {
   const { agentId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const currentUser = useSessionStore((state) => state.user);
   const isAdmin = currentUser?.role === "admin";
   const { t, formatDateTime } = useI18n();
@@ -352,6 +355,17 @@ export function AgentDetailPage() {
       setSectionState(DEFAULT_SECTION_STATE);
     }
   }, [agentId]);
+
+  // Listen for avatar.updated events from AI avatar generation
+  const realtimeEvents = useRealtimeStore((state) => state.events);
+  useEffect(() => {
+    if (!agentId) return;
+    const latest = realtimeEvents[0];
+    if (latest?.type === "avatar.updated" && latest.agent_id === agentId) {
+      // Invalidate agent query to refresh avatar
+      queryClient.refetchQueries({ queryKey: ["agents", agentId] });
+    }
+  }, [realtimeEvents, agentId]);
 
   function toggleSection(section: keyof typeof DEFAULT_SECTION_STATE) {
     setSectionState((current) => {

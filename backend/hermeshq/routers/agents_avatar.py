@@ -74,8 +74,9 @@ async def generate_ai_avatar(
         f" The image should be a simple, clean, modern icon-style avatar"
         f" suitable for a chatbot or AI assistant."
         f" Use warm, professional colors."
-        f" Save the image to the agent's avatar directory."
-        f" Target agent ID: {agent_id}"
+        f" Save the image as a PNG file in your work/ directory"
+        f" using the filename 'avatar.png'."
+        f" It will be automatically applied to the agent."
     )
 
     task = Task(

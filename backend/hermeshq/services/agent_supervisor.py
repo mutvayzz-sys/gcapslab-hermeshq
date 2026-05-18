@@ -288,6 +288,10 @@ class AgentSupervisor:
                     "response": execution.final_response,
                 }
             )
+
+            # Post-task hooks
+            await self._run_post_task_hooks(task_id)
+
         except asyncio.CancelledError:
             async with self.session_factory() as session:
                 task = await session.get(Task, task_id)
@@ -550,3 +554,97 @@ class AgentSupervisor:
                 select(ActivityLog).order_by(desc(ActivityLog.created_at)).limit(limit)
             )
             return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Post-task hooks
+    # ------------------------------------------------------------------
+
+    async def _run_post_task_hooks(self, task_id: str) -> None:
+        """Run post-completion hooks based on task metadata."""
+        try:
+            async with self.session_factory() as session:
+                task = await session.get(Task, task_id)
+                if not task:
+                    return
+                metadata = task.metadata_json or {}
+
+                # Avatar generation hook
+                if metadata.get("avatar_generation"):
+                    target_agent_id = metadata.get("target_agent_id")
+                    if target_agent_id:
+                        await self._apply_avatar_generation(session, task, target_agent_id)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Post-task hook failed for %s: %s", task_id, exc)
+
+    async def _apply_avatar_generation(
+        self,
+        session: AsyncSession,
+        task: Task,
+        target_agent_id: str,
+    ) -> None:
+        """Find generated image in operator workspace and apply as avatar."""
+        from pathlib import Path
+        from hermeshq.config import get_settings
+        from hermeshq.services.avatar import build_avatar_dir, ALLOWED_AVATAR_TYPES, AVATAR_MEDIA_TYPES
+
+        settings = get_settings()
+
+        # Operator workspace: work/ directory where hermes-agent saves files
+        operator_workspace = Path(settings.workspaces_root) / f"agent-{task.agent_id}" / "work"
+        if not operator_workspace.exists():
+            return
+
+        # Find image files (png, jpg, jpeg, webp, svg) sorted newest first
+        image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+        candidates = sorted(
+            [f for f in operator_workspace.rglob("*") if f.is_file() and f.suffix.lower() in image_extensions],
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        if not candidates:
+            return
+
+        # Take the most recent image
+        source = candidates[0]
+
+        # Copy to target agent's avatar directory
+        avatar_base = Path(settings.agent_assets_root) if settings.agent_assets_root else Path(settings.workspaces_root) / "_agent_assets"
+        avatar_dir = build_avatar_dir(avatar_base, target_agent_id)
+        avatar_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean existing avatars
+        for existing in avatar_dir.iterdir():
+            if existing.is_file() or existing.is_symlink():
+                existing.unlink()
+
+        # Determine filename with proper extension
+        ext = source.suffix.lower()
+        if ext in (".jpeg",):
+            ext = ".jpg"
+        dest = avatar_dir / f"avatar{ext}"
+
+        # Copy file
+        import shutil
+        shutil.copy2(source, dest)
+
+        # Update target agent in DB
+        target_agent = await session.get(Agent, target_agent_id)
+        if target_agent:
+            target_agent.avatar_filename = dest.name
+            await session.commit()
+
+            await self._log(
+                session,
+                "agent.avatar.generated",
+                agent=target_agent,
+                task=task,
+                message=f"AI avatar applied from operator task",
+            )
+
+        # Publish event so frontend refreshes
+        await self.event_broker.publish({
+            "type": "avatar.updated",
+            "agent_id": target_agent_id,
+            "task_id": task.id,
+        })
