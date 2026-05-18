@@ -1,8 +1,8 @@
 """
-Webhook endpoints for Microsoft Teams and Google Chat.
+Webhook endpoints for Google Chat.
 
-These endpoints receive incoming events from the respective platforms
-and route them to the appropriate gateway instance.
+This endpoint receives incoming events from Google Chat and routes
+them to the appropriate gateway instance.
 """
 
 import json
@@ -16,45 +16,6 @@ from hermeshq.database import get_db_session
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
-
-
-# ---------------------------------------------------------------------------
-# Microsoft Teams webhook
-# ---------------------------------------------------------------------------
-
-
-@router.post("/webhooks/teams")
-async def teams_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db_session),
-) -> dict | None:
-    """
-    Receive incoming events from Microsoft Teams Bot Framework.
-
-    Teams sends events to this endpoint when:
-    - A user sends a message to the bot
-    - The bot is added/removed from a conversation
-    - A card interaction occurs
-    """
-    try:
-        payload = await request.json()
-    except Exception:
-        return {"error": "invalid payload"}
-
-    # Get the Teams gateways from app state
-    gateways = getattr(request.app.state, "teams_gateways", {})
-    if not gateways:
-        logger.warning("Teams webhook received but no gateways registered")
-        return {"status": "ok"}
-
-    from hermeshq.services.teams_gateway import handle_teams_webhook
-
-    result = await handle_teams_webhook(
-        payload=payload,
-        session_factory=request.app.state.session_factory,
-        gateways=gateways,
-    )
-    return result or {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

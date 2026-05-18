@@ -130,7 +130,7 @@ class GatewaySupervisor:
         bootstrap_targets: dict[str, tuple[Agent, str]] = {}
         for channel, agent in rows:
             # Enterprise platforms are bootstrapped by EnterpriseGatewayManager
-            if channel.platform in ("microsoft_teams", "google_chat"):
+            if channel.platform == "google_chat":
                 continue
             if not self._channel_runtime_enabled(channel):
                 continue
@@ -253,7 +253,7 @@ class GatewaySupervisor:
 
     async def get_runtime_status(self, agent_id: str, platform: str) -> dict:
         # Delegate enterprise platforms to the EnterpriseGatewayManager
-        if platform in ("microsoft_teams", "google_chat") and self._enterprise_gateways is not None:
+        if platform == "google_chat" and self._enterprise_gateways is not None:
             return await self._get_enterprise_runtime_status(agent_id, platform)
 
         async with self.session_factory() as session:
@@ -330,7 +330,7 @@ class GatewaySupervisor:
 
     async def _start_channel_locked(self, agent_id: str, platform: str) -> None:
         # Delegate enterprise platforms
-        if platform in ("microsoft_teams", "google_chat"):
+        if platform == "google_chat":
             await self._start_enterprise_channel(agent_id, platform)
             return
 
@@ -480,7 +480,7 @@ class GatewaySupervisor:
 
     async def _stop_channel_locked(self, agent_id: str, platform: str) -> None:
         # Delegate enterprise platforms
-        if platform in ("microsoft_teams", "google_chat"):
+        if platform == "google_chat":
             await self._stop_enterprise_channel(agent_id, platform)
             return
 
@@ -643,7 +643,7 @@ class GatewaySupervisor:
 
     async def tail_log(self, agent_id: str, platform: str, lines: int = 120) -> str:
         # Enterprise gateways run as async tasks, not subprocesses — no file logs
-        if platform in ("microsoft_teams", "google_chat"):
+        if platform == "google_chat":
             return ""
 
         async with self.session_factory() as session:

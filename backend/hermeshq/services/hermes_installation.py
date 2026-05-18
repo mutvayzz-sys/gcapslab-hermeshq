@@ -278,6 +278,7 @@ class HermesInstallationManager:
         profile = get_runtime_profile(agent.runtime_profile)
         telegram_channel = next((item for item in messaging_channels if item.platform == "telegram"), None)
         whatsapp_channel = next((item for item in messaging_channels if item.platform == "whatsapp"), None)
+        teams_channel = next((item for item in messaging_channels if item.platform == "microsoft_teams"), None)
         runtime_provider = normalize_runtime_provider(agent.provider)
         model_provider = self._model_provider_for_agent(agent)
         effective_base_url = self._effective_provider_base_url(agent)
@@ -352,6 +353,19 @@ class HermesInstallationManager:
                     "name": whatsapp_channel.home_chat_name or "Home",
                 }
             platforms["whatsapp"] = whatsapp_platform
+        if teams_channel and self._channel_runtime_enabled(teams_channel):
+            platforms = config.setdefault("platforms", {})
+            teams_platform = {
+                "enabled": bool(teams_channel.enabled),
+                "extra": {},
+            }
+            if teams_channel.home_chat_id:
+                teams_platform["home_channel"] = {
+                    "platform": "teams",
+                    "chat_id": teams_channel.home_chat_id,
+                    "name": teams_channel.home_chat_name or "Home",
+                }
+            platforms["teams"] = teams_platform
         voice_overrides = self._voice_runtime_overrides(agent)
         if voice_overrides:
             config.update(voice_overrides)
@@ -819,6 +833,23 @@ class HermesInstallationManager:
                     managed["WHATSAPP_REQUIRE_MENTION"] = "true"
                 if channel.free_response_chat_ids:
                     managed["WHATSAPP_FREE_RESPONSE_CHATS"] = ",".join(channel.free_response_chat_ids)
+            if channel.platform == "microsoft_teams":
+                teams_secret = await self._resolve_api_key(channel.secret_ref)
+                if teams_secret:
+                    managed["TEAMS_CLIENT_SECRET"] = teams_secret
+                metadata = channel.metadata_json or {}
+                if metadata.get("app_id"):
+                    managed["TEAMS_CLIENT_ID"] = str(metadata["app_id"])
+                if metadata.get("tenant_id"):
+                    managed["TEAMS_TENANT_ID"] = str(metadata["tenant_id"])
+                if channel.allowed_user_ids:
+                    managed["TEAMS_ALLOWED_USERS"] = ",".join(channel.allowed_user_ids)
+                if channel.home_chat_id:
+                    managed["TEAMS_HOME_CHANNEL"] = channel.home_chat_id
+                if channel.home_chat_name:
+                    managed["TEAMS_HOME_CHANNEL_NAME"] = channel.home_chat_name
+                managed["TEAMS_REQUIRE_MENTION"] = "true" if channel.require_mention else "false"
+                continue
 
         for slug, config in (agent.integration_configs or {}).items():
             enabled_integrations = await self._load_enabled_integration_slugs()
@@ -853,6 +884,13 @@ class HermesInstallationManager:
             "WHATSAPP_ALLOWED_USERS",
             "WHATSAPP_REQUIRE_MENTION",
             "WHATSAPP_FREE_RESPONSE_CHATS",
+            "TEAMS_CLIENT_ID",
+            "TEAMS_CLIENT_SECRET",
+            "TEAMS_TENANT_ID",
+            "TEAMS_ALLOWED_USERS",
+            "TEAMS_HOME_CHANNEL",
+            "TEAMS_HOME_CHANNEL_NAME",
+            "TEAMS_REQUIRE_MENTION",
             *self._provider_env_names("zai"),
             *self._provider_env_names("openrouter"),
             *self._provider_env_names("anthropic"),
