@@ -56,6 +56,7 @@ export function useUpdateSettings() {
       await queryClient.invalidateQueries({ queryKey: ["settings"] });
       await queryClient.invalidateQueries({ queryKey: ["branding", "public"] });
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      await queryClient.invalidateQueries({ queryKey: ["hermes-versions"] });
     },
   });
 }

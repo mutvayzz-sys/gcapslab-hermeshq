@@ -86,7 +86,7 @@ async def create_agent(
         slug=payload.slug,
     )
     unique_slug = await ensure_unique_agent_slug(db, slug)
-    hermes_version = await _validate_hermes_version(request, payload.hermes_version)
+    hermes_version = await _validate_hermes_version(request, payload.hermes_version or runtime_defaults.get("hermes_version"))
     agent = Agent(
         node_id=payload.node_id,
         name=name,

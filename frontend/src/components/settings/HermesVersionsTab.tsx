@@ -9,6 +9,7 @@ import {
   useUninstallHermesVersion,
   useDeleteHermesVersionCatalogEntry,
 } from "../../api/hermesVersions";
+import { useUpdateSettings } from "../../api/settings";
 import type { HermesVersion } from "../../types/api";
 
 interface HermesVersionsTabProps {
@@ -36,6 +37,7 @@ export default function HermesVersionsTab({ hermesVersions }: HermesVersionsTabP
   const uninstallHermesVersion = useUninstallHermesVersion();
   const deleteHermesVersionCatalogEntry = useDeleteHermesVersionCatalogEntry();
   const createHermesVersionFromUpstream = useCreateHermesVersionFromUpstream();
+  const updateSettings = useUpdateSettings();
 
   useEffect(() => {
     setHermesVersionDrafts(
@@ -236,6 +238,16 @@ export default function HermesVersionsTab({ hermesVersions }: HermesVersionsTabP
                 </div>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-3">
+                {version.version !== "bundled" && !version.is_default && version.installed ? (
+                  <button
+                    type="button"
+                    className="panel-button-primary"
+                    disabled={updateSettings.isPending}
+                    onClick={() => void updateSettings.mutateAsync({ default_hermes_version: version.version })}
+                  >
+                    {updateSettings.isPending ? "Setting..." : "Set as default"}
+                  </button>
+                ) : null}
                 {version.version !== "bundled" ? (
                   <button
                     type="button"

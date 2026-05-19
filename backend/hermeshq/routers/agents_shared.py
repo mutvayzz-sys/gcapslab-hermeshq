@@ -249,6 +249,7 @@ async def _resolve_runtime_defaults(db: AsyncSession, payload: AgentCreate) -> d
         "provider": payload.provider or (app_settings.default_provider if app_settings else None) or "openrouter",
         "api_key_ref": payload.api_key_ref or (app_settings.default_api_key_ref if app_settings else None),
         "base_url": payload.base_url or (app_settings.default_base_url if app_settings else None),
+        "hermes_version": getattr(app_settings, "default_hermes_version", None) if app_settings else None,
     }
 
 

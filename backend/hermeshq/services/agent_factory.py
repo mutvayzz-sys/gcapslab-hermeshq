@@ -167,6 +167,7 @@ async def _resolve_runtime_defaults(db: AsyncSession, payload: AgentCreate) -> d
             or (app_settings.default_api_key_ref if app_settings else None),
         "base_url": payload.base_url
             or (app_settings.default_base_url if app_settings else None),
+        "hermes_version": getattr(app_settings, "default_hermes_version", None) if app_settings else None,
     }
 
 
@@ -266,7 +267,7 @@ async def create_agent_from_config(
 
     # --- hermes version ----------------------------------------------------
     hermes_version = await _validate_hermes_version(
-        payload.hermes_version,
+        payload.hermes_version or runtime_defaults.get("hermes_version"),
         version_manager=hermes_version_manager,
     )
 
