@@ -254,28 +254,37 @@ async def _handle_list_agents(db: AsyncSession, access: McpAccessToken, argument
     page = max(1, int(arguments.get("page") or 1))
     page_size = max(1, min(100, int(arguments.get("page_size") or 50)))
     agents, total = await _list_allowed_agents(db, access, page, page_size)
+    agent_list = [
+        {
+            "id": agent.id,
+            "slug": agent.slug,
+            "name": _agent_label(agent),
+            "description": agent.description,
+            "status": agent.status,
+            "runtime_profile": agent.runtime_profile,
+            "can_receive_tasks": agent.can_receive_tasks,
+        }
+        for agent in agents
+    ]
     payload = {
-        "agents": [
-            {
-                "id": agent.id,
-                "slug": agent.slug,
-                "name": _agent_label(agent),
-                "description": agent.description,
-                "status": agent.status,
-                "runtime_profile": agent.runtime_profile,
-                "can_receive_tasks": agent.can_receive_tasks,
-            }
-            for agent in agents
-        ],
+        "agents": agent_list,
         "pagination": {"page": page, "page_size": page_size, "total": total},
     }
+
+    # Build rich text so LLM clients that only read "text" get full data
+    lines = [f"Found {total} authorized agent(s) (page {page}):"]
+    for a in agent_list:
+        desc = f" — {a['description'][:120]}" if a["description"] else ""
+        lines.append(f"  • {a['name']} (id: {a['id']}, slug: {a['slug']}, status: {a['status']}){desc}")
+    rich_text = "\n".join(lines)
+
     await _log_mcp_event(
         db, access, "mcp.tool.list_agents",
         message=f"MCP listed {len(agents)} authorized agents (page {page})",
         details={"count": len(agents), "total": total},
     )
     await db.commit()
-    return _tool_text_result(f"{len(agents)} agents (page {page}, total {total}).", payload)
+    return _tool_text_result(rich_text, payload)
 
 
 async def _handle_invoke_agent(
@@ -346,7 +355,23 @@ async def _handle_invoke_agent(
                 "completed": final_task.status in ("completed", "failed", "cancelled"),
                 "completed_at": final_task.completed_at.isoformat() if final_task.completed_at else None,
             }
-            summary = final_task.response or final_task.error_message or f"Task {final_task.status}"
+
+            # Build rich text for LLM clients that only read "text"
+            if final_task.status == "completed" and final_task.response:
+                summary = (
+                    f"Agent {_agent_label(agent)} completed the task.\n\n"
+                    f"Response:\n{final_task.response}"
+                )
+            elif final_task.status == "failed":
+                summary = (
+                    f"Agent {_agent_label(agent)} failed the task.\n\n"
+                    f"Error: {final_task.error_message or 'Unknown error'}"
+                )
+            elif final_task.status == "cancelled":
+                summary = f"Task {final_task.id} was cancelled."
+            else:
+                summary = f"Task {final_task.id} is still {final_task.status} (wait timeout)."
+
             return _tool_text_result(summary, payload)
 
     # ── Fire-and-forget fallback ────────────────────────────────────────
@@ -383,7 +408,17 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,
     }
-    return _tool_text_result(task.response or task.error_message or f"Task status: {task.status}", payload)
+
+    # Rich text for LLM clients
+    lines = [f"Task {task.id} — status: {task.status}"]
+    if task.response:
+        lines.append(f"\nResponse:\n{task.response}")
+    elif task.error_message:
+        lines.append(f"\nError: {task.error_message}")
+    if task.completed_at:
+        lines.append(f"\nCompleted at: {task.completed_at.isoformat()}")
+
+    return _tool_text_result("\n".join(lines), payload)
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -674,7 +709,9 @@ async def _handle_per_agent_tool(db: AsyncSession, access: McpAccessToken, name:
                 await db.commit()
                 await db.refresh(task)
                 return _tool_text_result(
-                    f"Tool '{tool_name}' dispatched to {_agent_label(matched)}.",
+                    f"Tool '{tool_name}' dispatched to agent {_agent_label(matched)}.\n\n"
+                    f"Task ID: {task.id}\nStatus: queued\n\n"
+                    f"Use get_agent_task with task_id \"{task.id}\" to check the result.",
                     {"task_id": task.id, "agent_id": matched.id, "status": "queued", "completed": False},
                 )
 
