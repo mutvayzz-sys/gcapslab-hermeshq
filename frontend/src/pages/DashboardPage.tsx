@@ -182,6 +182,7 @@ export function DashboardPage() {
         </div>
       </section>
 
+      {channels?.filter((ch) => ch.paired_at).length ? (
       <section className="dashboard-channels-card panel-frame p-6">
         <div className="flex items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
           <div>
@@ -223,6 +224,7 @@ export function DashboardPage() {
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }
