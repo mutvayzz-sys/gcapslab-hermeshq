@@ -187,8 +187,29 @@ class HermesRuntime:
         if not final_result:
             raise RuntimeExecutionError("Hermes runtime returned no result payload")
 
+        raw_response = str(final_result.get("final_response") or "").strip()
+
+        # ── Detect provider-level errors disguised as successful responses ──
+        # hermes-agent catches API errors (429, timeout, auth) and returns
+        # them as normal text responses instead of raising errors.
+        _PROVIDER_ERROR_PATTERNS = (
+            "API call failed",
+            "rate limit",
+            "Rate limit",
+            "429",
+            "401",
+            "403",
+            "Authentication",
+            "timeout",
+            "Connection",
+            "service unavailable",
+            "internal server error",
+        )
+        if any(p.lower() in raw_response.lower() for p in _PROVIDER_ERROR_PATTERNS) and len(raw_response) < 300:
+            raise RuntimeExecutionError(raw_response)
+
         return RuntimeExecutionResult(
-            final_response=str(final_result.get("final_response") or "").strip(),
+            final_response=raw_response,
             messages=list(final_result.get("messages") or []),
             tool_calls=list(final_result.get("tool_calls") or []),
             tokens_used=int(final_result.get("tokens_used") or 0),
