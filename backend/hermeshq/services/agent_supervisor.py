@@ -88,6 +88,43 @@ class AgentSupervisor:
             for agent in result.scalars().all():
                 self.running_agents.add(agent.id)
 
+        # ── Recover zombie tasks left from previous container lifecycle ──
+        # When the backend container restarts, all subprocess tasks die
+        # without updating the DB. Mark them as failed so they don't stay
+        # stuck in "running" forever.
+        await self._recover_zombie_tasks()
+
+    async def _recover_zombie_tasks(self) -> None:
+        """Mark tasks stuck in 'running' or 'queued' as failed after a restart."""
+        async with self.session_factory() as session:
+            from hermeshq.models.task import Task
+
+            result = await session.execute(
+                select(Task).where(
+                    Task.status.in_(["running", "queued"]),
+                )
+            )
+            zombies = result.scalars().all()
+            if not zombies:
+                return
+
+            now = utcnow()
+            for task in zombies:
+                prev_status = task.status
+                task.status = "failed"
+                task.error_message = (
+                    f"Task was {prev_status} when the server restarted "
+                    "and could not be resumed."
+                )
+                task.completed_at = now
+
+            await session.commit()
+
+            logging.getLogger(__name__).warning(
+                "Recovered %d zombie tasks — marked as failed",
+                len(zombies),
+            )
+
     async def start_agent(self, agent_id: str) -> Agent:
         async with self.session_factory() as session:
             agent = await session.get(Agent, agent_id)
