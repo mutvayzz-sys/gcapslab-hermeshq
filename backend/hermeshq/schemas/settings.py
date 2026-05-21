@@ -40,3 +40,36 @@ class AppSettingsRead(ORMModel):
     has_favicon: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class ResourceStatusResponse(BaseModel):
+    """Full resource status for the Settings UI."""
+    semaphore: dict
+    container: dict
+    system: dict
+    estimate: dict | None = None
+
+
+class SemaphoreUpdateRequest(BaseModel):
+    """Request body for updating the concurrency semaphore."""
+    semaphore: int
+
+
+class SemaphoreUpdateResponse(BaseModel):
+    """Response after updating the semaphore."""
+    semaphore: int
+    restart_required: bool = True
+
+
+class GenerateOverrideRequest(BaseModel):
+    """Request body for generating docker-compose.override.yml."""
+    agents: int
+
+
+class GenerateOverrideResponse(BaseModel):
+    """Response with generated override file content."""
+    content: str
+    agents: int
+    semaphore: int
+    applied: bool = False
+    restart_required: bool = True

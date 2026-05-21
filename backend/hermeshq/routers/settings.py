@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 import re
 from pathlib import Path
@@ -14,7 +15,16 @@ from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
-from hermeshq.schemas.settings import AppSettingsRead, AppSettingsUpdate
+from hermeshq.schemas.settings import (
+    AppSettingsRead,
+    AppSettingsUpdate,
+    GenerateOverrideRequest,
+    GenerateOverrideResponse,
+    ResourceStatusResponse,
+    SemaphoreUpdateRequest,
+    SemaphoreUpdateResponse,
+)
+from hermeshq.services.resource_monitor import resource_monitor
 from hermeshq.versioning import get_app_version
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -304,3 +314,158 @@ async def get_favicon(
     if path.suffix.lower() == ".ico":
         media_type = "image/x-icon"
     return FileResponse(path, media_type=media_type or "application/octet-stream")
+
+
+# ── Resource endpoints ────────────────────────────────────────────────────────
+
+@router.get("/resources", response_model=ResourceStatusResponse)
+async def get_resource_status(
+    _: User = Depends(require_admin),
+) -> ResourceStatusResponse:
+    """Current resource status: semaphore, container, system, estimate."""
+    limits = resource_monitor.get_container_limits()
+    usage = resource_monitor.get_container_usage()
+    system = resource_monitor.get_system_resources()
+    
+    # Get active task count from app state
+    import asyncio
+    active_count = 0
+    try:
+        from hermeshq.database import AsyncSessionLocal
+        from hermeshq.models.task import Task
+        from sqlalchemy import select, func
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(func.count()).where(Task.status == "running")
+            )
+            active_count = result.scalar() or 0
+    except Exception:
+        pass
+
+    semaphore_info = resource_monitor.get_semaphore_info(active_count)
+
+    container = {
+        "memory_limit_mb": limits.get("memory_limit_mb"),
+        "memory_usage_mb": usage.get("memory_mb"),
+        "cpu_limit": limits.get("cpu_limit"),
+        "cpu_usage_pct": usage.get("cpu_pct"),
+    }
+
+    return ResourceStatusResponse(
+        semaphore=semaphore_info,
+        container=container,
+        system=system,
+        estimate=None,
+    )
+
+
+@router.put("/resources/semaphore", response_model=SemaphoreUpdateResponse)
+async def update_semaphore(
+    payload: SemaphoreUpdateRequest,
+    _: User = Depends(require_admin),
+) -> SemaphoreUpdateResponse:
+    """Update the concurrency semaphore in .env (requires restart)."""
+    if payload.semaphore < 1:
+        raise HTTPException(status_code=400, detail="Semaphore must be at least 1")
+    if payload.semaphore > 200:
+        raise HTTPException(status_code=400, detail="Semaphore cannot exceed 200")
+
+    env_path = Path(settings.model_config.get("env_file", ".env"))
+    if not env_path.is_absolute():
+        env_path = Path(__file__).resolve().parents[2] / env_path
+
+    lines: list[str] = []
+    found = False
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.strip().startswith("CONCURRENCY_SEMAPHORE="):
+                lines.append(f"CONCURRENCY_SEMAPHORE={payload.semaphore}")
+                found = True
+            else:
+                lines.append(line)
+
+    if not found:
+        lines.append(f"CONCURRENCY_SEMAPHORE={payload.semaphore}")
+
+    env_path.write_text("\n".join(lines) + "\n")
+
+    # Also update runtime value immediately (no restart needed for semaphore)
+    from hermeshq.config import update_runtime_setting
+    update_runtime_setting("concurrency_semaphore", payload.semaphore)
+
+    # Also update the agent supervisor semaphore in-place
+    try:
+        from hermeshq.services.agent_supervisor import get_supervisor
+        supervisor = get_supervisor()
+        supervisor.update_semaphore(payload.semaphore)
+    except Exception:
+        pass
+
+    logging.getLogger(__name__).info(
+        "CONCURRENCY_SEMAPHORE updated to %d (applied immediately + persisted)",
+        payload.semaphore,
+    )
+
+    return SemaphoreUpdateResponse(
+        semaphore=payload.semaphore,
+        restart_required=False,
+    )
+
+
+@router.post("/resources/generate-override", response_model=GenerateOverrideResponse)
+async def generate_docker_override(
+    payload: GenerateOverrideRequest,
+    _: User = Depends(require_admin),
+) -> GenerateOverrideResponse:
+    """Generate a docker-compose.override.yml for the given agent count."""
+    if payload.agents < 1:
+        raise HTTPException(status_code=400, detail="Agent count must be at least 1")
+    if payload.agents > 200:
+        raise HTTPException(status_code=400, detail="Agent count cannot exceed 200")
+
+    sizing = resource_monitor.calculate_sizing(payload.agents)
+
+    ram_backend_mb = sizing["ram_backend_mb"]
+    ram_postgres_mb = sizing["ram_postgres_mb"]
+    cpu_backend = max(0.5, sizing["cpu_needed"] * 0.75)
+    cpu_postgres = max(0.5, sizing["cpu_needed"] * 0.25)
+    pg_shared_buffers = ram_postgres_mb // 4
+    pg_effective_cache = ram_postgres_mb * 3 // 4
+    pg_max_connections = sizing["semaphore"] * 2
+
+    content = f"""# docker-compose.override.yml — generated by HermesHQ
+# For {payload.agents} agents ({sizing['concurrent']} concurrent)
+services:
+  postgres:
+    command: >
+      postgres
+        -c shared_buffers={pg_shared_buffers}MB
+        -c max_connections={pg_max_connections}
+        -c work_mem=64MB
+        -c effective_cache_size={pg_effective_cache}MB
+    deploy:
+      resources:
+        limits:
+          memory: {ram_postgres_mb}M
+          cpus: '{cpu_postgres:.1f}'
+  backend:
+    deploy:
+      resources:
+        limits:
+          memory: {ram_backend_mb}M
+          cpus: '{cpu_backend:.1f}'
+  frontend:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+"""
+
+    return GenerateOverrideResponse(
+        content=content,
+        agents=payload.agents,
+        semaphore=sizing["semaphore"],
+        applied=False,
+        restart_required=True,
+    )

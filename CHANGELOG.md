@@ -1,273 +1,102 @@
 # Changelog
 
-## Unreleased
+All notable changes to HermesHQ are documented in this file.
 
-## 2026-05-19
+## [2026.5.21.1] — 2026-05-21
 
-### Added
-- **AI Avatar Generation** — agents can generate avatars via HQ Operator using AI image generation
-  - Post-task hook auto-applies AI-generated image from operator workspace to target agent
-  - WebSocket `avatar.updated` event refreshes agent detail page in real-time
-- **Deterministic Avatar Generation** — instant gradient + initials PNG avatar derived from agent name (SHA-256)
-  - 12 color palettes, 256×256 PNG via Pillow, always same avatar for same name
-- **Default Hermes Version for new agents** — set from Settings → Hermes Versions → "Set as default"
-  - New agents created without specifying a version inherit the default
-  - `_resolve_runtime_defaults()` reads `default_hermes_version` from `AppSettings`
-- **`connected_at` counter for all messaging platforms** — tracks days since a channel connected
-  - WhatsApp: tracks since QR pairing (creds.json appeared)
-  - Telegram / MS Teams / Google Chat: tracks since gateway started running
-  - Automatic migration from legacy `whatsapp_paired_at` → `connected_at`
-  - Visible in agent messaging panel (per-channel) and Dashboard → Channels section
-- **Access control for MS Teams & Google Chat gateways**
-  - Allowed users filter: Teams by AAD Object ID, Google Chat by email
-  - `require_mention` support: Teams via `entities[]`, Google Chat via `annotations[]`
-  - DM bypass: personal conversations always pass through
-  - Unauthorized DM behavior: `"pair"` (respond) or `"ignore"` (silence)
-- **Metadata fields for enterprise channels** — App ID, Tenant ID (Teams) and Project ID (Google Chat) configurable in channel form
-- **Dashboard Channels section** — overview table showing all connected channels across agents with platform, status, and days connected
-- **i18n keys for MS Teams & Google Chat** — 20+ new translation keys in English and Spanish
-- **Fallback Provider (Nivel 2)** — automatic retry with alternate provider on failure
-  - Agent model: `fallback_provider`, `fallback_model`, `fallback_api_key_ref`, `fallback_base_url`
-  - `HermesRuntime.execute()`: catches `RuntimeExecutionError`, resolves fallback API key, retries execution
-  - If fallback also fails, task fails with fallback error message
-  - Frontend: editable "Fallback Provider" section in Runtime Settings with 4 fields
-  - DB migration: auto-adds 4 columns on startup
+### Added — Configurable Concurrency & Resource-Aware Sizing
 
-### Changed
-- **MS Teams migrated to native Hermes Agent plugin** (v0.14+)
-  - Removed custom `teams_gateway.py` (−501 lines) — Teams now handled by `plugins/platforms/teams` inside hermes-agent
-  - `hermes_installation.py` writes `platforms.teams` config + `TEAMS_*` env vars
-  - Gains: Adaptive Cards, threading, images, typing indicator, meeting summaries, deduplication
-- **Google Chat secrets now properly decrypted** via `SecretVault` — was reading non-existent `secret.value`
-- **MS Teams secrets now properly decrypted** via `SecretVault` — same fix as Google Chat
-- **EventBroker** — added `subscribe()`/`unsubscribe()` for internal pub/sub alongside WebSocket
-- **MCP `invoke_agent`** — uses `populate_existing=True` fresh query instead of `expire_all()` to avoid `MissingGreenlet`
-- **MCP tool responses** — enriched `text` field with full data for LLM clients that don't read `structuredContent`
-- **ChannelForm** — Telegram-only fields (allowed users, home chat, behavior) hidden from MS Teams & Google Chat
-- **Manual** — MS Teams section updated for native plugin; Google Chat and Teams sections expanded with secret setup + curl tests
-- **Avatar service layer** — `save_avatar_bytes()` reusable function, supervisor no longer duplicates filesystem logic
-- **DashboardPage** — Channels section now shows all connected platforms (not just WhatsApp)
+#### Phase 1: Configurable Semaphore
 
-### Fixed
-- **MCP `invoke_agent` response not returned** — SQLAlchemy identity map cache returned stale task in polling loop
-- **MCP `MissingGreenlet`** — `expire_all()` caused synchronous lazy loading in async context
-- **Google Chat webhook 500** — `session_factory` not registered in `app.state`
-- **MS Teams/Google Chat labels showed "Telegram"** — `enableLabelKey`/`saveLabelKey` now platform-specific
-- **Secret filter excluded Teams/Google Chat** — selector now shows secrets with any of the 4 providers
-- **Google Chat hardcoded Spanish strings** — replaced with English-neutral text
-- **`AgentDetailPage`** — WebSocket listener for `avatar.updated` auto-refreshes agent query
-- **Settings update** — invalidates `hermes-versions` query so default badge refreshes
+- **`concurrency_semaphore` setting** — Replaced hardcoded `asyncio.Semaphore(8)` in `AgentSupervisor` with a configurable value from environment variable `CONCURRENCY_SEMAPHORE` (default: 8).
+- **Runtime semaphore update** — `PUT /api/settings/resources/semaphore` now updates the semaphore value **in real-time without restart**. Changes are persisted to `.env` for next boot.
+- **`.env.example`** — Updated with `CONCURRENCY_SEMAPHORE` and all other configurable environment variables.
+- **`docker-compose.yml`** — Added `CONCURRENCY_SEMAPHORE` to backend service environment.
 
-### Removed
-- `teams_gateway.py` — MS Teams now handled by native Hermes Agent plugin
-- Authentik-specific code, configs, and documentation (`docker-compose.authentik.yml`, `authentik_plan.md`, `authentik_pending.md`, `authentik-local/`)
-- Authentik references from `.env`, `.env.example`, `docker-compose.yml`, `config.py`, `auth.py`, `ManualPage.tsx`
+#### Phase 2: Resource Monitoring API & Settings UI
 
-### Contributors
-- @ElizabethJMB — ManualPage UI refactor (#4), TasksPage vertical Kanban (#5)
+- **Resource Monitor service** (`backend/hermeshq/services/resource_monitor.py`) — New service that detects:
+  - Container memory/CPU limits via cgroups v1 and v2 (`/sys/fs/cgroup/`)
+  - Container memory usage, CPU %, threads, processes
+  - System RAM, CPU cores, available disk via `psutil`
+  - Semaphore configuration and utilization percentage
+  - Resource sizing calculations (RAM/CPU/disk per agent)
+- **Settings API endpoints**:
+  - `GET /api/settings/resources` — Full resource status (container limits, usage, system resources, semaphore info)
+  - `PUT /api/settings/resources/semaphore` — Update concurrency semaphore (1–200 range, immediate effect)
+  - `POST /api/settings/resources/generate-override` — Generate `docker-compose.override.yml` with resource limits and PostgreSQL tuning
+- **New Pydantic schemas**: `ResourceStatusResponse`, `SemaphoreUpdateRequest`, `SemaphoreUpdateResponse`, `GenerateOverrideRequest`, `GenerateOverrideResponse`
+- **Resources Settings Tab** (`frontend/src/components/settings/ResourcesTab.tsx`) — New UI tab with:
+  - **Concurrency Control** — Current semaphore display, input to update (1–200), apply button
+  - **Resource Estimator** — Input planned agent count, shows calculated resources table
+  - **Generate Override** — Preview and download `docker-compose.override.yml`
+  - **Current Status** — 4-card dashboard showing container memory, CPU, system RAM, disk
+  - 10-second polling for live resource updates
+- **i18n** — 33 new translation keys in English and Spanish for the Resources tab
 
-## 2026-05-14
+#### Phase 3: Installer & Resize Scripts
 
-### Added
-- **Microsoft Teams channel**: enterprise gateway connecting agents to MS Teams as bots (1:1 chat, channels, threads)
-- **Google Chat channel**: enterprise gateway connecting agents to Google Chat via Service Account (DM, spaces, mentions)
-- Webhook endpoints `/webhooks/teams` and `/webhooks/google-chat` for receiving messages
-- `EnterpriseGatewayManager` for lifecycle management of Teams and Google Chat gateways
-- Frontend: MS Teams and Google Chat tabs in agent messaging panel
-- Manual: detailed setup guides for Microsoft Teams and Google Chat (Spanish and English)
-- `SUPPORTED_PLATFORMS` now includes `microsoft_teams` and `google_chat`
-
-### Changed
-- `AgentMessagingPanel.tsx` generalized from 2 to 4 platform support
-- Nginx proxy added `/webhooks/` location block
-- VERSION bumped to 2026.5.14.1
-
-## 2026-05-13
-
-### Added
-- **Multi-Provider OIDC Authentication** — Direct Google and Microsoft 365 login without Authentik
-  - New `oidc_providers` database table for dynamic provider management
-  - Admin UI: Settings → Authentication tab to configure providers (client_id, secret, discovery URL)
-  - Google and Microsoft preset buttons for quick setup
-  - Provider-specific OIDC state (CSRF protection per provider)
-  - Social logout: Google/Microsoft sessions properly terminated on HermesHQ logout
-  - Auto-provision users from OIDC claims with configurable allowed domains
-  - Backward compatible: existing Authentik/env-based flow still works
-- **OIDC Admin API** — CRUD endpoints at `/api/oidc-providers` (admin only)
-- **Authentication tab in Settings** — Manage OIDC providers from the UI
-
-### Added (continued)
-- **Manual: Authentication section** — New bilingual section covering Google and Microsoft 365 OIDC setup (13 bullets each in Spanish and English)
-
-### Changed
-- Login page always shows Google and Microsoft buttons (enterprise appearance)
-- OIDC state token now includes provider slug for cross-provider CSRF protection
-- `oidc_logout` endpoint accepts `?provider=` parameter for social logout
-- `auth/providers` endpoint now includes DB-configured providers alongside env providers
-
-### Security
-- Provider-specific state validation prevents cross-provider CSRF attacks
-- OIDC admin endpoints require admin role
-- Client secrets stored encrypted in database
-
-## 2026-05-11
-
-### Added
-
-- shared avatar service (`services/avatar.py`) eliminating duplicated upload/validation/deletion logic across auth, agents and users routers
-- WebSocket reconnection with exponential backoff (1s → 30s), heartbeat (30s ping/10s pong timeout), and first-message token authentication (`{"type":"auth"}`)
-- JWT httpOnly cookie authentication alongside Bearer token — login and OIDC callback set `hermeshq_token` cookie; new `POST /auth/logout` endpoint clears it
-- OIDC ID token signature verification using JWKS cache (1h TTL) with issuer, audience and expiry validation
-- Argon2 password hashing with pbkdf2_sha256 backward-compatible fallback
-- Alembic database migration framework replacing ad-hoc SQL schema updates, with automatic legacy fallback
-- SQLAlchemy connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`)
-- Code-split settings tabs — `SettingsPage` refactored from 2165 to 321 lines with `React.lazy()` + `Suspense` for 9 independent tab components
-- Parameterized `ChannelForm` component eliminating ~60% code duplication between Telegram and WhatsApp configuration panels
-- Centralized `AgentFactory` service for agent creation logic shared between direct and template-based creation
-- Pydantic schemas (`AgentModeUpdate`, `AgentTemplateOverrides`) for previously untyped `dict` endpoints
-- i18n namespaced translations — 16 modules per locale (en/es) replacing single 1266-line monolithic file
-- Dynamic `.font-display` CSS class: Doto dots typography for all themes, Space Grotesk for sixmanager themes
-- Comprehensive test plan document (`docs/TEST_PLAN.md`) with 213 test cases across 14 categories
-- Backend `.dockerignore` to reduce Docker build context size
-
-### Changed
-
-- **Backend Dockerfile**: multi-stage build (builder + runtime), runs as non-root `appuser` (UID 1000)
-- **docker-compose.yml**: PostgreSQL port closed to host, explicit internal network, `unless-stopped` restart policy, JSON file logging (10m/3 files), backend resource limits (1G RAM / 1 CPU), `no-new-privileges:true` on all services
-- **nginx.conf**: security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy), gzip compression, static asset caching (1 year immutable), proxy timeouts (300s API / 3600s WebSocket)
-- **SettingsPage.tsx**: 2165 → 321 lines, 9 lazy-loaded tab components
-- **agents.py router**: 1230 → ~100 lines, split into 7 focused sub-routers (CRUD, runtime, avatar, workspace, bulk, template, managed)
-- **AgentMessagingPanel.tsx**: ~1100 → 441 lines via shared `ChannelForm` component
-- **Frontend HTTP client**: 30s timeout, `withCredentials: true` for cookie support
-- **Safe localStorage access** in `sessionStore` and `uiStore` — no more crashes in Safari private browsing
-- **hermes-agent** dependency pinned to `v2026.5.7` for reproducible builds
-- **CSP `font-src`** updated to allow Google Fonts (Doto typeface loading)
-- Health endpoint available at both `/health` (direct) and `/api/health` (nginx proxy)
+- **`install.sh`** — Enhanced with resource-aware sizing:
+  - Fresh install: prompts for planned agent count, detects system resources (RAM/CPU/disk), calculates sizing, validates, shows comparison table (✅/❌), generates `docker-compose.override.yml` with PostgreSQL tuning
+  - Update: detects existing config, offers resize to recommended, manual resize, or skip
+  - `SKIP_SIZING=1` env var to bypass sizing entirely (uses default semaphore=8)
+  - `PLANNED_AGENTS=N` env var for non-interactive installs
+  - Cross-platform: Linux + macOS support for resource detection
+  - Max agent calculation based on available RAM, CPU, and disk
+  - PostgreSQL tuning: `shared_buffers`, `max_connections`, `work_mem`, `effective_cache_size`
+- **`scripts/hermeshq-resize.sh`** — New standalone resize script:
+  - `--agents N` mode: validates resources, shows comparison table, updates `.env` and `docker-compose.override.yml`, restarts containers
+  - `--detect` mode: shows current deployment stats, detected system resources, recommended resize (capped at 200 agents)
+  - Interactive confirmation with `--yes` flag for automation
+  - Pure bash arithmetic (no `bc` dependency)
 
 ### Fixed
 
-- fixed agent start/stop returning 500 due to missing `Agent` model import in `agents_runtime.py` sub-router
-- fixed Hermes Versions tab showing empty upstream releases — hook was disconnected from refresh button after SettingsPage split
-- fixed `git ls-remote` failure in production — `git` was only in builder stage, not runtime
-- fixed Doto dots font not loading — CSP `font-src` was blocking Google Fonts downloads
-- fixed agent list returning 404 — double `/agents` prefix in sub-routers after refactor
-- fixed `localStorage` writes during drag operations — debounced to 300ms with cleanup
-- fixed form race conditions in messaging panel — `isDirty` ref prevents refetch from overwriting user edits
-- fixed TypeScript type narrowing — removed `| string` from `auth_source` and `auth_mode` union types
-- fixed backend Dockerfile missing `git` in runtime stage for Hermes version upstream queries
-- fixed rate limiting nginx directives referencing undefined zones (commented out with setup instructions)
-- fixed missing `default export` on settings tab components for React.lazy loading
+- **Config singleton** — Replaced `@lru_cache` with explicit singleton in `get_settings()` to support runtime configuration updates without module reload.
+- **AgentSupervisor runtime update** — Added `update_semaphore()` method to recreate `asyncio.Semaphore` in-place, allowing live concurrency changes.
+- **macOS disk detection** — `df -BG` unavailable on macOS; added `df -g` fallback for Darwin systems.
+- **Resize script macOS RAM** — Replaced `vm_stat`-based calculation (incorrect page size on Apple Silicon) with percentage-of-total-RAM approach.
 
-### Security
+### Technical Details
 
-- Backend container runs as non-root `appuser` with `no-new-privileges`
-- PostgreSQL no longer exposed to host network
-- JWT tokens set as httpOnly cookies with `SameSite=Lax`
-- OIDC ID tokens now verified with JWKS signature validation
-- Argon2 password hashing (backward compatible with pbkdf2_sha256)
-- Nginx security headers: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy
-- WebSocket token moved from query parameter to first-message auth (no longer in server logs)
+- **Sizing formulas**:
+  - Semaphore = `max(1, total_agents ÷ 2)`
+  - Backend RAM = `max(512, semaphore × 50MB) + 256MB`
+  - PostgreSQL RAM = `max(128, total_agents × 12.5MB)`
+  - CPU = `max(1, ceil(semaphore × 0.17))` for backend
+  - Disk = `max(10, total_agents × 1.5GB)`
+- **Resource validation**: Compares calculated needs vs. detected system resources with clear ✅/❌ indicators
+- **Override generation**: Creates `docker-compose.override.yml` with `deploy.resources.limits` for all services
 
-## 2026-05-11 (pre-release)
+### Files Changed
 
-### Added
+| File | Action |
+|------|--------|
+| `VERSION` | Updated to 2026.5.21.1 |
+| `backend/hermeshq/config.py` | Singleton settings, runtime update |
+| `backend/hermeshq/services/resource_monitor.py` | **New** — Resource detection & sizing |
+| `backend/hermeshq/services/agent_supervisor.py` | Runtime semaphore update, supervisor accessor |
+| `backend/hermeshq/routers/settings.py` | 3 new endpoints (resources, semaphore, override) |
+| `backend/hermeshq/schemas/settings.py` | 5 new Pydantic schemas |
+| `frontend/src/api/settings.ts` | 3 new React Query hooks |
+| `frontend/src/components/settings/ResourcesTab.tsx` | **New** — Resources settings UI |
+| `frontend/src/pages/SettingsPage.tsx` | Added Resources tab |
+| `frontend/src/lib/i18n/locales/en/settings.ts` | 33 new English keys |
+| `frontend/src/lib/i18n/locales/es/settings.ts` | 33 new Spanish keys |
+| `install.sh` | +368 lines (resource detection, sizing, override) |
+| `scripts/hermeshq-resize.sh` | **New** — Standalone resize script |
+| `.env.example` | Updated with all env vars |
+| `docker-compose.yml` | Added CONCURRENCY_SEMAPHORE env |
 
-- a new selectable `enterprise` theme for both instance default branding and per-user override, alongside the existing `dark`, `light`, and `system` options
-- runtime profiles (`standard`, `technical`, `security`) so an agent can carry a declared execution policy across Talk to agent, TUI, schedules, Telegram, and delegated work
-- visible runtime capability maps in the UI: `Settings` now shows built-in runtime toolsets and HermesHQ platform plugins, while each agent `Integrations` panel shows the effective built-ins, platform plugins, and enabled integration packages for that specific agent
-- a managed integration package system with upload, install, uninstall, catalog metadata, and per-agent enable/disable flows
-- bundled productivity integrations always visible in `Settings -> Integrations`: `ms365-mail`, `ms365-calendar`, `sharepoint`, `google-workspace-mail`, `google-calendar`, and `google-drive`
-- real integration health checks for Microsoft Graph and Google OAuth-backed managed integrations
-- a bundled `snyk-agent-scan` managed integration with health check and manual `scan_skills` action traced into agent activity
-- support for uploaded `standard`-compatible integration packages built from legacy Hermes skills, validated with a new `gamma-app` package that exposes Gamma API tools, actions, and a companion skill bundle in HermesHQ format
-- an `Integration Factory` workflow for admins and `HQ Operator`: draft integration packages can now be scaffolded, edited file-by-file, validated, and published into `Managed Integrations` without leaving HermesHQ
-- a task board / Kanban phase 1 with board columns, drag state persistence, manual board ownership, and a collapsible `Submit task` rail
-- agent archival instead of hard delete: archived agents keep `Activity stream`, `Runtime ledger`, and messages for audit, can be listed again with `Show archived`, and open in read-only operational mode
-- per-agent Hermes Agent version pinning plus instance default Hermes version selection
-- an upstream-aware Hermes Agent version catalog in `Settings`, with real tag discovery from the Hermes repo, automatic catalog entry creation from upstream releases, metadata editing, install/uninstall, default selection, and per-agent override
-- version-specific Hermes runtime resolution for tasks, TUI, and gateways using isolated installs under `/app/workspaces/_hermes_versions/<version>`
-- instance-level `Backup & Restore` in `Settings`: admins can now create encrypted backup archives, validate them before import, and restore them in `replace` or `merge` mode, including workspaces, branding, provider catalog, users, secrets, agents, channels, schedules, templates, uploaded integration packages, and integration factory state
-- real deletion for installed agent skills from the Hermes skill registry; managed skills are also removed from the agent assignment list on delete
-- built-in `scripts/backup-instance.sh` and `scripts/restore-instance.sh` to preserve and rehydrate PostgreSQL, workspaces, `.env` and `cloudflared` token state
-- `scripts/reset-admin-password.sh` for Docker-based instances, with a backend-safe inline reset path
-- a first-run `install.sh` so HermesHQ can be installed with a single `curl | bash` command from GitHub
-- GitHub Pages landing content, dark demo assets, refreshed screenshots, and README video/demo support for project presentation
-- Telegram chat traceability into agent `Activity stream` by persisting inbound and outbound gateway messages as `channel.telegram.*` events
-- native per-agent WhatsApp channels using the Hermes gateway, including bridge asset sync, QR-based pairing, runtime visibility, and shared gateway supervision compatible with multi-platform agent messaging
-- two new inference provider presets: `AWS Bedrock` using `auth_type=aws_sdk` and `OpenAI-compatible API` for generic OpenAI-style gateways and self-hosted endpoints
-- enterprise MCP access for exposing authorized HermesHQ agents to external AI clients, including scoped credentials, per-agent allowlists, expiry, revocation, audit events, the `/mcp` JSON-RPC endpoint, and a `scripts/hermeshq-mcp-stdio.py` bridge for Claude Code, Codex and other stdio MCP clients
-- two bundled voice managed integrations enabled by default at instance level: `voice-edge` for `faster-whisper` + `edge-tts`, and `voice-local` for `faster-whisper` + Piper, both with Spanish and English presets and runtime `stt`/`tts` config generation
-- fixed `voice-local` runtime dependencies to install the actual Piper package (`piper-tts`) required by the health check and local TTS path
-- backend image now installs WhatsApp bridge dependencies with `npm ci --omit=peer` so Baileys no longer drags in `sharp` during image builds, which keeps local and production deploys from stalling in that layer
+---
 
-### Changed
-
-- `Settings` is now organized into internal tabs (`General`, `Runtime`, `Providers`, `Integrations`, `Factory`, `Hermes Versions`, `Secrets`, `Templates`) to reduce the operational sprawl of one long admin page
-- the `enterprise` theme now applies a more structured enterprise control-surface look across the shell, overview, surface system, task board, agent detail, comms, users, settings, manual, nodes, my account, and login screens without replacing the older themes
-- the login screen now follows the instance default public theme instead of always presenting a dark entry surface
-- `standard` agents now lose direct terminal/process execution in the shared backend runtime and no longer expose the Hermes TUI
-- `Settings -> Integrations` now separates built-in runtime capabilities, HermesHQ platform plugins, and installable integration packages more clearly
-- agent detail now has a dedicated `Integrations` section with effective capability summaries, managed integration metadata, actions, and connectivity testing
-- managed integrations documentation now includes package requirements and the Gamma.app upload flow for converting older skill bundles into HermesHQ-native integration packages
-- managed integrations documentation now also includes the full `Integration Factory` authoring flow, including draft lifecycle, validation, publication, and operator-assisted publishing
-- the manual and README now document how to configure `AWS Bedrock` versus `OpenAI-compatible API`, including the current credential model and runtime caveats for Bedrock
-- managed integrations now support declarative `select` and `boolean` fields so packages like bundled voice presets can be configured cleanly from `Agent -> Integrations`
-- `Activity stream` now groups streamed `agent.output` fragments into readable consolidated blocks instead of showing token-like fragments line by line
-- `Runtime ledger` and `Activity stream` now include client-side search
-- gateway supervision now treats Hermes messaging as one shared gateway process per agent, which avoids WhatsApp/Telegram PID races and keeps multi-platform channels under the same `HERMES_HOME`
-- the dependency canvas now varies agent identity shapes by runtime profile instead of rendering every agent the same way
-- the installer now auto-installs Docker on Linux hosts when missing, attempts Docker-without-root setup, preserves existing instance env files, shows admin credentials at the end, and performs rollback/cleanup on failed first installs
-- the frontend API/WebSocket base resolution no longer depends on `localhost` for remote installs
-- the README and in-app manual now distinguish the new in-product `Backup & Restore` flow from the older shell scripts, and document the passphrase-encrypted archive format plus `replace` vs `merge` restore behavior
-- `Settings -> Hermes Versions` now validates manual `release_tag` values against the upstream Hermes repository and warns when a catalog label differs from the detected runtime version after install
-- README, manual, and docs now explain Hermes Agent vs HermesHQ more explicitly and present the project as an actively developed system that may still contain rough edges
+## [2026.5.19.2] — 2026-05-19
 
 ### Fixed
-
-- fixed instance backup export so JSON columns mapped to names like `metadata_json` are serialized through the ORM attribute instead of leaking SQLAlchemy internals such as `MetaData`
-- fixed the `Backup & Restore` UI so optional-history checkboxes align correctly and successful backup creation leaves a visible fallback `Download again` link when the browser does not start the ZIP download automatically
-- fixed `install.sh` updates on hosts where an existing HermesHQ stack was started with `sudo docker` while the current shell also has access to a separate non-sudo Docker context; the installer now reuses the Docker context that already owns the running stack and suppresses noisy future-timestamp warnings from GitHub archives
-- increased the Hermes runtime subprocess output limit to reduce false `failed` tasks caused by oversized final result lines
-- fixed installer temp directory cleanup so the one-line install flow no longer ends with `tmp_dir: unbound variable`
-- fixed the admin password reset flow so it no longer depends on the backend image already containing a new helper file
-- documented that a Telegram bot token must be active in only one HermesHQ instance at a time to avoid polling conflicts
-- fixed HermesHQ WhatsApp startup so the bundled bridge assets, bridge port, and runtime config no longer depend on missing files inside the upstream `hermes-agent` wheel
-- fixed WhatsApp QR pairing in HermesHQ so the UI now renders a real visual QR from the bridge output instead of depending only on ASCII text rendering in the browser
-- fixed the backend image build path for the WhatsApp bridge by resolving Baileys from the published npm package and normalizing remaining git dependencies to `git+https`, so remote Docker builds no longer stall on GitHub SSH
-
-## 2026-04-03
+- Zombie task recovery on server restart — stale running/queued tasks marked as failed.
+- Provider error detection for responses disguised as successful.
+- Added missing logging import for zombie task recovery.
 
 ### Added
-
-- Per-agent Telegram channel management using the native Hermes gateway, including allowlisted Telegram user IDs persisted per agent.
-- Instance-wide Hermes TUI skin management for admins. A single uploaded YAML skin can now be applied as the default look for every agent TUI.
-- Provider registry and preset-driven runtime configuration for admins, covering Kimi Coding, Z.AI Coding Plan, OpenRouter API, OpenAI API, Gemini API and Anthropic API.
-- Real HermesHQ inter-agent tools exposed to agents themselves: `hq_list_agents`, `hq_direct_message` and `hq_delegate_task`.
-- Per-agent avatars with upload, delete and rendering across the dashboard, agent matrix, dependency canvas and agent detail view.
-- Per-user avatars with upload and delete from the `Users` page.
-- Per-user theme overrides layered on top of the instance default theme.
-- Per-user language overrides (`en` / `es`) layered on top of the instance default language.
-- User management with `admin` / `user` roles and assigned-agent scope.
-- In-app user manual with screenshots, exposed from the operator section in the sidebar.
-- Self-service `My Account` page for display name, avatar, theme preference and personal password changes.
-
-### Changed
-
-- Agent detail `Configuration` is now collapsed by default.
-- The agent detail view now translates its main UI chrome into Spanish when the user selects `es`, including configuration, conversation, terminal shell chrome, Telegram settings, skills and workspace panels.
-- Dashboard `Primary Readout` now shows the active operator instead of a decorative placeholder.
-- The `Users` screen now exposes editable display names and clearer operator icon controls.
-- Hermes runtime prompt fragments now use the configured instance app name, falling back to `HermesHQ` only when no branding name is set.
-- `Comms` now enforces hierarchy-aware delegation: independent agents delegate freely, subordinates can escalate upward or delegate downward within their branch, and cross-branch lateral delegation is blocked.
-- `Comms` now previews those hierarchy rules in the UI, including disabled destinations and a visual routing scope for the selected source agent.
-- Delegated child tasks now generate a real callback path to the parent agent: HermesHQ persists a `delegate_result` message, creates a follow-up callback task in the delegator and surfaces the result in the parent runtime ledger.
-- Delegations started from Telegram now preserve the origin chat context so the delegator can auto-reply to that same Telegram conversation when the delegated child finishes.
-- `Message edges` in `Comms` now shows human-readable agent names plus delegate/direct/broadcast counts instead of raw IDs.
-- `Settings` now controls the instance default language, while `My Account` and the sidebar operator section expose a personal language override for every user.
-- `Settings` now also controls a shared Hermes TUI skin, which HermesHQ propagates into each agent `HERMES_HOME` and activates through `display.skin`.
-- `Settings` now includes a provider registry where admins can edit provider names, base URLs, enabled state and default models. Agent creation and instance runtime defaults can start from those presets instead of typing provider/model/base URL/secret ref by hand.
-- The `Kimi Coding` preset was corrected to use `https://api.kimi.com/coding/v1`.
-# Unreleased
-
-- frontend builds are now protected against accidentally baking a local `VITE_API_BASE_URL` such as `http://localhost:8000/api` into production bundles
-- the frontend Dockerfile no longer defaults `VITE_API_BASE_URL` to localhost; the safe default path is the browser-side `/api` proxy
+- Concurrency semaphore (max 8) to prevent OOM on mass task submission.
+- Design document `DESIGN_CONCURRENCY_SIZING.md` for configurable concurrency and resource-aware sizing.

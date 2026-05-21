@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3420"]
     pty_shell: str = "/bin/sh"
     internal_api_base_url: str = "http://127.0.0.1:8000/api/internal"
+    # Max concurrent hermes_task_runner subprocesses.
+    # Each process uses ~50MB RAM. Default: 8 (safe for 1GB container).
+    # For production sizing: available_RAM_MB / 60 (50MB per process + 20% headroom)
+    concurrency_semaphore: int = 8
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -72,6 +76,18 @@ class Settings(BaseSettings):
         self.integration_packages_root = self.integration_packages_root.resolve()
 
 
-@lru_cache
+_settings_instance: Settings | None = None
+
+
 def get_settings() -> Settings:
-    return Settings()
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+    return _settings_instance
+
+
+def update_runtime_setting(key: str, value: object) -> None:
+    """Update a setting value at runtime without restart."""
+    global _settings_instance
+    s = get_settings()
+    setattr(s, key, value)

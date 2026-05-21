@@ -57,6 +57,7 @@ services:
       BRANDING_ROOT: ${BRANDING_ROOT:-/app/workspaces/_branding}
       PTY_SHELL: ${PTY_SHELL:-/bin/sh}
       CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend"]}'
+      CONCURRENCY_SEMAPHORE: ${CONCURRENCY_SEMAPHORE:-8}
     volumes:
       - hermeshq_workspaces:/app/workspaces
     extra_hosts:

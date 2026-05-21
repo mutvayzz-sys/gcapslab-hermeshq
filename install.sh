@@ -27,6 +27,360 @@ FINAL_ADMIN_USERNAME=""
 FINAL_ADMIN_PASSWORD=""
 DOCKER_GROUP_UPDATED=0
 USED_SUDO_DOCKER=0
+PLANNED_AGENTS="${PLANNED_AGENTS:-}"
+SKIP_SIZING="${SKIP_SIZING:-0}"
+
+# ── Phase 3: System-resource detection and sizing ──────────────────────
+
+SYS_TOTAL_RAM_MB=0
+SYS_AVAILABLE_RAM_MB=0
+SYS_CPU_CORES=0
+SYS_AVAILABLE_DISK_GB=0
+
+SIZING_SEMAPHORE=0
+SIZING_RAM_BACKEND=0
+SIZING_RAM_POSTGRES=0
+SIZING_RAM_TOTAL=0
+SIZING_CPU=0
+SIZING_DISK=0
+SIZING_CONCURRENT=0
+
+PG_SHARED_BUFFERS=""
+PG_EFFECTIVE_CACHE=""
+PG_MAX_CONNECTIONS=0
+
+detect_system_resources() {
+  local os_name
+  os_name="$(uname -s)"
+
+  if [ "$os_name" = "Darwin" ]; then
+    SYS_TOTAL_RAM_MB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 ))
+    SYS_AVAILABLE_RAM_MB=$(( SYS_TOTAL_RAM_MB * 70 / 100 ))
+    SYS_CPU_CORES="$(sysctl -n hw.ncpu)"
+  else
+    if command -v free >/dev/null 2>&1; then
+      SYS_TOTAL_RAM_MB="$(free -m | awk '/^Mem:/ {print $2}')"
+      SYS_AVAILABLE_RAM_MB="$(free -m | awk '/^Mem:/ {print $7}')"
+    else
+      SYS_TOTAL_RAM_MB=4096
+      SYS_AVAILABLE_RAM_MB=2048
+    fi
+    SYS_CPU_CORES="$(nproc 2>/dev/null || printf '2')"
+  fi
+
+  local disk_path
+  disk_path="$(dirname "$INSTALL_DIR")"
+  if [ "$os_name" = "Darwin" ]; then
+    SYS_AVAILABLE_DISK_GB="$(df -g "$disk_path" 2>/dev/null | awk 'NR==2{printf "%d", $4}' || printf '50')"
+  else
+    SYS_AVAILABLE_DISK_GB="$(df -BG "$disk_path" 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$4); print $4}' || printf '50')"
+  fi
+}
+
+calculate_sizing() {
+  local total_agents="${1:?total_agents required}"
+  local concurrent semaphore ram_backend ram_postgres ram_total cpu_needed disk_needed
+  local max_by_ram
+
+  concurrent=$(( total_agents / 2 ))
+  semaphore=$concurrent
+  ram_backend=$(( semaphore * 50 + 500 ))
+  ram_postgres=$(( semaphore * 10 + 200 ))
+  ram_total=$(( ram_backend + ram_postgres + 256 ))
+  cpu_needed=$(( semaphore / 6 + 1 ))
+  disk_needed=$(( total_agents * 1500 / 1000 + 5 ))
+
+  # Clamp semaphore to available RAM
+  if [ "$SYS_AVAILABLE_RAM_MB" -gt 756 ]; then
+    max_by_ram=$(( (SYS_AVAILABLE_RAM_MB - 756) / 60 ))
+    if [ "$max_by_ram" -lt "$semaphore" ]; then
+      semaphore=$max_by_ram
+      concurrent=$semaphore
+      ram_backend=$(( semaphore * 50 + 500 ))
+      ram_postgres=$(( semaphore * 10 + 200 ))
+      ram_total=$(( ram_backend + ram_postgres + 256 ))
+      cpu_needed=$(( semaphore / 6 + 1 ))
+      disk_needed=$(( semaphore * 2 * 1500 / 1000 + 5 ))
+    fi
+  fi
+
+  SIZING_CONCURRENT=$concurrent
+  SIZING_SEMAPHORE=$semaphore
+  SIZING_RAM_BACKEND=$ram_backend
+  SIZING_RAM_POSTGRES=$ram_postgres
+  SIZING_RAM_TOTAL=$ram_total
+  SIZING_CPU=$cpu_needed
+  SIZING_DISK=$disk_needed
+}
+
+validate_resources() {
+  local ok=1
+  if [ "$SIZING_RAM_TOTAL" -gt "$SYS_AVAILABLE_RAM_MB" ]; then
+    ok=0
+  fi
+  if [ "$SIZING_CPU" -gt "$SYS_CPU_CORES" ]; then
+    ok=0
+  fi
+  if [ "$SIZING_DISK" -gt "$SYS_AVAILABLE_DISK_GB" ]; then
+    ok=0
+  fi
+  return $(( 1 - ok ))
+}
+
+print_resource_table() {
+  local needed_ram="$1" available_ram="$2"
+  local needed_cpu="$3" available_cpu="$4"
+  local needed_disk="$5" available_disk="$6"
+  local semaphore="$7"
+
+  local ram_icon cpu_icon disk_icon
+  if [ "$needed_ram" -le "$available_ram" ]; then ram_icon="✅"; else ram_icon="❌"; fi
+  if [ "$needed_cpu" -le "$available_cpu" ]; then cpu_icon="✅"; else cpu_icon="❌"; fi
+  if [ "$needed_disk" -le "$available_disk" ]; then disk_icon="✅"; else disk_icon="❌"; fi
+
+  local needed_ram_gb available_ram_gb needed_disk_gb available_disk_gb
+  needed_ram_gb="$(( needed_ram / 1024 )) GB"
+  available_ram_gb="$(( available_ram / 1024 )) GB"
+  needed_disk_gb="${needed_disk} GB"
+  available_disk_gb="${available_disk} GB"
+
+  printf '\n'
+  printf '    ┌──────────────┬─────────────┬──────────────┐\n'
+  printf '    │ %-12s │ %-11s │ %-12s │\n' "Resource" "Needed" "Available"
+  printf '    ├──────────────┼─────────────┼──────────────┤\n'
+  printf '    │ %-12s │ %-11s │ %-8s %s │\n' "RAM" "$needed_ram_gb" "$available_ram_gb" "$ram_icon"
+  printf '    │ %-12s │ %-11s │ %-8s %s │\n' "CPU" "${needed_cpu} cores" "${available_cpu} cores" "$cpu_icon"
+  printf '    │ %-12s │ %-11s │ %-8s %s │\n' "Disk" "$needed_disk_gb" "$available_disk_gb" "$disk_icon"
+  printf '    │ %-12s │ %-11s │ %-12s │\n' "Semaphore" "$semaphore" ""
+  printf '    └──────────────┴─────────────┴──────────────┘\n'
+  printf '\n'
+}
+
+calculate_max_agents() {
+  local max_agents=200
+  local max_semaphore max_by_cpu max_by_disk agents_from_ram agents_from_cpu agents_from_disk
+
+  if [ "$SYS_AVAILABLE_RAM_MB" -gt 756 ]; then
+    max_semaphore=$(( (SYS_AVAILABLE_RAM_MB - 756) / 60 ))
+    agents_from_ram=$(( max_semaphore * 2 ))
+  else
+    agents_from_ram=0
+  fi
+
+  max_by_cpu=$(( SYS_CPU_CORES * 6 ))
+  agents_from_cpu=$(( max_by_cpu * 2 ))
+
+  agents_from_disk=$(( (SYS_AVAILABLE_DISK_GB - 5) * 1000 / 1500 * 2 ))
+
+  # Take minimum of all constraints
+  max_agents=$agents_from_ram
+  if [ "$agents_from_cpu" -lt "$max_agents" ]; then
+    max_agents=$agents_from_cpu
+  fi
+  if [ "$agents_from_disk" -lt "$max_agents" ]; then
+    max_agents=$agents_from_disk
+  fi
+
+  if [ "$max_agents" -lt 1 ]; then
+    max_agents=1
+  fi
+  if [ "$max_agents" -gt 200 ]; then
+    max_agents=200
+  fi
+
+  printf '%d' "$max_agents"
+}
+
+calculate_postgres_tuning() {
+  local pg_ram_mb="${1:?pg_ram_mb required}"
+
+  PG_SHARED_BUFFERS="$(( pg_ram_mb / 4 ))MB"
+  PG_EFFECTIVE_CACHE="$(( pg_ram_mb * 3 / 4 ))MB"
+  PG_MAX_CONNECTIONS=$(( SIZING_SEMAPHORE * 2 ))
+}
+
+generate_docker_override() {
+  local semaphore="${1:?semaphore required}"
+  local ram_backend ram_postgres backend_mem_limit cpu_limit
+
+  ram_backend=$(( semaphore * 50 + 500 ))
+  ram_postgres=$(( semaphore * 10 + 200 ))
+  backend_mem_limit="${ram_backend}M"
+  cpu_limit="$(( semaphore / 6 + 1 ))"
+
+  cat >"$INSTALL_DIR/docker-compose.override.yml" <<OVERRIDE
+services:
+  postgres:
+    command: >
+      postgres
+      -c shared_buffers=${PG_SHARED_BUFFERS}
+      -c effective_cache_size=${PG_EFFECTIVE_CACHE}
+      -c max_connections=${PG_MAX_CONNECTIONS}
+    deploy:
+      resources:
+        limits:
+          memory: ${ram_postgres}M
+          cpus: "1"
+  backend:
+    deploy:
+      resources:
+        limits:
+          memory: ${backend_mem_limit}
+          cpus: "${cpu_limit}"
+  frontend:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+OVERRIDE
+
+  printf 'Generated docker-compose.override.yml with resource limits\n'
+}
+
+update_env_semaphore() {
+  local semaphore="${1:?semaphore required}"
+  local env_file="$INSTALL_DIR/.env"
+
+  if [ ! -f "$env_file" ]; then
+    printf 'CONCURRENCY_SEMAPHORE=%s\n' "$semaphore" >> "$env_file"
+    return
+  fi
+
+  if grep -q '^CONCURRENCY_SEMAPHORE=' "$env_file" 2>/dev/null; then
+    sed -i.bak "s/^CONCURRENCY_SEMAPHORE=.*/CONCURRENCY_SEMAPHORE=${semaphore}/" "$env_file"
+    rm -f "$env_file.bak"
+  else
+    printf 'CONCURRENCY_SEMAPHORE=%s\n' "$semaphore" >> "$env_file"
+  fi
+}
+
+prompt_agent_count() {
+  local count
+  while true; do
+    printf 'How many agents do you plan to deploy? (1-200): '
+    read -r count
+    if printf '%s' "$count" | grep -qE '^[0-9]+$' && [ "$count" -ge 1 ] && [ "$count" -le 200 ]; then
+      printf '%d' "$count"
+      return
+    fi
+    printf '  ⚠️  Please enter a number between 1 and 200.\n'
+  done
+}
+
+do_sizing_flow() {
+  detect_system_resources
+
+  printf '\n  Detected system resources:\n'
+  printf '    RAM:   %d MB total, %d MB available\n' "$SYS_TOTAL_RAM_MB" "$SYS_AVAILABLE_RAM_MB"
+  printf '    CPU:   %d cores\n' "$SYS_CPU_CORES"
+  printf '    Disk:  %d GB available\n\n' "$SYS_AVAILABLE_DISK_GB"
+
+  if [ -z "$PLANNED_AGENTS" ]; then
+    PLANNED_AGENTS="$(prompt_agent_count)"
+  fi
+
+  calculate_sizing "$PLANNED_AGENTS"
+  print_resource_table "$SIZING_RAM_TOTAL" "$SYS_AVAILABLE_RAM_MB" \
+    "$SIZING_CPU" "$SYS_CPU_CORES" "$SIZING_DISK" "$SYS_AVAILABLE_DISK_GB" \
+    "$SIZING_SEMAPHORE"
+
+  if ! validate_resources; then
+    local max_agents
+    max_agents="$(calculate_max_agents)"
+    printf '  ⚠️  Insufficient resources for %d agents.\n' "$PLANNED_AGENTS"
+    printf '  Maximum agents supported by this system: %d\n\n' "$max_agents"
+    printf '  Options:\n'
+    printf '    1) Reduce agent count to %d (recommended)\n' "$max_agents"
+    printf '    2) Continue with %d agents anyway (may cause instability)\n' "$PLANNED_AGENTS"
+    printf '    3) Cancel installation\n'
+    printf '\n  Choose [1/2/3]: '
+
+    local choice
+    read -r choice
+    case "$choice" in
+      1)
+        PLANNED_AGENTS=$max_agents
+        calculate_sizing "$PLANNED_AGENTS"
+        printf '  ✅ Resized to %d agents (semaphore=%d)\n' "$PLANNED_AGENTS" "$SIZING_SEMAPHORE"
+        ;;
+      2)
+        printf '  ⚠️  Continuing with %d agents — monitor for resource issues.\n' "$PLANNED_AGENTS"
+        ;;
+      *)
+        printf '  Installation cancelled.\n'
+        exit 0
+        ;;
+    esac
+  else
+    printf '  ✅ System resources sufficient for %d agents.\n' "$PLANNED_AGENTS"
+  fi
+
+  calculate_postgres_tuning "$SIZING_RAM_POSTGRES"
+  update_env_semaphore "$SIZING_SEMAPHORE"
+  generate_docker_override "$SIZING_SEMAPHORE"
+
+  printf '  ✅ Sizing complete: semaphore=%d, ram_total=%dMB, cpu=%d, disk=%dGB\n' \
+    "$SIZING_SEMAPHORE" "$SIZING_RAM_TOTAL" "$SIZING_CPU" "$SIZING_DISK"
+}
+
+do_update_sizing() {
+  detect_system_resources
+
+  local current_semaphore
+  current_semaphore="$(grep '^CONCURRENCY_SEMAPHORE=' "$INSTALL_DIR/.env" 2>/dev/null | sed 's/^CONCURRENCY_SEMAPHORE=//' || printf '8')"
+
+  printf '\n  Current configuration:\n'
+  printf '    Semaphore: %s\n' "$current_semaphore"
+  printf '    Estimated agents: %d\n' "$(( current_semaphore * 2 ))"
+  printf '\n  Detected system resources:\n'
+  printf '    RAM:   %d MB available\n' "$SYS_AVAILABLE_RAM_MB"
+  printf '    CPU:   %d cores\n' "$SYS_CPU_CORES"
+  printf '    Disk:  %d GB available\n\n' "$SYS_AVAILABLE_DISK_GB"
+
+  local max_agents
+  max_agents="$(calculate_max_agents)"
+
+  printf '  Maximum agents this system supports: %d\n\n' "$max_agents"
+  printf '  Options:\n'
+  printf '    1) Keep current configuration (semaphore=%s)\n' "$current_semaphore"
+  printf '    2) Resize to recommended (%d agents)\n' "$max_agents"
+  printf '    3) Resize to specific agent count\n'
+  printf '    4) Skip sizing\n'
+  printf '\n  Choose [1/2/3/4]: '
+
+  local choice
+  read -r choice
+  case "$choice" in
+    2)
+      PLANNED_AGENTS=$max_agents
+      calculate_sizing "$PLANNED_AGENTS"
+      calculate_postgres_tuning "$SIZING_RAM_POSTGRES"
+      update_env_semaphore "$SIZING_SEMAPHORE"
+      generate_docker_override "$SIZING_SEMAPHORE"
+      printf '  ✅ Resized: semaphore=%d for %d agents\n' "$SIZING_SEMAPHORE" "$PLANNED_AGENTS"
+      ;;
+    3)
+      PLANNED_AGENTS="$(prompt_agent_count)"
+      calculate_sizing "$PLANNED_AGENTS"
+      print_resource_table "$SIZING_RAM_TOTAL" "$SYS_AVAILABLE_RAM_MB" \
+        "$SIZING_CPU" "$SYS_CPU_CORES" "$SIZING_DISK" "$SYS_AVAILABLE_DISK_GB" \
+        "$SIZING_SEMAPHORE"
+      calculate_postgres_tuning "$SIZING_RAM_POSTGRES"
+      update_env_semaphore "$SIZING_SEMAPHORE"
+      generate_docker_override "$SIZING_SEMAPHORE"
+      printf '  ✅ Resized: semaphore=%d for %d agents\n' "$SIZING_SEMAPHORE" "$PLANNED_AGENTS"
+      ;;
+    *)
+      # Ensure CONCURRENCY_SEMAPHORE exists in .env even if keeping current config
+      if ! grep -q '^CONCURRENCY_SEMAPHORE=' "$INSTALL_DIR/.env" 2>/dev/null; then
+        printf 'CONCURRENCY_SEMAPHORE=8\n' >> "$INSTALL_DIR/.env"
+        printf '  Added CONCURRENCY_SEMAPHORE=8 to .env\n'
+      fi
+      printf '  Keeping current configuration.\n'
+      ;;
+  esac
+}
 
 fail() {
   printf 'Error: %s\n' "$1" >&2
@@ -370,6 +724,20 @@ main() {
   fi
   if [ -n "$preserve_cloudflared_env" ]; then
     cp "$preserve_cloudflared_env" "$INSTALL_DIR/.cloudflared.env"
+  fi
+
+  # ── Phase 3: Sizing ─────────────────────────────────────────────────
+  if [ "$SKIP_SIZING" != "1" ]; then
+    if [ "$FRESH_INSTALL" = "1" ]; then
+      do_sizing_flow
+    else
+      do_update_sizing
+    fi
+  elif [ "$FRESH_INSTALL" = "1" ]; then
+    # Ensure a default semaphore exists for non-interactive installs
+    if ! grep -q '^CONCURRENCY_SEMAPHORE=' "$INSTALL_DIR/.env" 2>/dev/null; then
+      printf 'CONCURRENCY_SEMAPHORE=8\n' >> "$INSTALL_DIR/.env"
+    fi
   fi
 
   FINAL_ADMIN_USERNAME="$(read_env_value ADMIN_USERNAME "$INSTALL_DIR/.env")"

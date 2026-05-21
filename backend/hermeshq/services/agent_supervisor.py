@@ -7,6 +7,7 @@ from telegram import Bot
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
@@ -36,7 +37,19 @@ class AgentSupervisor:
         self.running_agents: set[str] = set()
         self.active_tasks: dict[str, asyncio.Task] = {}
         self._pending_callbacks: list = []
-        self._concurrency_semaphore = asyncio.Semaphore(8)  # max concurrent task processes
+        settings = get_settings()
+        self._concurrency_semaphore = asyncio.Semaphore(settings.concurrency_semaphore)
+        self._semaphore_value = settings.concurrency_semaphore
+
+    def update_semaphore(self, new_value: int) -> None:
+        """Update the concurrency semaphore at runtime.
+
+        Creates a new semaphore with the given value. Tasks currently
+        waiting on the old semaphore will continue waiting; new tasks
+        will use the new one.  This is safe to call from any thread.
+        """
+        self._semaphore_value = new_value
+        self._concurrency_semaphore = asyncio.Semaphore(new_value)
 
     def _build_conversation_assistant_content(self, task: Task) -> str:
         if task.response and task.response.strip():
@@ -681,8 +694,16 @@ class AgentSupervisor:
             )
 
         # Publish event so frontend refreshes
-        await self.event_broker.publish({
-            "type": "avatar.updated",
-            "agent_id": target_agent_id,
-            "task_id": task.id,
-        })
+# ---------------------------------------------------------------------------
+# Module-level helper to get the running supervisor from the FastAPI app.
+# ---------------------------------------------------------------------------
+
+def get_supervisor() -> "AgentSupervisor":
+    """Return the AgentSupervisor attached to the running FastAPI app state."""
+    # Lazy import to avoid circular dependency at module level.
+    from hermeshq.main import app  # noqa: WPS433
+
+    supervisor: AgentSupervisor | None = getattr(app.state, "supervisor", None)
+    if supervisor is None:
+        raise RuntimeError("AgentSupervisor not initialised yet")
+    return supervisor

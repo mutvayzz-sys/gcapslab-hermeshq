@@ -126,3 +126,78 @@ export function useDeleteTuiSkin() {
     },
   });
 }
+
+// ── Resource endpoints ─────────────────────────────────────────────────────
+
+export interface ResourceStatus {
+  semaphore: {
+    current: number;
+    active_tasks: number;
+    max_tasks: number;
+    utilization_pct: number;
+  };
+  container: {
+    memory_limit_mb: number | null;
+    memory_usage_mb: number | null;
+    cpu_limit: number | null;
+    cpu_usage_pct: number | null;
+  };
+  system: {
+    total_ram_mb: number;
+    available_ram_mb: number;
+    cpu_cores: number;
+    disk_available_gb: number;
+  };
+  estimate: {
+    agents: number;
+    concurrent: number;
+    semaphore: number;
+    ram_backend_mb: number;
+    ram_postgres_mb: number;
+    cpu_needed: number;
+    disk_gb: number;
+  } | null;
+}
+
+export function useResourceStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["settings", "resources"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ResourceStatus>("/settings/resources");
+      return data;
+    },
+    enabled,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useUpdateSemaphore() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (semaphore: number) => {
+      const { data } = await apiClient.put<{ semaphore: number; restart_required: boolean }>(
+        "/settings/resources/semaphore",
+        { semaphore },
+      );
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "resources"] });
+    },
+  });
+}
+
+export function useGenerateOverride() {
+  return useMutation({
+    mutationFn: async (agents: number) => {
+      const { data } = await apiClient.post<{
+        content: string;
+        agents: number;
+        semaphore: number;
+        applied: boolean;
+        restart_required: boolean;
+      }>("/settings/resources/generate-override", { agents });
+      return data;
+    },
+  });
+}
