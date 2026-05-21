@@ -36,6 +36,7 @@ class AgentSupervisor:
         self.running_agents: set[str] = set()
         self.active_tasks: dict[str, asyncio.Task] = {}
         self._pending_callbacks: list = []
+        self._concurrency_semaphore = asyncio.Semaphore(8)  # max concurrent task processes
 
     def _build_conversation_assistant_content(self, task: Task) -> str:
         if task.response and task.response.strip():
@@ -176,8 +177,12 @@ class AgentSupervisor:
     async def submit_task(self, task_id: str) -> None:
         if task_id in self.active_tasks:
             return
-        runner = asyncio.create_task(self._run_task(task_id))
+        runner = asyncio.create_task(self._run_task_with_semaphore(task_id))
         self.active_tasks[task_id] = runner
+
+    async def _run_task_with_semaphore(self, task_id: str) -> None:
+        async with self._concurrency_semaphore:
+            await self._run_task(task_id)
 
     async def cancel_task(self, task_id: str) -> None:
         runner = self.active_tasks.get(task_id)
