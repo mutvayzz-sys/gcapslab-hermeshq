@@ -44,6 +44,7 @@ class AppSettingsRead(ORMModel):
 
 class PublicSettingsRead(BaseModel):
     """Safe subset of settings for unauthenticated access (login page, etc.)."""
+    app_version: str
     app_name: str | None
     app_short_name: str | None
     theme_mode: Literal["dark", "light", "system", "enterprise", "sixmanager", "sixmanager-light"]

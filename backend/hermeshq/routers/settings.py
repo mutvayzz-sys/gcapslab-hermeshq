@@ -85,6 +85,7 @@ def _settings_to_public_read(item: AppSettings) -> PublicSettingsRead:
     logo_url = f"/api/settings/branding/logo?v={version}" if item.logo_filename else None
     favicon_url = f"/api/settings/branding/favicon?v={version}" if item.favicon_filename else None
     return PublicSettingsRead(
+        app_version=get_app_version(),
         app_name=item.app_name or settings.app_name,
         app_short_name=item.app_short_name or (item.app_name or settings.app_name),
         theme_mode=item.theme_mode or "dark",
