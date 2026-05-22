@@ -29,39 +29,41 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def _run_alembic_migrations() -> None:
-    """Run Alembic migrations if available. Returns True on success."""
+async def _run_alembic_migrations() -> bool:
+    """Run Alembic migrations when Alembic is installed."""
     try:
         from alembic import command as alembic_command
         from alembic.config import Config as AlembicConfig
+    except ImportError:
+        logger.warning("Alembic is not installed, falling back to legacy schema updates")
+        return False
 
-        alembic_cfg = AlembicConfig("alembic.ini")
-        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    alembic_cfg = AlembicConfig("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
 
-        def _run_upgrade() -> None:
-            alembic_command.upgrade(alembic_cfg, "head")
+    def _run_upgrade() -> None:
+        alembic_command.upgrade(alembic_cfg, "head")
 
-        import asyncio
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _run_upgrade)
-        logger.info("Alembic migrations applied successfully")
-    except Exception:
-        logger.warning("Alembic migrations not available, falling back to legacy schema updates", exc_info=True)
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _run_upgrade)
+    logger.info("Alembic migrations applied successfully")
+    return True
 
 
 async def init_database() -> None:
     # Try Alembic first; fall back to legacy schema bootstrap
-    alembic_ok = False
-    try:
-        from pathlib import Path
-        alembic_ini = Path("alembic.ini")
-        if alembic_ini.exists():
-            await _run_alembic_migrations()
-            alembic_ok = True
-    except Exception:
-        logger.warning("Alembic not available, using legacy schema bootstrap")
+    from pathlib import Path
 
-    if not alembic_ok:
+    alembic_ini = Path("alembic.ini")
+    use_legacy_bootstrap = not alembic_ini.exists()
+    if alembic_ini.exists():
+        if await _run_alembic_migrations():
+            return
+        use_legacy_bootstrap = True
+
+    if use_legacy_bootstrap:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
             await connection.run_sync(_run_schema_updates)

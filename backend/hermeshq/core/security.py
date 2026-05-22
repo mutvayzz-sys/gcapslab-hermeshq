@@ -17,7 +17,7 @@ from hermeshq.models.user import User
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["argon2", "pbkdf2_sha256"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 ROLE_ADMIN = "admin"
 ROLE_USER = "user"
 
@@ -99,7 +99,7 @@ async def _resolve_token_from_request(
 
 
 async def get_current_user(
-    bearer_token: str = Depends(oauth2_scheme),
+    bearer_token: str | None = Depends(oauth2_scheme),
     cookie_token: str | None = Cookie(default=None, alias="hermeshq_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> User:

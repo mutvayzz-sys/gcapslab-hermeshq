@@ -46,6 +46,14 @@ class PTYManager:
         self.shell = shell
         self.sessions: dict[str, PTYSession] = {}
         self.audit_callback = audit_callback
+        self._session_locks: dict[str, asyncio.Lock] = {}
+
+    def _get_session_lock(self, agent_id: str) -> asyncio.Lock:
+        lock = self._session_locks.get(agent_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._session_locks[agent_id] = lock
+        return lock
 
     async def create_session(
         self,
@@ -57,49 +65,50 @@ class PTYManager:
         cols: int = 120,
         rows: int = 40,
     ) -> PTYSession:
-        if agent_id in self.sessions:
-            return self.sessions[agent_id]
-        master_fd, slave_fd = pty.openpty()
-        self._resize_fd(slave_fd, cols, rows)
-        shell = self._resolve_shell()
-        launch_command = command or [shell]
-        process = subprocess.Popen(
-            launch_command,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            cwd=cwd,
-            env={**os.environ, "TERM": "xterm-256color", **(env or {})},
-            close_fds=True,
-        )
-        session = PTYSession(
-            session_id=str(uuid4()),
-            agent_id=agent_id,
-            master_fd=master_fd,
-            slave_fd=slave_fd,
-            process=process,
-            mode=mode,
-            cwd=cwd,
-            command=launch_command,
-            cols=cols,
-            rows=rows,
-        )
-        session.reader_task = asyncio.create_task(self._reader_loop(session))
-        self.sessions[agent_id] = session
-        await self._audit(
-            session,
-            "terminal.session.started",
-            f"Started terminal session in {cwd}",
-            details={
-                "mode": mode,
-                "cwd": cwd,
-                "command": launch_command,
-                "cols": cols,
-                "rows": rows,
-                "pid": process.pid,
-            },
-        )
-        return session
+        async with self._get_session_lock(agent_id):
+            if agent_id in self.sessions:
+                return self.sessions[agent_id]
+            master_fd, slave_fd = pty.openpty()
+            self._resize_fd(slave_fd, cols, rows)
+            shell = self._resolve_shell()
+            launch_command = command or [shell]
+            process = subprocess.Popen(
+                launch_command,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                cwd=cwd,
+                env={**os.environ, "TERM": "xterm-256color", **(env or {})},
+                close_fds=True,
+            )
+            session = PTYSession(
+                session_id=str(uuid4()),
+                agent_id=agent_id,
+                master_fd=master_fd,
+                slave_fd=slave_fd,
+                process=process,
+                mode=mode,
+                cwd=cwd,
+                command=launch_command,
+                cols=cols,
+                rows=rows,
+            )
+            session.reader_task = asyncio.create_task(self._reader_loop(session))
+            self.sessions[agent_id] = session
+            await self._audit(
+                session,
+                "terminal.session.started",
+                f"Started terminal session in {cwd}",
+                details={
+                    "mode": mode,
+                    "cwd": cwd,
+                    "command": launch_command,
+                    "cols": cols,
+                    "rows": rows,
+                    "pid": process.pid,
+                },
+            )
+            return session
 
     async def destroy_session(self, agent_id: str) -> None:
         session = self.sessions.pop(agent_id, None)

@@ -24,6 +24,7 @@ class SchedulerService:
         self.on_task_created = on_task_created
         self._task: asyncio.Task | None = None
         self._running = False
+        self._tick_lock = asyncio.Lock()
 
     async def start(self) -> None:
         if self._running:
@@ -47,11 +48,19 @@ class SchedulerService:
             await asyncio.sleep(5)
 
     async def tick(self) -> None:
+        if self._tick_lock.locked():
+            return
+        async with self._tick_lock:
+            await self._tick_once()
+
+    async def _tick_once(self) -> None:
         now = datetime.now(timezone.utc)
         async with self.session_factory() as session:
-            result = await session.execute(
-                select(ScheduledTask).where(ScheduledTask.enabled == True)  # noqa: E712
-            )
+            statement = select(ScheduledTask).where(ScheduledTask.enabled == True)  # noqa: E712
+            dialect_name = session.bind.dialect.name if session.bind is not None else ""
+            if dialect_name in {"postgresql", "mysql"}:
+                statement = statement.with_for_update(skip_locked=True)
+            result = await session.execute(statement)
             schedules = result.scalars().all()
             created_task_ids: list[str] = []
             for schedule in schedules:

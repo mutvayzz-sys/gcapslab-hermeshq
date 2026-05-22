@@ -653,7 +653,8 @@ async def oidc_callback(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response, current_user: User = Depends(get_current_user)) -> Response:
     _clear_auth_cookie(response)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @router.get("/me", response_model=UserRead)
