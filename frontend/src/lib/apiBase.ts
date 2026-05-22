@@ -24,6 +24,12 @@ export function resolveApiRoot(): string {
 }
 
 export function resolveWsRoot(): string {
+  const apiBase = resolveApiBase();
+  // If the API base is an absolute URL, derive the WS root from it.
+  if (/^https?:\/\//.test(apiBase)) {
+    return apiBase.replace(/\/api$/, "").replace(/^http/, "ws");
+  }
+  // Relative API base (same origin) — use window.location.
   if (typeof window !== "undefined") {
     return window.location.origin.replace(/^http/, "ws");
   }

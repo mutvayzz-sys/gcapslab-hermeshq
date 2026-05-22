@@ -26,6 +26,25 @@ function safeRemoveLocalStorage(key: string): void {
   }
 }
 
+/**
+ * Decode JWT payload without a library.
+ * Returns null if the token is malformed or expired.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && typeof payload.exp === "number") {
+      // exp is in seconds since epoch
+      if (Date.now() >= payload.exp * 1000) return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 interface SessionState {
   token: string | null;
   user: User | null;
@@ -34,7 +53,13 @@ interface SessionState {
   logout: () => void;
 }
 
-const storedToken = safeReadLocalStorage("hermeshq.token");
+// Validate stored token — discard if expired
+const storedToken = (() => {
+  const raw = safeReadLocalStorage("hermeshq.token");
+  if (raw && decodeJwtPayload(raw)) return raw;
+  if (raw) safeRemoveLocalStorage("hermeshq.token");
+  return null;
+})();
 
 export const useSessionStore = create<SessionState>((set) => ({
   token: storedToken,

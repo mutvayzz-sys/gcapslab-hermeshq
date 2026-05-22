@@ -1152,7 +1152,6 @@ class GatewaySupervisor:
             )
         except Exception:
             return []
-        return []
 
     def _extract_entries_from_messages(
         self,

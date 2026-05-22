@@ -76,6 +76,7 @@ COPY --from=builder /app/hermeshq/assets/whatsapp-bridge/node_modules \
 
 # Copy application source
 COPY VERSION /app/VERSION
+COPY backend/alembic.ini /app/alembic.ini
 COPY backend/hermeshq /app/hermeshq
 
 # Writable directories for appuser

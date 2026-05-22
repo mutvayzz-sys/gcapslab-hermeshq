@@ -2,6 +2,31 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.22.2] — 2026-05-22
+
+### Stability & Architecture (Priority 2)
+
+#### P2.1 — Full migration to Alembic, removed legacy inline schema updates
+- **`database.py`**: Reduced from 381 → 57 lines (−324). Removed the entire `_run_schema_updates()` function containing 300+ lines of hardcoded `ALTER TABLE` statements.
+- **`alembic/versions/d39fa7cf25af_initial_schema_from_models.py`**: New initial migration (stamp) of the current schema. All future schema changes go through Alembic.
+- **`backend/Dockerfile`**: Added `COPY backend/alembic.ini` so Alembic is available inside the container.
+- `init_database()` now runs `alembic upgrade head` as a subprocess, avoiding async event-loop conflicts.
+
+#### P2.2 — Fixed identical branches in `_restore_secrets`
+- **`services/instance_backup.py`**: `merge` mode now only fills `None` fields (preserving existing values), while `replace` mode overwrites everything. Previously both branches did the same thing (unconditional setattr).
+
+#### P2.3 — JWT expiration validation in frontend session store
+- **`frontend/src/stores/sessionStore.ts`**: Added `decodeJwtPayload()` that decodes the JWT and checks the `exp` claim. On store initialization, expired tokens are automatically discarded and removed from localStorage.
+
+#### P2.4 — `resolveWsRoot()` now respects `VITE_API_BASE_URL`
+- **`frontend/src/lib/apiBase.ts`**: When `VITE_API_BASE_URL` is an absolute URL, the WebSocket root is derived from it (e.g. `https://api.example.com/api` → `wss://api.example.com`). Previously always used `window.location.origin`, ignoring the environment variable.
+
+#### P2.5 — Dead code removal
+- **`routers/mcp_server.py`**: Removed write-only `_log_levels` dict and unused `is_error` variable.
+- **`services/gateway_supervisor.py`**: Removed unreachable `return []` in exception handler.
+- **`services/agent_supervisor.py`**: Removed redundant local `import Task` inside `_recover_zombie_tasks`.
+
+
 ## [2026.5.22.1] — 2026-05-22
 
 ### Security

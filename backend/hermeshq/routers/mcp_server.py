@@ -42,7 +42,6 @@ router = APIRouter(tags=["mcp"])
 # ---------------------------------------------------------------------------
 _rate_limiter = McpRateLimiter(max_requests=60, window_seconds=60)
 _analytics = McpAnalytics()
-_log_levels: dict[str, str] = {}  # token_id → logging level
 
 # ---------------------------------------------------------------------------
 # JSON-RPC 2.0 helpers
@@ -741,7 +740,6 @@ async def mcp_http_endpoint(
     await _rate_limiter.check(access.id)
 
     t0 = time.monotonic()
-    is_error = False
     try:
         if method == "initialize":
             result = {
@@ -820,7 +818,7 @@ async def mcp_http_endpoint(
         # ── logging/setLevel ──────────────────────────────────────────
         if method == "logging/setLevel":
             level = str(params.get("level", "info")).upper()
-            _log_levels[access.id] = level
+            # Level acknowledged (per-session filtering not yet implemented)
             result: Any = {}
             resp = JSONResponse(_jsonrpc_result(request_id, result))
             _analytics.record(token_id=access.id, method=method, latency_ms=(time.monotonic() - t0) * 1000)

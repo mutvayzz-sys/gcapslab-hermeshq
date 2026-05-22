@@ -1,11 +1,11 @@
 import logging
+import subprocess
+import sys
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from hermeshq.config import get_settings
-from hermeshq.models.base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -29,353 +29,29 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def _run_alembic_migrations() -> bool:
-    """Run Alembic migrations when Alembic is installed."""
-    try:
-        from alembic import command as alembic_command
-        from alembic.config import Config as AlembicConfig
-    except ImportError:
-        logger.warning("Alembic is not installed, falling back to legacy schema updates")
-        return False
+async def init_database() -> None:
+    """Run Alembic migrations to bring the database schema up to date.
 
-    alembic_cfg = AlembicConfig("alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-
-    def _run_upgrade() -> None:
-        alembic_command.upgrade(alembic_cfg, "head")
-
+    Legacy inline schema updates (_run_schema_updates) were removed in
+    v2026.5.22.1.  All schema changes are now managed exclusively through
+    Alembic migrations in ``hermeshq/alembic/versions/``.
+    """
     import asyncio
 
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _run_upgrade)
+
+    def _run_alembic_upgrade() -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout:
+            for line in result.stdout.strip().splitlines():
+                logger.info("[alembic] %s", line)
+        if result.returncode != 0:
+            logger.error("[alembic] %s", result.stderr)
+            raise RuntimeError(f"Alembic upgrade failed: {result.stderr}")
+
+    await loop.run_in_executor(None, _run_alembic_upgrade)
     logger.info("Alembic migrations applied successfully")
-    return True
-
-
-async def init_database() -> None:
-    # Try Alembic first; fall back to legacy schema bootstrap
-    from pathlib import Path
-
-    alembic_ini = Path("alembic.ini")
-    use_legacy_bootstrap = not alembic_ini.exists()
-    if alembic_ini.exists():
-        if await _run_alembic_migrations():
-            return
-        use_legacy_bootstrap = True
-
-    if use_legacy_bootstrap:
-        async with engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-            await connection.run_sync(_run_schema_updates)
-
-
-def _run_schema_updates(sync_connection) -> None:
-    inspector = inspect(sync_connection)
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    user_indexes = {index["name"] for index in inspector.get_indexes("users")}
-    user_unique_constraints = {constraint["name"] for constraint in inspector.get_unique_constraints("users")}
-    user_named_constraints = user_indexes | user_unique_constraints
-    if "email" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
-    if "auth_source" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN auth_source VARCHAR(32)"))
-        sync_connection.execute(text("UPDATE users SET auth_source = 'local' WHERE auth_source IS NULL"))
-    if "oidc_subject" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN oidc_subject VARCHAR(255)"))
-    if "role" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(16)"))
-        sync_connection.execute(text("UPDATE users SET role = 'admin' WHERE username = 'admin'"))
-        sync_connection.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
-    if "is_active" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
-        sync_connection.execute(text("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
-    if "theme_preference" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN theme_preference VARCHAR(16)"))
-        sync_connection.execute(text("UPDATE users SET theme_preference = 'default' WHERE theme_preference IS NULL"))
-    if "locale_preference" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN locale_preference VARCHAR(16)"))
-        sync_connection.execute(text("UPDATE users SET locale_preference = 'default' WHERE locale_preference IS NULL"))
-    if "avatar_filename" not in user_columns:
-        sync_connection.execute(text("ALTER TABLE users ADD COLUMN avatar_filename VARCHAR(255)"))
-    if "ix_users_email" not in user_named_constraints:
-        sync_connection.execute(text("CREATE INDEX ix_users_email ON users(email)"))
-    if "ix_users_auth_source" not in user_named_constraints:
-        sync_connection.execute(text("CREATE INDEX ix_users_auth_source ON users(auth_source)"))
-    if "ix_users_oidc_subject" not in user_named_constraints:
-        sync_connection.execute(text("CREATE INDEX ix_users_oidc_subject ON users(oidc_subject)"))
-    if not inspector.has_table("agent_assignments"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE agent_assignments (
-                    id VARCHAR(36) PRIMARY KEY,
-                    user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    agent_id VARCHAR(36) NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-                    assigned_by VARCHAR(36) NULL REFERENCES users(id) ON DELETE SET NULL,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_agent_assignments_user_agent UNIQUE (user_id, agent_id)
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_agent_assignments_user_id ON agent_assignments(user_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_agent_assignments_agent_id ON agent_assignments(agent_id)"))
-    agent_columns = {column["name"] for column in inspector.get_columns("agents")}
-    if "friendly_name" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN friendly_name VARCHAR(128)"))
-        sync_connection.execute(text("UPDATE agents SET friendly_name = name WHERE friendly_name IS NULL"))
-    if "avatar_filename" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN avatar_filename VARCHAR(255)"))
-    if "runtime_profile" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN runtime_profile VARCHAR(32)"))
-        sync_connection.execute(text("UPDATE agents SET runtime_profile = 'standard' WHERE runtime_profile IS NULL"))
-    if "hermes_version" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN hermes_version VARCHAR(32)"))
-    if "approval_mode" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN approval_mode VARCHAR(32)"))
-    if "tool_progress_mode" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN tool_progress_mode VARCHAR(16)"))
-    if "gateway_notifications_mode" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN gateway_notifications_mode VARCHAR(16)"))
-    if "is_system_agent" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN is_system_agent BOOLEAN DEFAULT FALSE"))
-        sync_connection.execute(text("UPDATE agents SET is_system_agent = FALSE WHERE is_system_agent IS NULL"))
-    if "system_scope" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN system_scope VARCHAR(32)"))
-    if "is_archived" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN is_archived BOOLEAN DEFAULT FALSE"))
-        sync_connection.execute(text("UPDATE agents SET is_archived = FALSE WHERE is_archived IS NULL"))
-    if "archived_at" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN archived_at TIMESTAMP WITH TIME ZONE"))
-    if "archive_reason" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN archive_reason TEXT"))
-    if "integration_configs" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN integration_configs JSON"))
-        sync_connection.execute(text("UPDATE agents SET integration_configs = '{}' WHERE integration_configs IS NULL"))
-    if "fallback_provider" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_provider VARCHAR(64)"))
-    if "fallback_model" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_model VARCHAR(255)"))
-    if "fallback_api_key_ref" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_api_key_ref VARCHAR(128)"))
-    if "fallback_base_url" not in agent_columns:
-        sync_connection.execute(text("ALTER TABLE agents ADD COLUMN fallback_base_url VARCHAR(512)"))
-    settings_columns = {column["name"] for column in inspector.get_columns("app_settings")}
-    if "app_name" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN app_name VARCHAR(128)"))
-    if "app_short_name" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN app_short_name VARCHAR(48)"))
-    if "theme_mode" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN theme_mode VARCHAR(16)"))
-    if "default_locale" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN default_locale VARCHAR(8)"))
-    if "default_hermes_version" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN default_hermes_version VARCHAR(32)"))
-    if "default_tui_skin" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN default_tui_skin VARCHAR(128)"))
-    if "enabled_integration_packages" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN enabled_integration_packages JSON"))
-        sync_connection.execute(
-            text(
-                """
-                UPDATE app_settings
-                SET enabled_integration_packages = '[]'
-                WHERE enabled_integration_packages IS NULL
-                """
-            )
-        )
-    if "tui_skin_filename" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN tui_skin_filename VARCHAR(255)"))
-    if "logo_filename" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN logo_filename VARCHAR(255)"))
-    if "favicon_filename" not in settings_columns:
-        sync_connection.execute(text("ALTER TABLE app_settings ADD COLUMN favicon_filename VARCHAR(255)"))
-    if not inspector.has_table("providers"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE providers (
-                    slug VARCHAR(64) PRIMARY KEY,
-                    name VARCHAR(128) NOT NULL,
-                    runtime_provider VARCHAR(64) NOT NULL,
-                    auth_type VARCHAR(32) NOT NULL DEFAULT 'api_key',
-                    base_url VARCHAR(512) NULL,
-                    default_model VARCHAR(255) NULL,
-                    description TEXT NULL,
-                    docs_url VARCHAR(512) NULL,
-                    secret_placeholder VARCHAR(128) NULL,
-                    supports_secret_ref BOOLEAN NOT NULL DEFAULT TRUE,
-                    supports_custom_base_url BOOLEAN NOT NULL DEFAULT TRUE,
-                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                    sort_order INTEGER NOT NULL DEFAULT 100,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_providers_runtime_provider ON providers(runtime_provider)"))
-    if not inspector.has_table("messaging_channels"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE messaging_channels (
-                    id VARCHAR(36) PRIMARY KEY,
-                    agent_id VARCHAR(36) NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-                    platform VARCHAR(32) NOT NULL,
-                    enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                    mode VARCHAR(32) NOT NULL DEFAULT 'bidirectional',
-                    secret_ref VARCHAR(128) NULL,
-                    allowed_user_ids JSON NOT NULL DEFAULT '[]'::json,
-                    home_chat_id VARCHAR(128) NULL,
-                    home_chat_name VARCHAR(128) NULL,
-                    require_mention BOOLEAN NOT NULL DEFAULT FALSE,
-                    free_response_chat_ids JSON NOT NULL DEFAULT '[]'::json,
-                    unauthorized_dm_behavior VARCHAR(32) NOT NULL DEFAULT 'pair',
-                    status VARCHAR(20) NOT NULL DEFAULT 'stopped',
-                    last_error TEXT NULL,
-                    metadata_json JSON NOT NULL DEFAULT '{}'::json,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_messaging_channels_agent_platform UNIQUE (agent_id, platform)
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_messaging_channels_agent_id ON messaging_channels(agent_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_messaging_channels_platform ON messaging_channels(platform)"))
-        sync_connection.execute(text("CREATE INDEX ix_messaging_channels_status ON messaging_channels(status)"))
-    if not inspector.has_table("terminal_sessions"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE terminal_sessions (
-                    id VARCHAR(36) PRIMARY KEY,
-                    agent_id VARCHAR(36) NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-                    node_id VARCHAR(36) NULL REFERENCES nodes(id) ON DELETE SET NULL,
-                    mode VARCHAR(32) NOT NULL DEFAULT 'hybrid',
-                    cwd TEXT NULL,
-                    command_json JSON NOT NULL DEFAULT '[]'::json,
-                    status VARCHAR(16) NOT NULL DEFAULT 'open',
-                    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                    ended_at TIMESTAMP WITH TIME ZONE NULL,
-                    exit_code INTEGER NULL,
-                    input_transcript TEXT NOT NULL DEFAULT '',
-                    output_transcript TEXT NOT NULL DEFAULT '',
-                    transcript_text TEXT NOT NULL DEFAULT '',
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_terminal_sessions_agent_id ON terminal_sessions(agent_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_terminal_sessions_node_id ON terminal_sessions(node_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_terminal_sessions_status ON terminal_sessions(status)"))
-    if not inspector.has_table("conversation_threads"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE conversation_threads (
-                    id VARCHAR(36) PRIMARY KEY,
-                    agent_id VARCHAR(36) NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-                    user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255) NULL,
-                    last_task_id VARCHAR(36) NULL REFERENCES tasks(id) ON DELETE SET NULL,
-                    notes TEXT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_conversation_threads_agent_user UNIQUE (agent_id, user_id)
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_conversation_threads_agent_id ON conversation_threads(agent_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_conversation_threads_user_id ON conversation_threads(user_id)"))
-    if not inspector.has_table("integration_drafts"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE integration_drafts (
-                    id VARCHAR(36) PRIMARY KEY,
-                    slug VARCHAR(128) NOT NULL UNIQUE,
-                    template VARCHAR(32) NOT NULL DEFAULT 'rest-api',
-                    status VARCHAR(24) NOT NULL DEFAULT 'draft',
-                    created_by_user_id VARCHAR(36) NULL REFERENCES users(id) ON DELETE SET NULL,
-                    created_by_agent_id VARCHAR(36) NULL REFERENCES agents(id) ON DELETE SET NULL,
-                    last_validation JSON NULL,
-                    published_package_slug VARCHAR(128) NULL,
-                    published_package_version VARCHAR(32) NULL,
-                    published_at TIMESTAMP WITH TIME ZONE NULL,
-                    notes TEXT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_integration_drafts_slug ON integration_drafts(slug)"))
-        sync_connection.execute(text("CREATE INDEX ix_integration_drafts_template ON integration_drafts(template)"))
-        sync_connection.execute(text("CREATE INDEX ix_integration_drafts_status ON integration_drafts(status)"))
-    if not inspector.has_table("mcp_access_tokens"):
-        sync_connection.execute(
-            text(
-                """
-                CREATE TABLE mcp_access_tokens (
-                    id VARCHAR(36) PRIMARY KEY,
-                    name VARCHAR(128) NOT NULL,
-                    description TEXT NULL,
-                    client_name VARCHAR(128) NULL,
-                    token_prefix VARCHAR(24) NOT NULL,
-                    token_hash VARCHAR(128) NOT NULL UNIQUE,
-                    created_by_user_id VARCHAR(36) NULL REFERENCES users(id) ON DELETE SET NULL,
-                    allowed_agent_ids JSON NOT NULL DEFAULT '[]'::json,
-                    scopes JSON NOT NULL DEFAULT '[]'::json,
-                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                    expires_at TIMESTAMP WITH TIME ZONE NULL,
-                    last_used_at TIMESTAMP WITH TIME ZONE NULL,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-        sync_connection.execute(text("CREATE INDEX ix_mcp_access_tokens_name ON mcp_access_tokens(name)"))
-        sync_connection.execute(text("CREATE INDEX ix_mcp_access_tokens_token_prefix ON mcp_access_tokens(token_prefix)"))
-        sync_connection.execute(text("CREATE INDEX ix_mcp_access_tokens_created_by_user_id ON mcp_access_tokens(created_by_user_id)"))
-        sync_connection.execute(text("CREATE INDEX ix_mcp_access_tokens_is_active ON mcp_access_tokens(is_active)"))
-        sync_connection.execute(text("CREATE INDEX ix_mcp_access_tokens_expires_at ON mcp_access_tokens(expires_at)"))
-    task_columns = {column["name"] for column in inspector.get_columns("tasks")}
-    if "board_column" not in task_columns:
-        sync_connection.execute(text("ALTER TABLE tasks ADD COLUMN board_column VARCHAR(32)"))
-        sync_connection.execute(
-            text(
-                """
-                UPDATE tasks
-                SET board_column = CASE
-                    WHEN status = 'running' THEN 'running'
-                    WHEN status = 'completed' THEN 'done'
-                    WHEN status IN ('failed', 'cancelled') THEN 'failed'
-                    ELSE 'inbox'
-                END
-                WHERE board_column IS NULL
-                """
-            )
-        )
-    if "board_order" not in task_columns:
-        sync_connection.execute(text("ALTER TABLE tasks ADD COLUMN board_order BIGINT"))
-        sync_connection.execute(
-            text(
-                """
-                UPDATE tasks
-                SET board_order = FLOOR(
-                    EXTRACT(EPOCH FROM COALESCE(completed_at, started_at, queued_at, CURRENT_TIMESTAMP)) * 1000
-                )::BIGINT
-                WHERE board_order IS NULL
-                """
-            )
-        )
-    if "board_manual" not in task_columns:
-        sync_connection.execute(text("ALTER TABLE tasks ADD COLUMN board_manual BOOLEAN DEFAULT FALSE"))
-        sync_connection.execute(text("UPDATE tasks SET board_manual = FALSE WHERE board_manual IS NULL"))

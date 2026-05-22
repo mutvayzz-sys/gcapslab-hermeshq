@@ -566,11 +566,15 @@ class InstanceBackupService:
             if secret is None:
                 session.add(Secret(**self._deserialize_payload(Secret, payload)))
             else:
+                restored = self._deserialize_payload(Secret, payload)
                 if mode == "merge":
-                    for key, value in self._deserialize_payload(Secret, payload).items():
-                        setattr(secret, key, value)
+                    # Merge: only fill in fields that are currently empty/None
+                    for key, value in restored.items():
+                        if getattr(secret, key, None) is None:
+                            setattr(secret, key, value)
                 else:
-                    for key, value in self._deserialize_payload(Secret, payload).items():
+                    # Replace: overwrite all fields
+                    for key, value in restored.items():
                         setattr(secret, key, value)
             count += 1
         return count

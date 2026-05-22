@@ -112,8 +112,6 @@ class AgentSupervisor:
     async def _recover_zombie_tasks(self) -> None:
         """Mark tasks stuck in 'running' or 'queued' as failed after a restart."""
         async with self.session_factory() as session:
-            from hermeshq.models.task import Task
-
             result = await session.execute(
                 select(Task).where(
                     Task.status.in_(["running", "queued"]),
