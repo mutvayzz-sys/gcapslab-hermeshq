@@ -268,7 +268,7 @@ const ns: Record<string, string> = {
   // --- Kapso WhatsApp ---
   "agent.kapsoWhatsAppCopy": "WhatsApp via Kapso (Meta Cloud API). Stable, official, no subprocess needed. Messages are received via webhook and forwarded as tasks; responses are sent back automatically.",
   "agent.selectKapsoSecret": "Select Kapso API key secret",
-  "agent.kapsoSecretHint": "Create a secret in Settings → Secrets with your **Kapso Project API key** as the value. Then select it here.",
+  "agent.kapsoSecretHint": "Create a secret in Settings → Secrets with your **Kapso Project API Key** as the value. A single API key works for all phone numbers in your Kapso project — you only need one secret shared across all agents. Each agent differentiates via the Phone Number ID below.",
   "agent.enableKapsoWhatsApp": "Enable Kapso WhatsApp gateway for this agent",
   "agent.saveKapsoWhatsApp": "Save Kapso WhatsApp channel",
   "agent.kapsoWhatsAppConfigSaveFailed": "Unable to save Kapso WhatsApp channel configuration.",
