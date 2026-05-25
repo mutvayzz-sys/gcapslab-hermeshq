@@ -21,6 +21,9 @@ New WhatsApp channel powered by the official Meta Cloud API via Kapso platform.
 - **`ChannelForm.tsx`**: New Kapso metadata fields (Phone Number ID, Webhook Secret) and platform-specific labels/placeholders.
 - **i18n (EN/ES)**: 16 new translation keys for Kapso WhatsApp channel.
 
+#### Manual
+- **`ManualPage.tsx`**: New "Kapso WhatsApp" section in both EN and ES with step-by-step setup guide (6 steps), prerequisites, testing instructions, and migration notes.
+
 #### Key Design Decisions
 - Coexists with existing Baileys WhatsApp (`"whatsapp"` legacy channel). Agents can use either or both.
 - No subprocess overhead — runs as lightweight asyncio coroutine within the backend process.
