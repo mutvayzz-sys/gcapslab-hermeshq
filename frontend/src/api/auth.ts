@@ -135,14 +135,3 @@ export function useEmailConfig() {
     },
   });
 }
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data } = await apiClient.delete<User>("/auth/me/avatar");
-      return data;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
-    },
-  });
-}
