@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     oidc_provider_login_url_google: str | None = None
     oidc_provider_login_url_microsoft: str | None = None
 
+    resend_api_key: str | None = None
+    from_email: str | None = None
+    from_name: str | None = None
+    public_base_url: str | None = None
+    password_reset_token_minutes: int = 15
+
     admin_username: str = "admin"
     admin_password: str = "admin123"
     admin_display_name: str = "Hermes Operator"

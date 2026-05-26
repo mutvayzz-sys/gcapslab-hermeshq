@@ -22,3 +22,7 @@ class AppSettings(TimestampMixin, Base):
     tui_skin_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     logo_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     favicon_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    resend_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    from_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    from_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    public_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

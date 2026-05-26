@@ -115,3 +115,34 @@ export function useDeleteMyAvatar() {
     },
   });
 }
+
+export async function forgotPassword(email: string) {
+  const { data } = await apiClient.post<{ message: string }>("/auth/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(token: string, new_password: string) {
+  const { data } = await apiClient.post<{ message: string }>("/auth/reset-password", { token, new_password });
+  return data;
+}
+
+export function useEmailConfig() {
+  return useQuery({
+    queryKey: ["email-config"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ configured: boolean; from_email: string | null; from_name: string | null; public_base_url: string | null }>("/auth/email-config");
+      return data;
+    },
+  });
+}
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.delete<User>("/auth/me/avatar");
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+}

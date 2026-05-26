@@ -20,6 +20,7 @@ const ns: Record<string, string> = {
   "login.notConfigured": "Not configured",
   "login.useLocalAdminLogin": "Use local admin login",
   "login.enterControlSurface": "Enter Control Surface",
+  "login.forgotPassword": "Forgot password?",
 };
 
 export default ns;

@@ -63,3 +63,30 @@ class ChangePasswordRequest(BaseModel):
     def validate_password(cls, value: str) -> str:
         _validate_password_strength(value)
         return value
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=255)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=2048)
+    new_password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        _validate_password_strength(value)
+        return value
+
+
+class PasswordResetResponse(BaseModel):
+    message: str
+
+
+class EmailConfigStatus(BaseModel):
+    """Status of email configuration for the settings UI."""
+    configured: bool = False
+    from_email: str | None = None
+    from_name: str | None = None
+    public_base_url: str | None = None

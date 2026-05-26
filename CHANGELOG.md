@@ -2,6 +2,53 @@
 
 All notable changes to HermesHQ are documented in this file.
 
+## [2026.5.25.3] — 2026-05-25
+
+### Feature: Password Recovery via Email (Resend)
+
+Full password reset flow using the Resend email API, configurable from the Settings UI.
+
+#### Backend
+- **`models/password_reset.py`** (NEW): `PasswordResetToken` model with hashed tokens, expiration, single-use, rate limiting (3/hour).
+- **`services/email_service.py`** (NEW): `EmailService` class with Resend REST API integration, dark-themed HTML email template, async config reload from database.
+- **`routers/auth.py`**: 3 new endpoints:
+  - `POST /auth/forgot-password` — generates reset token, sends email (anti-enumeration: always returns 200)
+  - `POST /auth/reset-password` — validates token, updates password, invalidates other tokens
+  - `GET /auth/email-config` — returns email config status for Settings UI
+- **`schemas/auth.py`**: `ForgotPasswordRequest`, `ResetPasswordRequest`, `PasswordResetResponse`, `EmailConfigStatus`
+- **`config.py`**: `resend_api_key`, `from_email`, `from_name`, `public_base_url`, `password_reset_token_minutes`
+- **`models/app_settings.py`**: 4 new DB-backed fields for email config (editable from Settings UI)
+- **Alembic migration**: `9a4ccb262336_add_email_and_password_reset`
+
+#### Frontend
+- **`ForgotPasswordPage.tsx`** (NEW): Email input → confirmation message, branded dark layout matching LoginPage
+- **`ResetPasswordPage.tsx`** (NEW): Token validation, password + confirm fields, success → redirect to login
+- **`EmailTab.tsx`** (NEW): Settings tab for Resend API key, From email/name, Public base URL, test email button
+- **`LoginPage.tsx`**: "Forgot password?" link
+- **`App.tsx`**: Routes for `/forgot-password` and `/reset-password`
+- **`SettingsPage.tsx`**: New "Email" tab
+- **i18n (EN/ES)**: 45+ new translation keys for password recovery and email config
+
+#### Security
+- Tokens hashed (SHA-256) in database — plaintext never stored
+- 15-minute expiration (configurable)
+- Single-use tokens with immediate invalidation on password change
+- Rate limited to 3 requests per email per hour
+- Anti-enumeration: identical response regardless of email existence
+- Only works for `auth_source == "local"` users (OIDC users excluded)
+- `PublicSettingsRead` does NOT expose email config or API keys
+
+#### Tested
+- ✅ Forgot password flow (registered + unregistered emails)
+- ✅ Password reset with valid token
+- ✅ Re-use of token blocked
+- ✅ Old password rejected after reset
+- ✅ Rate limiting (3/hour)
+- ✅ Email config reads from DB dynamically
+- ✅ Frontend pages load correctly
+- ✅ TypeScript compiles with zero errors
+
+
 ## [2026.5.25.2] — 2026-05-25
 
 ### Fix: Kapso webhook batch payload support

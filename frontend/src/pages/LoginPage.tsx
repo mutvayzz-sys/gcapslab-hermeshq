@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { resolveAssetUrl, usePublicBranding } from "../api/settings";
 import { buildOidcLoginUrl, login, useAuthProviders } from "../api/auth";
@@ -221,6 +221,12 @@ export function LoginPage() {
                 <button type="submit" className="panel-button-primary w-full" disabled={loading}>
                   {loading ? t("common.loading") : t("login.enterControlSurface")}
                 </button>
+                <Link
+                  to="/forgot-password"
+                  className="block text-center text-sm text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                >
+                  {t("login.forgotPassword")}
+                </Link>
                 <EnterpriseProviderList
                   providers={publicEnterpriseProviders}
                   onStart={startEnterpriseLogin}

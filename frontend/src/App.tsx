@@ -19,6 +19,8 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { CommsPage } from "./pages/CommsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ManualPage } from "./pages/ManualPage";
 import { MyAccountPage } from "./pages/MyAccountPage";
 import { NodesPage } from "./pages/NodesPage";
@@ -87,7 +89,12 @@ export default function App() {
   if (!token) {
     return (
       <I18nProvider locale={effectiveLocale}>
-        <LoginPage />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
       </I18nProvider>
     );
   }

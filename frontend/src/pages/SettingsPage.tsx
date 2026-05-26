@@ -61,15 +61,16 @@ const HermesVersionsTab = lazy(() => import("../components/settings/HermesVersio
 const SecretsTab = lazy(() => import("../components/settings/SecretsTab").then((m) => ({ default: m.default })));
 const TemplatesTab = lazy(() => import("../components/settings/TemplatesTab").then((m) => ({ default: m.default })));
 const AuthenticationTab = lazy(() => import("../components/settings/AuthenticationTab").then((m) => ({ default: m.AuthenticationTab })));
+const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "resources";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "resources",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources",
 ];
 
 function LoadingFallback() {
@@ -161,6 +162,7 @@ export function SettingsPage() {
     { id: "secrets", label: t("settings.tabSecrets"), copy: t("settings.tabSecretsCopy") },
     { id: "templates", label: t("settings.tabTemplates"), copy: t("settings.tabTemplatesCopy") },
     { id: "authentication", label: "Authentication", copy: "Configure enterprise OIDC providers (Google, Microsoft 365) for single sign-on." },
+    { id: "email", label: "Email", copy: "Configure Resend for transactional emails (password reset, notifications)." },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
   ];
 
@@ -274,6 +276,9 @@ export function SettingsPage() {
           )}
           {activeTab === "authentication" && isAdmin && (
             <AuthenticationTab />
+          )}
+          {activeTab === "email" && isAdmin && (
+            <EmailTab />
           )}
           {activeTab === "resources" && isAdmin && (
             <ResourcesTab />

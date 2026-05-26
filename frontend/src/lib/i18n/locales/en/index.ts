@@ -4,6 +4,7 @@ import agents from "./agents";
 import common from "./common";
 import comms from "./comms";
 import dashboard from "./dashboard";
+import email from "./email";
 import login from "./login";
 import nav from "./nav";
 import nodes from "./nodes";
@@ -21,6 +22,7 @@ const en: Record<string, string> = {
   ...common,
   ...comms,
   ...dashboard,
+  ...email,
   ...login,
   ...nav,
   ...nodes,

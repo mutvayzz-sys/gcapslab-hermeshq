@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 import secrets
@@ -22,16 +23,22 @@ from hermeshq.core.security import (
 from hermeshq.config import get_settings
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
+from hermeshq.models.password_reset import PasswordResetToken
 from hermeshq.schemas.auth import (
     AuthProviderRead,
     AuthProvidersResponse,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    PasswordResetResponse,
+    EmailConfigStatus,
     LoginRequest,
     TokenResponse,
     UserPreferencesUpdate,
     UserProfileUpdate,
     UserRead,
 )
+from hermeshq.services.email_service import get_email_service, EmailServiceError
 from hermeshq.services.avatar import (
     build_avatar_path as _build_avatar_path_shared,
     delete_avatar_files as _delete_avatar_files_shared,
@@ -648,6 +655,167 @@ async def oidc_callback(
     redirect = RedirectResponse(_build_frontend_redirect(request, token=token), status_code=status.HTTP_302_FOUND)
     _set_auth_cookie(redirect, token)
     return redirect
+
+
+# ---------------------------------------------------------------------------
+# Password Reset (Resend email)
+# ---------------------------------------------------------------------------
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+) -> PasswordResetResponse:
+    """Request a password reset link via email. Always returns 200 to prevent email enumeration."""
+    # Find user by email (case-insensitive)
+    result = await db.execute(
+        select(User).where(
+            func.lower(User.email) == payload.email.strip().lower(),
+            User.is_active == True,  # noqa: E712
+            User.auth_source == "local",
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or not user.email:
+        # Always return success to prevent enumeration
+        return PasswordResetResponse(
+            message="If that email is registered, a reset link has been sent."
+        )
+
+    # Rate limit: max 3 reset requests per user per hour
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent_result = await db.execute(
+        select(func.count(PasswordResetToken.id)).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.created_at >= one_hour_ago,
+        )
+    )
+    recent_count = recent_result.scalar() or 0
+    if recent_count >= 3:
+        return PasswordResetResponse(
+            message="If that email is registered, a reset link has been sent."
+        )
+
+    # Generate a secure token
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    settings = get_settings()
+    expires_minutes = settings.password_reset_token_minutes or 15
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+
+    # Get client IP
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else request.client.host if request.client else None
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        ip_address=ip,
+    )
+    db.add(reset_token)
+    await db.commit()
+
+    # Send email
+    email_service = get_email_service()
+    await email_service.areload_config()
+    try:
+        await email_service.send_password_reset(
+            to_email=user.email,
+            token=raw_token,
+            display_name=user.display_name,
+        )
+    except EmailServiceError as exc:
+        logger.warning("Failed to send password reset email to %s: %s", user.email, exc)
+        # Don't reveal the error to the client
+
+    return PasswordResetResponse(
+        message="If that email is registered, a reset link has been sent."
+    )
+
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db_session),
+) -> PasswordResetResponse:
+    """Reset password using a valid reset token."""
+    # Hash the provided token to find it
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    reset_token = result.scalar_one_or_none()
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token.",
+        )
+
+    # Check expiration
+    now = datetime.now(timezone.utc)
+    if reset_token.expires_at.tzinfo is None:
+        reset_token.expires_at = reset_token.expires_at.replace(tzinfo=timezone.utc)
+    if now > reset_token.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired. Please request a new one.",
+        )
+
+    # Get user
+    user = await db.get(User, reset_token.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token.",
+        )
+
+    # Update password
+    user.password_hash = hash_password(payload.new_password)
+
+    # Mark token as used
+    reset_token.used_at = now
+
+    # Invalidate any other pending reset tokens for this user
+    other_result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.id != reset_token.id,
+        )
+    )
+    for other_token in other_result.scalars().all():
+        other_token.used_at = now
+
+    await db.commit()
+
+    logger.info("Password reset successful for user %s", user.username)
+
+    return PasswordResetResponse(
+        message="Password has been reset successfully."
+    )
+
+
+@router.get("/email-config", response_model=EmailConfigStatus)
+async def get_email_config(
+    _admin: User = Depends(get_current_user),
+) -> EmailConfigStatus:
+    """Get current email configuration status (admin only)."""
+    email_service = get_email_service()
+    await email_service.areload_config()
+    return EmailConfigStatus(
+        configured=email_service.is_configured,
+        from_email=email_service._from_email,
+        from_name=email_service._from_name,
+        public_base_url=email_service._public_base_url,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

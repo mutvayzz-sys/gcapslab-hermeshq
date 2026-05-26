@@ -17,6 +17,10 @@ class AppSettingsUpdate(BaseModel):
     default_base_url: str | None = None
     default_hermes_version: str | None = None
     default_tui_skin: str | None = None
+    resend_api_key: str | None = None
+    from_email: str | None = None
+    from_name: str | None = None
+    public_base_url: str | None = None
 
 
 class AppSettingsRead(ORMModel):
@@ -32,6 +36,10 @@ class AppSettingsRead(ORMModel):
     default_base_url: str | None
     default_hermes_version: str | None
     default_tui_skin: str | None = None
+    resend_api_key: str | None = None
+    from_email: str | None = None
+    from_name: str | None = None
+    public_base_url: str | None = None
     tui_skin_filename: str | None = None
     logo_url: str | None = None
     favicon_url: str | None = None
