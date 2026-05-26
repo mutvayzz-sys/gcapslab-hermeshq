@@ -259,7 +259,7 @@ update_env_semaphore() {
 }
 
 prompt_agent_count() {
-  local count
+  local count=""
   while true; do
     printf 'How many agents do you plan to deploy? (1-200): ' >&2
     read -r count
@@ -299,7 +299,7 @@ do_sizing_flow() {
     printf '    3) Cancel installation\n'
     printf '\n  Choose [1/2/3]: '
 
-    local choice
+    local choice=""
     read -r choice
     case "$choice" in
       1)
@@ -352,7 +352,7 @@ do_update_sizing() {
   printf '    4) Skip sizing\n'
   printf '\n  Choose [1/2/3/4]: '
 
-  local choice
+  local choice=""
   read -r choice
   case "$choice" in
     2)

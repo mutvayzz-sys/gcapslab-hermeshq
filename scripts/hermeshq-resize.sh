@@ -297,7 +297,7 @@ do_agents_mode() {
 
     # Confirmation
     printf "  Proceed? [y/N]: "
-    local answer
+    local answer=""
     read -r answer
 
     case "$answer" in

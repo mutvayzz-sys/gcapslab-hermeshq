@@ -49,6 +49,58 @@ Full password reset flow using the Resend email API, configurable from the Setti
 - ✅ TypeScript compiles with zero errors
 
 
+## [2026.5.26.1] — 2026-05-26
+
+### Fix: install.sh crashes on `read` with `set -u` (strict mode)
+
+#### Problem
+The install script (`install.sh`) and resize script (`hermeshq-resize.sh`) both use
+`set -Eeuo pipefail` (strict mode). When `read -r` is called inside a sub-shell
+(e.g. `PLANNED_AGENTS="$(prompt_agent_count)"`), the variable starts as unset.
+Under `set -u`, bash treats this as a fatal error and aborts before the user can type.
+
+This caused the installer to crash immediately when asking "How many agents do you plan to deploy?"
+
+#### Fix
+- **`install.sh`**: Initialize all 3 `read` variables with empty string defaults:
+  `local count=""`, `local choice=""` (x2)
+- **`scripts/hermeshq-resize.sh`**: Same fix: `local answer=""`
+
+### Feature: Password recovery via email (Resend)
+
+New password reset flow for local-auth users via transactional email using the Resend API.
+
+#### Backend
+- **`models/password_reset.py`** (NEW): `PasswordResetToken` model with token_hash, expires_at, used_at, ip_address.
+- **`services/email_service.py`** (NEW): Email service via Resend REST API with dark-themed HTML templates.
+- **`routers/auth.py`**: 3 new endpoints:
+  - `POST /forgot-password` — generates reset token, sends email (rate-limited 3/hr, anti-enumeration)
+  - `POST /reset-password` — validates token, updates password, invalidates other tokens
+  - `GET /email-config` — returns email config status (admin only)
+- **`config.py`**: 5 new fields: `resend_api_key`, `from_email`, `from_name`, `public_base_url`, `password_reset_token_minutes`
+- **`models/app_settings.py`**: 4 new DB-backed fields for email config (configurable from Settings UI)
+- **`schemas/auth.py`**: `ForgotPasswordRequest`, `ResetPasswordRequest`, `PasswordResetResponse`, `EmailConfigStatus`
+- **Alembic migration** `9a4ccb262336`: Creates `password_reset_tokens` table + email columns on `app_settings`
+
+#### Frontend
+- **`ForgotPasswordPage.tsx`** (NEW): Email input → success confirmation page
+- **`ResetPasswordPage.tsx`** (NEW): Token validation, new password form, success redirect to login
+- **`EmailTab.tsx`** (NEW): Settings tab for Resend API key, from email, public URL, test email button
+- **`LoginPage.tsx`**: "Forgot password?" link
+- **`App.tsx`**: Routes for `/forgot-password` and `/reset-password` (outside auth shell)
+- **`SettingsPage.tsx`**: New "Email" tab
+- **i18n (EN/ES)**: 40+ new translation keys
+
+#### Security
+- Token stored as SHA-256 hash in DB (never plaintext)
+- 15-minute expiration (configurable)
+- Single-use tokens (marked `used_at` on consume)
+- Anti-enumeration: always returns 200 with identical message
+- Rate limit: 3 requests per email per hour
+- Only `auth_source=local` users can reset
+- Email config fields excluded from `PublicSettingsRead`
+
+
 ## [2026.5.25.2] — 2026-05-25
 
 ### Fix: Kapso webhook batch payload support
