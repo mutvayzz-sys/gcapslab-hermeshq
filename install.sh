@@ -261,13 +261,13 @@ update_env_semaphore() {
 prompt_agent_count() {
   local count
   while true; do
-    printf 'How many agents do you plan to deploy? (1-200): '
+    printf 'How many agents do you plan to deploy? (1-200): ' >&2
     read -r count
     if printf '%s' "$count" | grep -qE '^[0-9]+$' && [ "$count" -ge 1 ] && [ "$count" -le 200 ]; then
       printf '%d' "$count"
       return
     fi
-    printf '  ⚠️  Please enter a number between 1 and 200.\n'
+    printf '  ⚠️  Please enter a number between 1 and 200.\n' >&2
   done
 }
 
@@ -379,7 +379,12 @@ do_update_sizing() {
       if ! grep -q '^CONCURRENCY_SEMAPHORE=' "$INSTALL_DIR/.env" 2>/dev/null; then
         printf 'CONCURRENCY_SEMAPHORE=8\n' >> "$INSTALL_DIR/.env"
         printf '  Added CONCURRENCY_SEMAPHORE=8 to .env\n'
+        current_semaphore=8
       fi
+      # Always generate override so docker-compose.override.yml exists for compose up
+      calculate_sizing "$(( current_semaphore * 2 ))"
+      calculate_postgres_tuning "$SIZING_RAM_POSTGRES"
+      generate_docker_override "$current_semaphore"
       printf '  Keeping current configuration.\n'
       ;;
   esac
@@ -427,6 +432,8 @@ on_error() {
     printf 'Restoring previous installation at %s...\n' "$INSTALL_DIR" >&2
     rm -rf "$INSTALL_DIR"
     mv "$INSTALL_BACKUP_DIR" "$INSTALL_DIR"
+    # Re-seed CWD in case it was pointing inside the moved directory
+    cd "$INSTALL_DIR" 2>/dev/null || cd /tmp || true
     if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
       (
         cd "$INSTALL_DIR"
@@ -686,10 +693,16 @@ main() {
   existing_env=""
   preserve_cloudflared_env=""
 
+  # Preserve CWD in case it is inside INSTALL_DIR (e.g. user ran ./install.sh from ~/hermeshq)
+  local _saved_cwd
+  _saved_cwd="$(pwd 2>/dev/null || printf '/tmp')" || true
+
   if [ -d "$INSTALL_DIR" ]; then
     INSTALL_BACKUP_DIR="$TMP_DIR/install-backup"
     mv "$INSTALL_DIR" "$INSTALL_BACKUP_DIR"
     RESTORE_BACKUP_ON_FAILURE=1
+    # Restore CWD if it was invalidated by the move
+    cd "$_saved_cwd" 2>/dev/null || cd /tmp || true
   fi
 
   if [ -f "$INSTALL_BACKUP_DIR/.env" ]; then
