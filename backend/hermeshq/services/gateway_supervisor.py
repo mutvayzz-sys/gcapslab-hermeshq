@@ -21,8 +21,8 @@ from hermeshq.services.hermes_installation import HermesInstallationError, Herme
 
 logger = logging.getLogger(__name__)
 BOOTSTRAP_CONCURRENCY = 3
-BOOTSTRAP_CHANNEL_TIMEOUT_SECONDS = 120
-BOOTSTRAP_RETRY_ATTEMPTS = 3
+BOOTSTRAP_CHANNEL_TIMEOUT_SECONDS = int(os.getenv("HQ_BOOTSTRAP_TIMEOUT", "30"))
+BOOTSTRAP_RETRY_ATTEMPTS = int(os.getenv("HQ_BOOTSTRAP_RETRIES", "2"))
 BOOTSTRAP_RETRY_DELAYS_SECONDS = (2, 5)
 GATEWAY_STARTUP_STABILIZATION_SECONDS = 2
 
@@ -119,11 +119,24 @@ class GatewaySupervisor:
         return any(marker in message for marker in transient_markers)
 
     async def bootstrap_gateways(self) -> None:
+        try:
+            await self._do_bootstrap_gateways()
+        except Exception:
+            logger.exception(
+                "CRITICAL: Gateway bootstrap failed with unhandled exception; "
+                "backends will continue running without gateway channels"
+            )
+
+    async def _do_bootstrap_gateways(self) -> None:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(MessagingChannel, Agent)
                 .join(Agent, Agent.id == MessagingChannel.agent_id)
-                .where(MessagingChannel.enabled.is_(True))
+                .where(
+                    MessagingChannel.enabled.is_(True),
+                    Agent.status.notin_(("stopped", "archived")),
+                    Agent.is_archived.is_(False),
+                )
             )
             rows = result.all()
 
@@ -134,7 +147,22 @@ class GatewaySupervisor:
                 continue
             if not self._channel_runtime_enabled(channel):
                 continue
+            if agent.status in ("stopped", "archived") or agent.is_archived:
+                continue
             bootstrap_targets.setdefault(agent.id, (agent, channel.platform))
+
+        if not bootstrap_targets:
+            logger.info("No bootstrap targets found — skipping gateway bootstrap")
+            return
+
+        target_descriptions = [
+            f"{agent.name} ({platform})" for agent, platform in bootstrap_targets.values()
+        ]
+        logger.info(
+            "Gateway bootstrap: %d target(s) — %s",
+            len(bootstrap_targets),
+            ", ".join(target_descriptions),
+        )
 
         semaphore = asyncio.Semaphore(BOOTSTRAP_CONCURRENCY)
 
@@ -175,14 +203,14 @@ class GatewaySupervisor:
                         transient = self._is_transient_bootstrap_error(error_text)
                         log_event = f"channel.{platform}.bootstrap_failed"
                         log_message = f"{agent.name} {platform} gateway bootstrap failed"
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Unexpected gateway bootstrap failure for agent %s (%s)",
                             agent.id,
                             agent.name,
                         )
-                        error_text = "unexpected_error"
-                        transient = False
+                        error_text = str(exc) or "unexpected_error"
+                        transient = True
                         log_event = f"channel.{platform}.bootstrap_failed"
                         log_message = f"{agent.name} {platform} gateway bootstrap failed"
 

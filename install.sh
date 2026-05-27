@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Install script revision: 2026-04-30
+# Install script revision: 2026-05-27
 
 REPO_URL="${REPO_URL:-https://github.com/jpalmae/hermeshq.git}"
 BRANCH="${BRANCH:-main}"
@@ -29,6 +29,33 @@ DOCKER_GROUP_UPDATED=0
 USED_SUDO_DOCKER=0
 PLANNED_AGENTS="${PLANNED_AGENTS:-}"
 SKIP_SIZING="${SKIP_SIZING:-0}"
+
+# ── Interactive input helper ────────────────────────────────────────────
+# When running via `curl ... | bash`, stdin is the pipe — not a terminal.
+# All `read` calls must read from /dev/tty instead, otherwise they consume
+# pipe data or hit EOF (which triggers `set -e` → crash).
+
+IS_INTERACTIVE=1
+if [ ! -t 0 ] || [ ! -e /dev/tty ]; then
+  IS_INTERACTIVE=0
+fi
+
+read_tty() {
+  # Reads a single line from /dev/tty (the controlling terminal).
+  # Falls back to reading from stdin only when /dev/tty is unavailable
+  # AND stdin looks like a terminal (e.g. `bash install.sh` directly).
+  # Returns the input in the variable named by $1.
+  local _var="${1:?variable name required}"
+  if [ -e /dev/tty ]; then
+    IFS= read -r "$_var" </dev/tty || true
+  elif [ -t 0 ]; then
+    IFS= read -r "$_var" || true
+  else
+    # Fully non-interactive (no tty, no terminal stdin).
+    # Return empty string — callers must handle this.
+    eval "$_var="
+  fi
+}
 
 # ── Phase 3: System-resource detection and sizing ──────────────────────
 
@@ -260,9 +287,19 @@ update_env_semaphore() {
 
 prompt_agent_count() {
   local count=""
+  # When non-interactive and PLANNED_AGENTS is set, use it without prompting
+  if [ "$IS_INTERACTIVE" = "0" ] && [ -n "${PLANNED_AGENTS:-}" ]; then
+    printf '%d' "$PLANNED_AGENTS"
+    return
+  fi
+  if [ "$IS_INTERACTIVE" = "0" ]; then
+    # No tty and no env var — default to 4 agents
+    printf '4'
+    return
+  fi
   while true; do
     printf 'How many agents do you plan to deploy? (1-200): ' >&2
-    read -r count
+    read_tty count
     if printf '%s' "$count" | grep -qE '^[0-9]+$' && [ "$count" -ge 1 ] && [ "$count" -le 200 ]; then
       printf '%d' "$count"
       return
@@ -300,7 +337,13 @@ do_sizing_flow() {
     printf '\n  Choose [1/2/3]: '
 
     local choice=""
-    read -r choice
+    if [ "$IS_INTERACTIVE" = "0" ]; then
+      # Non-interactive: auto-pick option 1 (reduce to max supported)
+      choice="1"
+      printf '1 (auto-selected)\n'
+    else
+      read_tty choice
+    fi
     case "$choice" in
       1)
         PLANNED_AGENTS=$max_agents
@@ -353,7 +396,7 @@ do_update_sizing() {
   printf '\n  Choose [1/2/3/4]: '
 
   local choice=""
-  read -r choice
+  if [ "$IS_INTERACTIVE" = "0" ]; then choice="1"; printf "1 (auto-selected)\n"; else read_tty choice; fi
   case "$choice" in
     2)
       PLANNED_AGENTS=$max_agents

@@ -58,6 +58,8 @@ services:
       PTY_SHELL: ${PTY_SHELL:-/bin/sh}
       CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend"]}'
       CONCURRENCY_SEMAPHORE: ${CONCURRENCY_SEMAPHORE:-8}
+      HQ_BOOTSTRAP_TIMEOUT: ${HQ_BOOTSTRAP_TIMEOUT:-30}
+      HQ_BOOTSTRAP_RETRIES: ${HQ_BOOTSTRAP_RETRIES:-2}
     volumes:
       - hermeshq_workspaces:/app/workspaces
     extra_hosts:
