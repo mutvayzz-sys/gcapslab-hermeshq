@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import traceback
+from pathlib import Path
 
 
 def _emit(payload: dict) -> None:
@@ -36,6 +37,26 @@ def main() -> int:
     os.environ.setdefault("TERM", "xterm-256color")
 
     os.chdir(payload["cwd"])
+
+    # ── Attachment enrichment ──────────────────────────────────
+    task_metadata = payload.get("metadata", {})
+    attachments = task_metadata.get("attachments", [])
+    if attachments:
+        attachment_lines = []
+        for att in attachments:
+            att_path = att.get("path", "")
+            if att_path:
+                full_path = Path(payload["cwd"]) / att_path
+                if full_path.exists():
+                    line = f"- [{att.get('media_type', 'file')}] {att_path}"
+                    if att.get('filename'):
+                        line += f" (filename: {att['filename']})"
+                    if att.get('caption'):
+                        line += f" — {att['caption']}"
+                    attachment_lines.append(line)
+        if attachment_lines:
+            payload["prompt"] += "\n\nAttached files:\n" + "\n".join(attachment_lines)
+    # ── End attachment enrichment ──────────────────────────────
 
     try:
         from run_agent import AIAgent

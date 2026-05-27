@@ -137,6 +137,7 @@ class HermesRuntime:
             "hermes_home": str(hermes_home),
             "conversation_history": conversation_history or [],
             "session_id": session_id,
+            "metadata": task.metadata_json or {},
         }
 
         if fallback_override:
