@@ -19,6 +19,7 @@ from hermeshq.models.task import Task
 from hermeshq.models.template import AgentTemplate
 from hermeshq.models.terminal_session import TerminalSession
 from hermeshq.models.user import User
+from hermeshq.models.user_m365_token import UserM365Token
 
 __all__ = [
     "ActivityLog",
@@ -41,4 +42,5 @@ __all__ = [
     "Task",
     "TerminalSession",
     "User",
+    "UserM365Token",
 ]

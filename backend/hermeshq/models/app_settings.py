@@ -26,3 +26,6 @@ class AppSettings(TimestampMixin, Base):
     from_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     from_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     public_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    m365_client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    m365_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    m365_enabled_scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
