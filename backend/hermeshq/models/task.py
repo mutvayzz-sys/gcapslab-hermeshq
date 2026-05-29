@@ -16,6 +16,7 @@ class Task(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     parent_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
     source_agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id"), nullable=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)

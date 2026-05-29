@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -231,13 +234,120 @@ async def poll_connect_status(
         )
     except M365TokenError as exc:
         error_msg = str(exc)
+        logger.warning("M365 poll error for user %s: %s", current_user.id, error_msg)
         if "authorization_pending" in error_msg or "authorization_declined" in error_msg.lower():
             return M365ConnectStatusRead(status="pending")
         _pending_flows.pop(current_user.id, None)
         raise HTTPException(status_code=400, detail=error_msg) from exc
     except Exception as exc:
+        logger.exception("M365 unexpected error for user %s", current_user.id)
         _pending_flows.pop(current_user.id, None)
         raise HTTPException(status_code=500, detail="Error inesperado durante la autenticación.") from exc
+
+
+@router.get("/me/agents/{agent_id}/scopes", response_model=dict)
+async def get_agent_m365_scopes(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    from hermeshq.models.agent_assignment import AgentAssignment
+    from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
+    result = await db.execute(
+        select(AgentAssignment).where(
+            AgentAssignment.user_id == current_user.id,
+            AgentAssignment.agent_id == agent_id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+    token_result = await db.execute(
+        select(UserM365Token).where(UserM365Token.user_id == current_user.id)
+    )
+    token = token_result.scalar_one_or_none()
+    user_scopes = token.scopes.split() if token and token.scopes else []
+    return {
+        "allowed_scopes": assignment.m365_allowed_scopes,
+        "user_scopes": user_scopes,
+        "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
+    }
+
+
+class AgentScopesUpdate(BaseModel):
+    allowed_scopes: list[str] | None
+
+
+@router.put("/me/agents/{agent_id}/scopes", response_model=dict)
+async def update_agent_m365_scopes(
+    agent_id: str,
+    payload: AgentScopesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    from hermeshq.models.agent_assignment import AgentAssignment
+    result = await db.execute(
+        select(AgentAssignment).where(
+            AgentAssignment.user_id == current_user.id,
+            AgentAssignment.agent_id == agent_id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+    assignment.m365_allowed_scopes = payload.allowed_scopes
+    await db.commit()
+    return {"allowed_scopes": assignment.m365_allowed_scopes}
+
+
+@router.get("/agent-token")
+async def get_agent_m365_token(
+    request: Request,
+    user_id: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Called by managed integration plugins running inside an agent runtime.
+    Validates agent credentials, verifies the agent is assigned to the user,
+    checks allowed scopes, and returns a fresh access token."""
+    from hermeshq.core.security import create_agent_service_token
+    from hermeshq.models.agent import Agent
+    from hermeshq.models.agent_assignment import AgentAssignment
+
+    agent_id = request.headers.get("X-HermesHQ-Agent-ID", "").strip()
+    agent_token = request.headers.get("X-HermesHQ-Agent-Token", "").strip()
+    if not agent_id or not agent_token:
+        raise HTTPException(status_code=401, detail="Missing agent credentials")
+    expected = create_agent_service_token(agent_id)
+    if agent_token != expected:
+        raise HTTPException(status_code=401, detail="Invalid agent credentials")
+    agent = await db.get(Agent, agent_id)
+    if not agent or agent.is_archived:
+        raise HTTPException(status_code=401, detail="Unknown agent")
+
+    assignment_result = await db.execute(
+        select(AgentAssignment).where(
+            AgentAssignment.agent_id == agent_id,
+            AgentAssignment.user_id == user_id,
+        )
+    )
+    assignment = assignment_result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=403, detail="Este agente no está asignado a ese usuario.")
+
+    vault = request.app.state.secret_vault
+    try:
+        access_token, _, granted_scopes = await get_valid_token(user_id, vault, db)
+    except M365TokenError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if not access_token:
+        raise HTTPException(status_code=403, detail="El usuario no tiene cuenta M365 conectada.")
+
+    allowed = assignment.m365_allowed_scopes
+    if allowed is not None:
+        granted_scopes = [s for s in (granted_scopes or []) if s in allowed]
+
+    return {"access_token": access_token, "scopes": granted_scopes}
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

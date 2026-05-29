@@ -1,7 +1,7 @@
 slug: ms365-mail
 name: Microsoft 365 Mail
 description: Managed Microsoft Graph mail integration. Uses delegated permissions — each user must connect their own Microsoft 365 account from their profile.
-version: "0.2.0"
+version: "0.3.0"
 standard_compatible: true
 supported_profiles:
   - standard
@@ -10,6 +10,12 @@ supported_profiles:
 required_fields: []
 fields: []
 secret_provider: null
+plugin_slug: hermeshq_ms365_mail
+skill_identifier: local/ms365-mail
 test_action: health
 env_map: {}
 delegated: true
+actions:
+  - slug: health
+    label: Check connection
+    description: Verify the Microsoft 365 Mail integration is reachable.

@@ -87,10 +87,10 @@ export default function M365Tab() {
                   type="checkbox"
                   checked={enabledScopes.includes(scope)}
                   onChange={() => toggleScope(scope)}
-                  className="shrink-0"
+                  className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] focus:ring-offset-0 accent-[var(--accent)]"
                 />
                 <div className="min-w-0">
-                  <p className="text-sm text-[var(--text-primary)]">{label}</p>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{label}</p>
                   <p className="font-mono text-xs text-[var(--text-disabled)]">{scope}</p>
                 </div>
               </label>

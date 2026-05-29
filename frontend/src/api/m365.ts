@@ -86,6 +86,40 @@ export function usePollM365ConnectStatus() {
   });
 }
 
+export interface AgentM365Scopes {
+  allowed_scopes: string[] | null;
+  user_scopes: string[];
+  available_scopes: Record<string, string>;
+}
+
+export function useAgentM365Scopes(agentId: string | null) {
+  return useQuery({
+    queryKey: ["m365-agent-scopes", agentId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<AgentM365Scopes>(`/m365/me/agents/${agentId}/scopes`);
+      return data;
+    },
+    enabled: Boolean(agentId),
+    retry: false,
+  });
+}
+
+export function useUpdateAgentM365Scopes(agentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (allowedScopes: string[] | null) => {
+      const { data } = await apiClient.put<{ allowed_scopes: string[] | null }>(
+        `/m365/me/agents/${agentId}/scopes`,
+        { allowed_scopes: allowedScopes },
+      );
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["m365-agent-scopes", agentId] });
+    },
+  });
+}
+
 export function useDisconnectM365() {
   const queryClient = useQueryClient();
   return useMutation({

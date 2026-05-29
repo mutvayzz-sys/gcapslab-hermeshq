@@ -30,7 +30,7 @@ AVAILABLE_SCOPES: dict[str, str] = {
 }
 
 # User.Read siempre requerido para identificar al usuario
-REQUIRED_SCOPES = ["User.Read", "offline_access"]
+REQUIRED_SCOPES = ["User.Read"]
 
 
 class M365ConfigError(RuntimeError):
@@ -171,7 +171,7 @@ async def get_valid_token(
     user_id: str,
     vault: SecretVault,
     db: AsyncSession,
-) -> tuple[str, str] | tuple[None, None]:
+) -> tuple[str, str, list[str]] | tuple[None, None, None]:
     result = await db.execute(
         select(UserM365Token).where(
             UserM365Token.user_id == user_id,
@@ -180,18 +180,18 @@ async def get_valid_token(
     )
     token_record = result.scalar_one_or_none()
     if not token_record:
-        return None, None
+        return None, None, None
 
     config = await get_instance_m365_config(db)
     if not config:
-        return None, None
+        return None, None, None
 
     msal = _get_msal()
     cache = msal.SerializableTokenCache()
     try:
         cache.deserialize(vault.decrypt(token_record.token_cache_enc))
     except Exception:
-        return None, None
+        return None, None, None
 
     app = msal.PublicClientApplication(
         config["client_id"],
@@ -201,13 +201,13 @@ async def get_valid_token(
 
     accounts = app.get_accounts()
     if not accounts:
-        return None, None
+        return None, None, None
 
     scopes = _build_scopes(config["enabled_scopes"])
     result_token = app.acquire_token_silent(scopes, account=accounts[0])
 
     if not result_token or "access_token" not in result_token:
-        return None, None
+        return None, None, None
 
     if cache.has_state_changed:
         token_record.token_cache_enc = vault.encrypt(cache.serialize())
@@ -218,7 +218,8 @@ async def get_valid_token(
             )
         await db.commit()
 
-    return result_token["access_token"], token_record.account_email
+    granted_scopes = token_record.scopes.split() if token_record.scopes else []
+    return result_token["access_token"], token_record.account_email, granted_scopes
 
 
 async def revoke_user_token(user_id: str, db: AsyncSession) -> bool:

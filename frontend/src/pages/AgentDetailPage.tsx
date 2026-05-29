@@ -15,6 +15,7 @@ import { AgentAvatar } from "../components/AgentAvatar";
 import { AgentConversationPanel } from "../components/AgentConversationPanel";
 import { AgentMessagingPanel } from "../components/AgentMessagingPanel";
 import { AgentSkillsPanel } from "../components/AgentSkillsPanel";
+import { AgentM365ScopesPanel } from "../components/AgentM365ScopesPanel";
 import { AgentTerminal } from "../components/AgentTerminal";
 import { WorkspacePanel } from "../components/WorkspacePanel";
 import { useI18n } from "../lib/i18n";
@@ -26,6 +27,7 @@ const DEFAULT_SECTION_STATE = {
   configuration: false,
   conversation: true,
   integrations: false,
+  "m365-scopes": false,
   skills: false,
   ledger: false,
   logs: false,
@@ -1653,6 +1655,14 @@ export function AgentDetailPage() {
             <p className="panel-inline-status">{t("agent.emptyIntegrations")}</p>
           )}
         </div>,
+      )}
+
+      {!isAdmin && renderSectionShell(
+        "m365-scopes",
+        "Microsoft 365",
+        "Permisos de este agente",
+        "",
+        <AgentM365ScopesPanel agentId={agent.id} />,
       )}
 
       {renderSectionShell(

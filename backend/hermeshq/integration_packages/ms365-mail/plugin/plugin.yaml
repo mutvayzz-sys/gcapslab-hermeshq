@@ -1,0 +1,9 @@
+name: hermeshq-ms365-mail
+version: "1.0.0"
+description: Microsoft 365 Mail tools using delegated user permissions
+author: HermesHQ
+provides_tools:
+  - ms365_mail_list
+  - ms365_mail_get
+  - ms365_mail_send
+  - ms365_mail_search

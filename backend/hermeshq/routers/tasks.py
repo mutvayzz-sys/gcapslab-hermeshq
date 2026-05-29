@@ -22,7 +22,13 @@ async def list_tasks(
     statement = select(Task).order_by(desc(Task.queued_at))
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
-        statement = statement.where(Task.agent_id.in_(accessible_ids)) if accessible_ids else statement.where(false())
+        if not accessible_ids:
+            statement = statement.where(false())
+        else:
+            statement = statement.where(
+                Task.agent_id.in_(accessible_ids),
+                Task.created_by_user_id == current_user.id,
+            )
     result = await db.execute(statement)
     return [TaskRead.model_validate(task) for task in result.scalars().all()]
 
@@ -62,7 +68,7 @@ async def create_task(
             await db.flush()
         metadata["thread_id"] = thread.id
         metadata["thread_user_id"] = current_user.id
-    task = Task(**payload_data, metadata_json=metadata)
+    task = Task(**payload_data, metadata_json=metadata, created_by_user_id=current_user.id)
     task.board_column = runtime_status_to_board_column(task.status)
     task.board_order = next_board_order()
     task.board_manual = False
@@ -87,6 +93,8 @@ async def get_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     await ensure_agent_access(db, current_user, task.agent_id)
+    if not is_admin(current_user) and task.created_by_user_id and task.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return TaskRead.model_validate(task)
 
 
@@ -101,6 +109,8 @@ async def cancel_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     await ensure_agent_access(db, current_user, task.agent_id)
+    if not is_admin(current_user) and task.created_by_user_id and task.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await request.app.state.supervisor.cancel_task(task_id)
     await db.refresh(task)
     return TaskRead.model_validate(task)
@@ -136,8 +146,12 @@ async def queue_state(
     queued_statement = select(Task).where(Task.status == "queued")
     running_statement = select(Task).where(Task.status == "running")
     if not is_admin(current_user):
-        queued_statement = queued_statement.where(Task.agent_id.in_(accessible_ids)) if accessible_ids else queued_statement.where(false())
-        running_statement = running_statement.where(Task.agent_id.in_(accessible_ids)) if accessible_ids else running_statement.where(false())
+        if not accessible_ids:
+            queued_statement = queued_statement.where(false())
+            running_statement = running_statement.where(false())
+        else:
+            queued_statement = queued_statement.where(Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id)
+            running_statement = running_statement.where(Task.agent_id.in_(accessible_ids), Task.created_by_user_id == current_user.id)
     queued_result = await db.execute(queued_statement)
     running_result = await db.execute(running_statement)
     return {
