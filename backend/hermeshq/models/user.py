@@ -28,3 +28,9 @@ class User(TimestampMixin, Base):
         cascade="all, delete-orphan",
         foreign_keys="AgentAssignment.user_id",
     )
+    m365_token = relationship(
+        "UserM365Token",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )

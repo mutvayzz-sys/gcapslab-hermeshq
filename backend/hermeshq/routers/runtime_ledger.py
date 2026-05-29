@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import ensure_agent_access, get_current_user
+from hermeshq.core.security import ensure_agent_access, get_current_user, is_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
@@ -192,9 +192,12 @@ async def list_runtime_ledger(
 ) -> RuntimeLedgerResponse:
     viewer_agent = await ensure_agent_access(db, current_user, agent_id)
 
+    task_filter = [Task.agent_id == agent_id]
+    if not is_admin(current_user):
+        task_filter.append(Task.created_by_user_id == current_user.id)
     task_result = await db.execute(
         select(Task)
-        .where(Task.agent_id == agent_id)
+        .where(*task_filter)
         .order_by(desc(Task.queued_at))
         .limit(limit)
     )

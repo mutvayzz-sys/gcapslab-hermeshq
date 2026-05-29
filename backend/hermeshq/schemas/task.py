@@ -22,6 +22,7 @@ class TaskBoardUpdate(BaseModel):
 class TaskRead(ORMModel):
     id: str
     agent_id: str
+    created_by_user_id: str | None = None
     title: str | None
     prompt: str
     status: str

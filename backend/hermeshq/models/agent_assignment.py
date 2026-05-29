@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -14,6 +14,7 @@ class AgentAssignment(TimestampMixin, Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
     assigned_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    m365_allowed_scopes: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="agent_assignments")
     agent = relationship("Agent", foreign_keys=[agent_id])

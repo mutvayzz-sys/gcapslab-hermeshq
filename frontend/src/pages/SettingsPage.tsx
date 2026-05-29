@@ -63,14 +63,15 @@ const TemplatesTab = lazy(() => import("../components/settings/TemplatesTab").th
 const AuthenticationTab = lazy(() => import("../components/settings/AuthenticationTab").then((m) => ({ default: m.AuthenticationTab })));
 const EmailTab = lazy(() => import("../components/settings/EmailTab").then((m) => ({ default: m.EmailTab })));
 const ResourcesTab = lazy(() => import("../components/settings/ResourcesTab"));
+const M365Tab = lazy(() => import("../components/settings/M365Tab").then((m) => ({ default: m.default })));
 
-type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources";
+type SettingsTab = "general" | "runtime" | "providers" | "integrations" | "factory" | "externalAccess" | "hermesVersions" | "secrets" | "templates" | "authentication" | "email" | "resources" | "m365";
 
 const SETTINGS_TAB_STORAGE_KEY = "hermeshq.settings.activeTab";
 
 const ALL_TABS: SettingsTab[] = [
   "general", "runtime", "providers", "integrations",
-  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources",
+  "factory", "externalAccess", "hermesVersions", "secrets", "templates", "authentication", "email", "resources", "m365",
 ];
 
 function LoadingFallback() {
@@ -164,6 +165,7 @@ export function SettingsPage() {
     { id: "authentication", label: "Authentication", copy: "Configure enterprise OIDC providers (Google, Microsoft 365) for single sign-on." },
     { id: "email", label: "Email", copy: "Configure Resend for transactional emails (password reset, notifications)." },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
+    { id: "m365", label: "Microsoft 365", copy: "Configura la app Azure AD para autenticación delegada. Cada usuario conecta su propia cuenta M365." },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
@@ -282,6 +284,9 @@ export function SettingsPage() {
           )}
           {activeTab === "resources" && isAdmin && (
             <ResourcesTab />
+          )}
+          {activeTab === "m365" && isAdmin && (
+            <M365Tab />
           )}
         </Suspense>
       </div>

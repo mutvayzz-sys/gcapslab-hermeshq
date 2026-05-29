@@ -9,6 +9,7 @@ import {
   useUploadMyAvatar,
 } from "../api/auth";
 import { UserAvatar } from "../components/UserAvatar";
+import { M365ConnectPanel } from "../components/M365ConnectPanel";
 import { useI18n } from "../lib/i18n";
 import { useSessionStore } from "../stores/sessionStore";
 
@@ -310,6 +311,14 @@ export function MyAccountPage() {
           {passwordError ? <p className="text-sm text-[var(--accent)]">{passwordError}</p> : null}
           {passwordMessage ? <p className="text-sm text-[var(--success)]">{passwordMessage}</p> : null}
         </form>
+      </section>
+
+      <section className="panel-frame p-6">
+        <p className="panel-label">{t("account.connectedAccounts")}</p>
+        <h2 className="mt-2 text-3xl text-[var(--text-display)]">{t("account.connectedAccounts")}</h2>
+        <div className="mt-6">
+          <M365ConnectPanel />
+        </div>
       </section>
     </div>
   );
