@@ -33,6 +33,7 @@ class Agent(TimestampMixin, Base):
     fallback_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fallback_api_key_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fallback_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    auxiliary_models: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
     enabled_toolsets: Mapped[list[str]] = mapped_column(JSON, default=list)
     disabled_toolsets: Mapped[list[str]] = mapped_column(JSON, default=list)
     skills: Mapped[list[str]] = mapped_column(JSON, default=list)

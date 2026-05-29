@@ -122,6 +122,7 @@ export interface Agent {
   fallback_model: string | null;
   fallback_api_key_ref: string | null;
   fallback_base_url: string | null;
+  auxiliary_models: Record<string, AuxiliaryModelEntry> | null;
   system_prompt: string | null;
   workspace_path: string;
   enabled_toolsets: string[];
@@ -254,6 +255,13 @@ export interface HermesUpstreamVersion {
   already_in_catalog: boolean;
 }
 
+export interface AuxiliaryModelEntry {
+  provider: string | null;
+  model: string | null;
+  api_key_ref: string | null;
+  base_url: string | null;
+}
+
 export interface ProviderDefinition {
   slug: string;
   name: string;
@@ -261,6 +269,7 @@ export interface ProviderDefinition {
   auth_type: "api_key" | "oauth_external" | string;
   base_url: string | null;
   default_model: string | null;
+  available_models: string[] | null;
   description: string | null;
   docs_url: string | null;
   secret_placeholder: string | null;

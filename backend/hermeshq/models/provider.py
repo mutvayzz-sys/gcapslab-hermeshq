@@ -1,5 +1,6 @@
 from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
 
 from hermeshq.models.base import Base, TimestampMixin
 
@@ -13,6 +14,7 @@ class ProviderDefinition(TimestampMixin, Base):
     auth_type: Mapped[str] = mapped_column(String(32), nullable=False, default="api_key")
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     default_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    available_models: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     docs_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     secret_placeholder: Mapped[str | None] = mapped_column(String(128), nullable=True)

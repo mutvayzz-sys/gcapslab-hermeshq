@@ -9,6 +9,7 @@ class ProviderUpdate(BaseModel):
     name: str | None = None
     base_url: str | None = None
     default_model: str | None = None
+    available_models: list[str] | None = None
     description: str | None = None
     docs_url: str | None = None
     secret_placeholder: str | None = None
@@ -24,6 +25,7 @@ class ProviderRead(ORMModel):
     auth_type: str
     base_url: str | None
     default_model: str | None
+    available_models: list[str] | None = None
     description: str | None
     docs_url: str | None
     secret_placeholder: str | None

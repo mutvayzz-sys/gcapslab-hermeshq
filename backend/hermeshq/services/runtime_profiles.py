@@ -14,6 +14,7 @@ STANDARD_ENABLED_TOOLSETS = [
     "cronjob",
     "messaging",
     "delegation",
+    "vision",
 ] + list_standard_compatible_toolsets()
 
 

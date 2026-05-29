@@ -17,7 +17,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.scheduled_task import ScheduledTask
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate
+from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate, auxiliary_models_to_db
 
 from hermeshq.routers.agents_shared import (
     USER_EDITABLE_FIELDS,
@@ -37,6 +37,21 @@ from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
 from hermeshq.models.activity import ActivityLog
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+def _aux_to_plain_dict(value: dict) -> dict | None:
+    """Convert auxiliary_models entries (Pydantic models or dicts) to plain dicts."""
+    if not value:
+        return None
+    result: dict = {}
+    for task_name, entry in value.items():
+        if hasattr(entry, "to_dict"):
+            result[task_name] = entry.to_dict()
+        elif isinstance(entry, dict):
+            result[task_name] = {k: v for k, v in entry.items() if v is not None}
+        else:
+            result[task_name] = entry
+    return result or None
 
 
 # ------------------------------------------------------------------
@@ -113,6 +128,7 @@ async def create_agent(
         team_tags=payload.team_tags,
         supervisor_agent_id=payload.supervisor_agent_id,
         workspace_path="pending",
+        auxiliary_models=auxiliary_models_to_db(payload.auxiliary_models),
     )
     _apply_runtime_profile_defaults(
         agent,
@@ -227,6 +243,9 @@ async def update_agent(
         agent.use_provider_default = False
     for field, value in update_data.items():
         if field == "integration_configs":
+            continue
+        if field == "auxiliary_models" and isinstance(value, dict):
+            setattr(agent, field, _aux_to_plain_dict(value))
             continue
         setattr(agent, field, value)
     if "integration_configs" in update_data:

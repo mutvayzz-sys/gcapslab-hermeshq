@@ -8,6 +8,7 @@ import { useLogs } from "../api/logs";
 import { useManagedIntegrations } from "../api/managedIntegrations";
 import { useRuntimeLedger } from "../api/runtimeLedger";
 import { useRuntimeCapabilityOverview, useRuntimeProfiles } from "../api/runtimeProfiles";
+import { useProviders } from "../api/providers";
 import { useSecrets } from "../api/secrets";
 import { useCreateTask, useTasks } from "../api/tasks";
 import { AgentAvatar } from "../components/AgentAvatar";
@@ -19,7 +20,7 @@ import { WorkspacePanel } from "../components/WorkspacePanel";
 import { useI18n } from "../lib/i18n";
 import { useSessionStore } from "../stores/sessionStore";
 import { useRealtimeStore } from "../stores/realtimeStore";
-import type { ActivityLogEntry } from "../types/api";
+import type { ActivityLogEntry, AuxiliaryModelEntry } from "../types/api";
 
 const DEFAULT_SECTION_STATE = {
   configuration: false,
@@ -184,6 +185,7 @@ export function AgentDetailPage() {
   const { data: runtimeCapabilityOverview } = useRuntimeCapabilityOverview(Boolean(currentUser));
   const { data: managedIntegrations } = useManagedIntegrations(Boolean(currentUser));
   const { data: secrets } = useSecrets(isAdmin);
+  const { data: providers } = useProviders(Boolean(currentUser));
   const startAgent = useAgentAction("start");
   const stopAgent = useAgentAction("stop");
   const deleteAgent = useDeleteAgent();
@@ -214,6 +216,7 @@ export function AgentDetailPage() {
     api_key_ref: string | null;
     base_url: string | null;
   }>({ provider: null, model: null, api_key_ref: null, base_url: null });
+  const [auxiliaryDraft, setAuxiliaryDraft] = useState<Record<string, { provider: string | null; model: string | null; api_key_ref: string | null; base_url: string | null }>>({});
   const [integrationDrafts, setIntegrationDrafts] = useState<Record<string, Record<string, string>>>({});
   const [integrationTestResults, setIntegrationTestResults] = useState<
     Record<string, { success: boolean; message: string; details?: Record<string, unknown> | null }>
@@ -337,6 +340,7 @@ export function AgentDetailPage() {
     });
     setUseProviderDefaultDraft(agent.use_provider_default ?? true);
     setCustomModelDraft(agent.model ?? "");
+    setAuxiliaryDraft(agent.auxiliary_models ?? {});
     const nextIntegrationDrafts: Record<string, Record<string, string>> = {};
     for (const integration of managedIntegrations ?? []) {
       const currentConfig = (agent.integration_configs?.[integration.slug] as Record<string, unknown> | undefined) ?? {};
@@ -500,6 +504,7 @@ export function AgentDetailPage() {
         fallback_model: fallbackDraft.model,
         fallback_api_key_ref: fallbackDraft.api_key_ref,
         fallback_base_url: fallbackDraft.base_url,
+        auxiliary_models: Object.keys(auxiliaryDraft).length > 0 ? auxiliaryDraft : null,
       },
     });
   }
@@ -1079,12 +1084,30 @@ export function AgentDetailPage() {
                           <label className="panel-field mt-4">
                             <span className="panel-label">{t("agents.model")}</span>
                             {isAdmin ? (
-                              <input
-                                type="text"
-                                value={customModelDraft}
-                                placeholder="anthropic/claude-sonnet-4"
-                                onChange={(event) => setCustomModelDraft(event.target.value)}
-                              />
+                              (() => {
+                                const agentProvider = providers?.find((p) => p.slug === agent?.provider);
+                                const models = agentProvider?.available_models;
+                                if (models && models.length > 0) {
+                                  return (
+                                    <select
+                                      value={customModelDraft}
+                                      onChange={(event) => setCustomModelDraft(event.target.value)}
+                                    >
+                                      {models.map((m) => (
+                                        <option key={m} value={m}>{m}</option>
+                                      ))}
+                                    </select>
+                                  );
+                                }
+                                return (
+                                  <input
+                                    type="text"
+                                    value={customModelDraft}
+                                    placeholder="anthropic/claude-sonnet-4"
+                                    onChange={(event) => setCustomModelDraft(event.target.value)}
+                                  />
+                                );
+                              })()
                             ) : (
                               <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
                                 {customModelDraft}
@@ -1169,6 +1192,78 @@ export function AgentDetailPage() {
                             </div>
                           )}
                         </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="border-b border-[var(--border)] pb-4">
+                        <p className="panel-label">{t("agent.auxiliarySectionTitle")}</p>
+                        <h5 className="mt-2 text-base text-[var(--text-display)]">{t("agent.auxiliarySectionDesc")}</h5>
+                      </div>
+                      <div className="mt-4 space-y-4">
+                        {(["vision", "compression", "web_extract", "approval"] as const).map((task) => (
+                          <div key={task} className="grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] p-3 lg:grid-cols-4">
+                            <label className="panel-field">
+                              <span className="panel-label">{t(`agent.auxiliaryTask.${task}`)}</span>
+                              {isAdmin ? (
+                                (() => {
+                                  const auxEntry = auxiliaryDraft[task] || { provider: null, model: null, api_key_ref: null, base_url: null };
+                                  const selectedAuxProvider = providers?.find((p) => p.slug === auxEntry.provider);
+                                  const models = selectedAuxProvider?.available_models;
+                                  return (
+                                    <>
+                                      <div className="grid gap-2">
+                                        <select
+                                          value={auxEntry.provider ?? ""}
+                                          onChange={(e) => setAuxiliaryDraft((d) => ({
+                                            ...d,
+                                            [task]: { ...((d[task] || {})), provider: e.target.value || null, model: null },
+                                          }))}
+                                        >
+                                          <option value="">{t("agent.none")}</option>
+                                          {providers?.map((p) => (
+                                            <option key={p.slug} value={p.slug}>{p.name}</option>
+                                          ))}
+                                        </select>
+                                        {auxEntry.provider && (
+                                          models && models.length > 0 ? (
+                                            <select
+                                              value={auxEntry.model ?? ""}
+                                              onChange={(e) => setAuxiliaryDraft((d) => ({
+                                                ...d,
+                                                [task]: { ...((d[task] || {})), model: e.target.value || null },
+                                              }))}
+                                            >
+                                              <option value="">{t("agent.auxiliaryDefaultModel")}</option>
+                                              {models.map((m) => (
+                                                <option key={m} value={m}>{m}</option>
+                                              ))}
+                                            </select>
+                                          ) : (
+                                            <input
+                                              value={auxEntry.model ?? ""}
+                                              placeholder={t("agent.auxiliaryDefaultModel")}
+                                              onChange={(e) => setAuxiliaryDraft((d) => ({
+                                                ...d,
+                                                [task]: { ...((d[task] || {})), model: e.target.value || null },
+                                              }))}
+                                            />
+                                          )
+                                        )}
+                                      </div>
+                                    </>
+                                  );
+                                })()
+                              ) : (
+                                <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-display)]">
+                                  {auxiliaryDraft[task]?.provider
+                                    ? `${auxiliaryDraft[task].provider} / ${auxiliaryDraft[task].model || "default"}`
+                                    : t("agent.none")}
+                                </div>
+                              )}
+                            </label>
+                          </div>
+                        ))}
                       </div>
                     </div>
 

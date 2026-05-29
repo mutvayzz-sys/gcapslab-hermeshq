@@ -294,6 +294,13 @@ const ns: Record<string, string> = {
   "agent.useProviderDefault": "Usar modelo por defecto del provider",
   "agent.useProviderDefaultYes": "Sí — seguir el default del provider",
   "agent.useProviderDefaultNo": "No — usar modelo personalizado",
+  "agent.auxiliarySectionTitle": "Modelos Auxiliares",
+  "agent.auxiliarySectionDesc": "Configura modelos secundarios para capacidades específicas del agente como visión, compresión de contexto y extracción web.",
+  "agent.auxiliaryDefaultModel": "Usar default del provider",
+  "agent.auxiliaryTask.vision": "Visión / Análisis de Imágenes",
+  "agent.auxiliaryTask.compression": "Compresión de Contexto",
+  "agent.auxiliaryTask.web_extract": "Extracción Web",
+  "agent.auxiliaryTask.approval": "Auto-Aprobación",
 };
 
 export default ns;

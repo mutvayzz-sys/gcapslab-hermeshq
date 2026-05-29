@@ -504,13 +504,29 @@ export function AgentsPage() {
               <div className="rounded-2xl border border-[var(--border-visible)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-3 text-sm text-[var(--text-secondary)]">
                 {t("agent.useProviderDefaultYes")}
               </div>
-            ) : (
-              <input
-                value={form.model}
-                onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
-                placeholder={settings?.default_model ?? "Uses global default"}
-              />
-            )}
+            ) : (() => {
+              const selectedProvider = enabledProviders?.find((p) => p.slug === form.provider || p.slug === selectedProviderSlug);
+              const models = selectedProvider?.available_models;
+              if (models && models.length > 0) {
+                return (
+                  <select
+                    value={form.model}
+                    onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+                  >
+                    {models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                );
+              }
+              return (
+                <input
+                  value={form.model}
+                  onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+                  placeholder={settings?.default_model ?? "Uses global default"}
+                />
+              );
+            })()}
           </label>
 
           <label className="panel-field">

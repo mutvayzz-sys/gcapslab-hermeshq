@@ -20,6 +20,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://api.kimi.com/coding/v1",
         "default_model": "kimi-k2.5",
+        "available_models": ["kimi-k2.5", "kimi-k2", "moonshot-v1-auto"],
         "description": "Moonshot Kimi coding provider using the Kimi coding API endpoint.",
         "docs_url": "https://platform.moonshot.ai/",
         "secret_placeholder": "KIMI API key",
@@ -35,6 +36,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://api.z.ai/api/coding/paas/v4",
         "default_model": "glm-5-turbo",
+        "available_models": ["glm-5-turbo", "glm-5.1", "glm-5", "glm-4-plus"],
         "description": "Z.AI coding plan endpoint for GLM coding models.",
         "docs_url": "https://docs.z.ai/devpack/faq",
         "secret_placeholder": "Z.AI API key",
@@ -50,6 +52,19 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://openrouter.ai/api/v1",
         "default_model": "anthropic/claude-sonnet-4",
+        "available_models": [
+            "anthropic/claude-sonnet-4",
+            "anthropic/claude-sonnet-4-5",
+            "anthropic/claude-haiku-4-5",
+            "openai/gpt-4.1",
+            "openai/gpt-4.1-mini",
+            "openai/o3",
+            "openai/o4-mini",
+            "google/gemini-2.5-pro",
+            "google/gemini-2.5-flash",
+            "deepseek/deepseek-r1",
+            "meta-llama/llama-4-maverick",
+        ],
         "description": "OpenRouter unified API for multi-provider model access.",
         "docs_url": "https://openrouter.ai/docs/quickstart",
         "secret_placeholder": "OpenRouter API key",
@@ -65,6 +80,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://api.openai.com/v1",
         "default_model": "gpt-4.1",
+        "available_models": ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o3", "o4-mini"],
         "description": "Direct OpenAI API using API keys.",
         "docs_url": "https://platform.openai.com/docs/overview",
         "secret_placeholder": "OpenAI API key",
@@ -80,6 +96,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": None,
         "default_model": None,
+        "available_models": [],
         "description": "Generic OpenAI-compatible endpoint for gateways, self-hosted runtimes, and compatible vendors.",
         "docs_url": None,
         "secret_placeholder": "OpenAI-compatible API key",
@@ -95,6 +112,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "default_model": "gemini-2.5-pro",
+        "available_models": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
         "description": "Gemini via Google's OpenAI-compatible endpoint.",
         "docs_url": "https://ai.google.dev/gemini-api/docs/openai",
         "secret_placeholder": "Gemini API key",
@@ -110,6 +128,7 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "api_key",
         "base_url": "https://api.anthropic.com",
         "default_model": "claude-sonnet-4-5",
+        "available_models": ["claude-sonnet-4-5", "claude-sonnet-4", "claude-haiku-4-5"],
         "description": "Direct Anthropic API.",
         "docs_url": "https://docs.anthropic.com/en/api/getting-started",
         "secret_placeholder": "Anthropic API key",
@@ -125,6 +144,11 @@ BUILTIN_PROVIDERS: list[dict] = [
         "auth_type": "aws_sdk",
         "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
         "default_model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "available_models": [
+            "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "anthropic.claude-sonnet-4-20250514-v1:0",
+            "anthropic.claude-haiku-4-5-20250301-v1:0",
+        ],
         "description": "Amazon Bedrock using the AWS SDK credential chain and regional Bedrock runtime endpoints.",
         "docs_url": "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html",
         "secret_placeholder": None,
@@ -144,6 +168,8 @@ def seed_provider_defaults(existing: ProviderDefinition | None, payload: dict) -
     existing.auth_type = payload["auth_type"]
     existing.base_url = existing.base_url or payload["base_url"]
     existing.default_model = existing.default_model or payload["default_model"]
+    if not existing.available_models and payload.get("available_models"):
+        existing.available_models = payload["available_models"]
     existing.description = existing.description or payload["description"]
     existing.docs_url = existing.docs_url or payload["docs_url"]
     existing.secret_placeholder = existing.secret_placeholder or payload["secret_placeholder"]

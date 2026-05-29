@@ -3,7 +3,30 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from hermeshq.schemas.common import ORMModel
+from typing import Any
 from hermeshq.schemas.node import NodeRead
+
+
+class AuxiliaryModelEntry(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    api_key_ref: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+
+    def to_dict(self) -> dict:
+        d: dict = {}
+        if self.provider:
+            d["provider"] = self.provider
+        if self.model:
+            d["model"] = self.model
+        if self.api_key_ref:
+            d["api_key_ref"] = self.api_key_ref
+        if self.api_key:
+            d["api_key"] = self.api_key
+        if self.base_url:
+            d["base_url"] = self.base_url
+        return d
 
 
 class AgentCreate(BaseModel):
@@ -27,6 +50,7 @@ class AgentCreate(BaseModel):
     fallback_model: str | None = None
     fallback_api_key_ref: str | None = None
     fallback_base_url: str | None = None
+    auxiliary_models: dict[str, AuxiliaryModelEntry] | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
@@ -57,6 +81,7 @@ class AgentUpdate(BaseModel):
     fallback_model: str | None = None
     fallback_api_key_ref: str | None = None
     fallback_base_url: str | None = None
+    auxiliary_models: dict[str, AuxiliaryModelEntry] | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
@@ -94,6 +119,7 @@ class AgentRead(ORMModel):
     fallback_model: str | None
     fallback_api_key_ref: str | None
     fallback_base_url: str | None
+    auxiliary_models: dict[str, AuxiliaryModelEntry] | None = None
     system_prompt: str | None
     workspace_path: str
     enabled_toolsets: list[str]
@@ -183,6 +209,7 @@ class AgentTemplateOverrides(BaseModel):
     fallback_model: str | None = None
     fallback_api_key_ref: str | None = None
     fallback_base_url: str | None = None
+    auxiliary_models: dict[str, AuxiliaryModelEntry] | None = None
     system_prompt: str | None = None
     soul_md: str | None = None
     enabled_toolsets: list[str] | None = None
@@ -200,3 +227,15 @@ class WorkspaceFileWrite(BaseModel):
         default="",
         description="The file content to write",
     )
+
+
+def auxiliary_models_to_db(
+    aux: dict[str, AuxiliaryModelEntry] | None,
+) -> dict[str, dict[str, Any]] | None:
+    """Convert Pydantic AuxiliaryModelEntry objects to plain dicts for JSONB storage."""
+    if aux is None:
+        return None
+    result: dict[str, dict[str, Any]] = {}
+    for task_name, entry in aux.items():
+        result[task_name] = entry.to_dict()
+    return result or None

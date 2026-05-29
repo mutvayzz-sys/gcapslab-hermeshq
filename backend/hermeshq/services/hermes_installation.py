@@ -114,7 +114,9 @@ class HermesInstallationManager:
         system_prompt = await self._build_system_prompt(agent, installed_skills, app_name)
         messaging_channels = await self._load_messaging_channels(agent.id)
         self._sync_whatsapp_bridge_assets(hermes_home)
-        self._write_config(agent, hermes_home, system_prompt, messaging_channels, active_skin, runtime_selection)
+        # Pre-resolve auxiliary API keys for config.yaml (sync method can't do async)
+        resolved_aux_api_keys = await self._resolve_auxiliary_api_keys(agent)
+        self._write_config(agent, hermes_home, system_prompt, messaging_channels, active_skin, runtime_selection, resolved_aux_api_keys)
         self._write_soul(agent, hermes_home, app_name)
         await self._sync_auth_store(agent, hermes_home)
         await self._sync_dotenv(agent, hermes_home, messaging_channels)
@@ -152,6 +154,26 @@ class HermesInstallationManager:
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
+        # ── Auxiliary model env vars ────────────────────────────────────
+        if agent.auxiliary_models:
+            for task_name, aux_cfg in agent.auxiliary_models.items():
+                if not isinstance(aux_cfg, dict):
+                    continue
+                task_upper = task_name.upper()
+                aux_provider = aux_cfg.get("provider")
+                aux_model = aux_cfg.get("model")
+                aux_base_url = aux_cfg.get("base_url")
+                aux_api_key_ref = aux_cfg.get("api_key_ref")
+                if aux_provider:
+                    env[f"AUXILIARY_{task_upper}_PROVIDER"] = aux_provider
+                if aux_model:
+                    env[f"AUXILIARY_{task_upper}_MODEL"] = aux_model
+                if aux_base_url:
+                    env[f"AUXILIARY_{task_upper}_BASE_URL"] = aux_base_url
+                if aux_api_key_ref:
+                    aux_api_key = await self._resolve_api_key(aux_api_key_ref)
+                    if aux_api_key:
+                        env[f"AUXILIARY_{task_upper}_API_KEY"] = aux_api_key
         return env
 
     async def build_gateway_env(self, agent: Agent, platform: str | None = None) -> dict[str, str]:
@@ -310,6 +332,7 @@ class HermesInstallationManager:
         messaging_channels: list[MessagingChannel],
         active_skin: str | None,
         runtime_selection: HermesRuntimeSelection,
+        resolved_aux_api_keys: dict[str, str] | None = None,
     ) -> None:
         profile = get_runtime_profile(agent.runtime_profile)
         telegram_channel = next((item for item in messaging_channels if item.platform == "telegram"), None)
@@ -413,8 +436,48 @@ class HermesInstallationManager:
                     existing.update(values)
                 else:
                     config[section] = values
+        # ── Auxiliary models ────────────────────────────────────────────
+        if agent.auxiliary_models:
+            aux_section = {}
+            for task_name, aux_cfg in agent.auxiliary_models.items():
+                if not isinstance(aux_cfg, dict):
+                    continue
+                entry = {}
+                provider_val = aux_cfg.get("provider")
+                base_url_val = aux_cfg.get("base_url")
+                # When a custom base_url is set, Hermes Agent expects provider="custom"
+                if base_url_val:
+                    entry["provider"] = "custom"
+                    entry["base_url"] = base_url_val
+                elif provider_val:
+                    entry["provider"] = provider_val
+                if aux_cfg.get("model"):
+                    entry["model"] = aux_cfg["model"]
+                if aux_cfg.get("api_key"):
+                    entry["api_key"] = aux_cfg["api_key"]
+                elif resolved_aux_api_keys and task_name in resolved_aux_api_keys:
+                    entry["api_key"] = resolved_aux_api_keys[task_name]
+                if entry:
+                    aux_section[task_name] = entry
+            if aux_section:
+                config["auxiliary"] = aux_section
         config_path = hermes_home / "config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+    async def _resolve_auxiliary_api_keys(self, agent: Agent) -> dict[str, str]:
+        """Pre-resolve auxiliary API keys so _write_config can include them in config.yaml."""
+        result: dict[str, str] = {}
+        if not agent.auxiliary_models:
+            return result
+        for task_name, aux_cfg in agent.auxiliary_models.items():
+            if not isinstance(aux_cfg, dict):
+                continue
+            ref = aux_cfg.get("api_key_ref")
+            if ref:
+                key = await self._resolve_api_key(ref)
+                if key:
+                    result[task_name] = key
+        return result
 
     def _interaction_runtime_overrides(self, agent: Agent) -> dict[str, dict]:
         overrides: dict[str, dict] = {}
