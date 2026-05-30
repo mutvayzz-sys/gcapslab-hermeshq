@@ -351,6 +351,12 @@ async def stream(websocket: WebSocket) -> None:
                 pass
     except WebSocketDisconnect:
         broker.disconnect(websocket)
+    except Exception as exc:
+        logger.warning("WebSocket stream unexpected error: %s", exc)
+        broker.disconnect(websocket)
+    finally:
+        # Ensure connection is cleaned up on any exit path
+        broker.disconnect(websocket)
 
 
 @app.websocket("/ws/pty/{agent_id}")
