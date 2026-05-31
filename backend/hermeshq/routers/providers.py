@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.provider import ProviderRead, ProviderUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/providers", tags=["providers"])
 
 

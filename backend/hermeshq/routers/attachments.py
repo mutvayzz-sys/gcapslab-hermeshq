@@ -1,7 +1,9 @@
 """Mobile app attachment endpoints – upload, download, delete media files."""
 
 from __future__ import annotations
+import logging
 
+import re
 import uuid
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["attachments"])
 
 ALLOWED_EXTENSIONS = {
@@ -44,6 +47,8 @@ MIME_MAP = {
     ".md": "text/markdown", ".xml": "application/xml", ".html": "text/html",
     ".zip": "application/zip",
 }
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 
 def _resolve_media_type(filename: str) -> str:
@@ -114,6 +119,9 @@ async def download_attachment(
     """Download an attachment by file_id."""
     await ensure_agent_access(db, current_user, agent_id)
 
+    if not _UUID_RE.match(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID format")
+
     uploads = _uploads_dir(request.app.state.workspace_manager, agent_id)
     matches = list(uploads.glob(f"{file_id}.*"))
     if not matches:
@@ -134,6 +142,9 @@ async def delete_attachment(
 ) -> dict:
     """Delete an attachment by file_id."""
     await ensure_agent_access(db, current_user, agent_id)
+
+    if not _UUID_RE.match(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID format")
 
     uploads = _uploads_dir(request.app.state.workspace_manager, agent_id)
     matches = list(uploads.glob(f"{file_id}.*"))

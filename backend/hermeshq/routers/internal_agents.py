@@ -1,4 +1,5 @@
 import hmac
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -9,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
+from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.models.task import Task
 from hermeshq.schemas.message import MessageCreate
 from hermeshq.services.agent_hierarchy import delegate_route, route_label, validate_delegate_hierarchy
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal/agents/self", tags=["internal-agents"], include_in_schema=False)
 
 
@@ -43,11 +46,6 @@ async def _get_internal_agent(
     if not agent or agent.is_archived:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown agent")
     return agent
-
-
-async def _load_agent_map(db: AsyncSession) -> dict[str, Agent]:
-    result = await db.execute(select(Agent).where(Agent.is_archived.is_(False)).order_by(Agent.created_at.asc()))
-    return {agent.id: agent for agent in result.scalars().all()}
 
 
 def _display_name(agent: Agent) -> str:

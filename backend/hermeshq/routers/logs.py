@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, and_, cast, desc, false, or_, select
@@ -10,6 +11,7 @@ from hermeshq.models.activity import ActivityLog
 from hermeshq.models.user import User
 from hermeshq.schemas.activity import ActivityPageRead, ActivityRead
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 

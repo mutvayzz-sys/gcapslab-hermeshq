@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, false, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from hermeshq.models.terminal_session import TerminalSession
 from hermeshq.models.user import User
 from hermeshq.schemas.terminal_session import TerminalSessionRead
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/terminal-sessions", tags=["terminal-sessions"])
 
 

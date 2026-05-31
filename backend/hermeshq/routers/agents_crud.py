@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import false, func, select, update
@@ -35,6 +36,8 @@ from hermeshq.routers.agents_shared import (
 from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug, slugify_agent_value
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
 from hermeshq.models.activity import ActivityLog
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -89,7 +92,6 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     from hermeshq.models.node import Node
-
     node = await db.get(Node, payload.node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")

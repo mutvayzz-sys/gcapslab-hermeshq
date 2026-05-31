@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from hermeshq.schemas.messaging_channel import (
 from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.models.activity import ActivityLog
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
 SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"}
 

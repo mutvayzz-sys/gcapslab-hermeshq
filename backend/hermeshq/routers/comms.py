@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,14 +9,12 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.message import AgentMessage
 from hermeshq.models.user import User
 from hermeshq.schemas.message import BroadcastCreate, MessageCreate, MessageRead
+from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.services.agent_hierarchy import validate_delegate_hierarchy
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/comms", tags=["comms"])
 
-
-async def _load_agent_map(session: AsyncSession) -> dict[str, Agent]:
-    result = await session.execute(select(Agent).where(Agent.is_archived.is_(False)))
-    return {agent.id: agent for agent in result.scalars().all()}
 
 @router.post("/send", response_model=MessageRead)
 async def send_message(

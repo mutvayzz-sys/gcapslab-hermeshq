@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,7 @@ from hermeshq.schemas.scheduled_task import (
     ScheduledTaskUpdate,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/scheduled-tasks", tags=["scheduled-tasks"])
 
 

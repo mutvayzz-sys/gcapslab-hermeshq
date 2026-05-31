@@ -307,7 +307,17 @@ app.include_router(m365.router, prefix=settings.api_prefix)
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok", timestamp=datetime.now(timezone.utc), version=get_app_version())
+    db_ok = True
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(select(1))
+    except Exception:
+        db_ok = False
+    return HealthResponse(
+        status="ok" if db_ok else "degraded",
+        timestamp=datetime.now(timezone.utc),
+        version=get_app_version(),
+    )
 
 
 @app.websocket("/ws/stream")

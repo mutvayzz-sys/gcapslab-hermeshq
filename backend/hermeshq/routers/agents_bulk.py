@@ -1,6 +1,7 @@
 """Agent bulk operation endpoints – bulk task dispatch, bulk message send."""
 
 from __future__ import annotations
+import logging
 
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from hermeshq.routers.agents_shared import (
 )
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 

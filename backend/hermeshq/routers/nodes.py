@@ -1,3 +1,4 @@
+import logging
 import socket
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,6 +12,7 @@ from hermeshq.models.node import Node
 from hermeshq.models.user import User
 from hermeshq.schemas.node import NodeCreate, NodeRead, NodeUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
 

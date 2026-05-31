@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, false, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from hermeshq.models.user import User
 from hermeshq.schemas.task import TaskBoardUpdate, TaskCreate, TaskRead
 from hermeshq.services.task_board import is_valid_board_column, next_board_order, runtime_status_to_board_column
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 

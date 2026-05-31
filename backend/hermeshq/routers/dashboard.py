@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import desc, false, func, select
@@ -12,6 +13,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 

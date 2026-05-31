@@ -21,6 +21,11 @@ services:
         max-file: "3"
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
     networks:
       - internal
 

@@ -3,6 +3,7 @@ import logging
 import re
 import secrets
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
@@ -45,6 +46,28 @@ from hermeshq.services.avatar import (
     validate_and_save_avatar,
     resolve_media_type,
 )
+
+# Simple in-memory rate limiter for login attempts
+_LOGIN_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_WINDOW_SECONDS = 60
+
+
+def _check_login_rate_limit(ip_address: str) -> None:
+    """Rate limit login attempts per IP address."""
+    now = time.monotonic()
+    cutoff = now - _LOGIN_WINDOW_SECONDS
+    attempts = _LOGIN_RATE_LIMITS[ip_address]
+    # Evict old entries
+    _LOGIN_RATE_LIMITS[ip_address] = [t for t in attempts if t > cutoff]
+    if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later.",
+        )
+    _LOGIN_RATE_LIMITS[ip_address].append(now)
+
 
 logger = logging.getLogger(__name__)
 
@@ -451,7 +474,8 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
+async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
+    _check_login_rate_limit(request.client.host if request.client else "unknown")
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
