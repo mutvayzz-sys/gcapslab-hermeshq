@@ -20,6 +20,20 @@ from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
+
+# ---------------------------------------------------------------------------
+# Shared HTTP client (lazily initialized, reused across calls)
+# ---------------------------------------------------------------------------
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating one if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=30)
+    return _http_client
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.models.agent import Agent
@@ -75,10 +89,10 @@ async def kapso_send_text(
         "type": "text",
         "text": {"body": text},
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, json=body, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_http_client()
+    resp = await client.post(url, json=body, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def kapso_send_media(
@@ -108,10 +122,10 @@ async def kapso_send_media(
         "type": media_type,
         media_type: media_obj,
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, json=body, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_http_client()
+    resp = await client.post(url, json=body, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def kapso_mark_read(
@@ -131,10 +145,10 @@ async def kapso_mark_read(
         "message_id": message_id,
     }
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(url, json=body, headers=headers)
-            resp.raise_for_status()
-            return resp.json()
+        client = _get_http_client()
+        resp = await client.post(url, json=body, headers=headers, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
     except Exception:
         logger.debug("Failed to mark message %s as read", message_id, exc_info=True)
         return None
@@ -268,25 +282,25 @@ class KapsoWhatsAppGateway:
         url = f"https://api.kapso.ai/platform/v1/whatsapp/phone_numbers"
         headers = {"X-API-Key": self._api_key}
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(url, headers=headers)
-                if resp.status_code == 401:
-                    raise ValueError("Kapso API key is invalid (401 Unauthorized)")
-                resp.raise_for_status()
-                data = resp.json()
-                # Kapso v1 wraps results in "data" array
-                phone_numbers = data.get("data", data.get("phone_numbers", []))
-                found = any(
-                    pn.get("phone_number_id") == self._phone_number_id
-                    or pn.get("id") == self._phone_number_id
-                    for pn in phone_numbers
+            client = _get_http_client()
+            resp = await client.get(url, headers=headers, timeout=15)
+            if resp.status_code == 401:
+                raise ValueError("Kapso API key is invalid (401 Unauthorized)")
+            resp.raise_for_status()
+            data = resp.json()
+            # Kapso v1 wraps results in "data" array
+            phone_numbers = data.get("data", data.get("phone_numbers", []))
+            found = any(
+                pn.get("phone_number_id") == self._phone_number_id
+                or pn.get("id") == self._phone_number_id
+                for pn in phone_numbers
+            )
+            if not found:
+                logger.warning(
+                    "Kapso phone_number_id %s not found in account numbers: %s",
+                    self._phone_number_id,
+                    [pn.get("id") for pn in phone_numbers],
                 )
-                if not found:
-                    logger.warning(
-                        "Kapso phone_number_id %s not found in account numbers: %s",
-                        self._phone_number_id,
-                        [pn.get("id") for pn in phone_numbers],
-                    )
         except httpx.HTTPStatusError as exc:
             logger.warning("Kapso connectivity check failed: %s", exc)
             raise ValueError(f"Kapso connectivity check failed: {exc}") from exc

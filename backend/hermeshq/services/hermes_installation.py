@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import stat
+import time
 from pathlib import Path
 
 import yaml
@@ -62,6 +63,29 @@ def _build_safe_env() -> dict[str, str]:
     return safe
 
 
+# ---------------------------------------------------------------------------
+# In-memory cache for sync_agent_installation results (avoids redundant
+# disk I/O + DB queries when the same agent is checked repeatedly).
+# ---------------------------------------------------------------------------
+_INSTALL_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_INSTALL_CACHE_TTL = 60  # seconds
+
+
+def _get_install_cached(agent_id: str) -> list[dict] | None:
+    entry = _INSTALL_CACHE.get(agent_id)
+    if entry and (time.monotonic() - entry[0]) < _INSTALL_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _set_install_cached(agent_id: str, result: list[dict]) -> None:
+    _INSTALL_CACHE[agent_id] = (time.monotonic(), result)
+
+
+def _invalidate_install_cached(agent_id: str) -> None:
+    _INSTALL_CACHE.pop(agent_id, None)
+
+
 class HermesInstallationError(RuntimeError):
     pass
 
@@ -103,6 +127,10 @@ class HermesInstallationManager:
         return self.resolve_workspace_path(workspace_path) / ".hermes"
 
     async def sync_agent_installation(self, agent: Agent) -> list[dict]:
+        cached = _get_install_cached(agent.id)
+        if cached is not None:
+            return cached
+
         hermes_home = self.build_hermes_home(agent.workspace_path)
         self._ensure_home_dirs(hermes_home)
         enabled_integrations = await self._load_enabled_integration_slugs()
@@ -120,6 +148,7 @@ class HermesInstallationManager:
         self._write_soul(agent, hermes_home, app_name)
         await self._sync_auth_store(agent, hermes_home)
         await self._sync_dotenv(agent, hermes_home, messaging_channels)
+        _set_install_cached(agent.id, installed_skills)
         return installed_skills
 
     async def build_process_env(self, agent: Agent, *, include_channels: bool = True) -> dict[str, str]:
@@ -227,6 +256,7 @@ class HermesInstallationManager:
                 ]
 
         shutil.rmtree(target_dir)
+        _invalidate_install_cached(agent.id)
         return await self.sync_agent_installation(agent)
 
     async def search_catalog(self, query: str, limit: int = 20) -> list[dict]:

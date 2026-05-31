@@ -21,12 +21,30 @@ logger = logging.getLogger(__name__)
 # Discovery + JWKS cache
 # ---------------------------------------------------------------------------
 _CACHE_TTL = 3600  # 1 hour
+_MAX_CACHE_ENTRIES = 50
 _discovery_cache: dict[str, dict] = {}
 _jwks_cache: dict[str, dict] = {}
 
 
+def _evict_cache(cache: dict[str, dict]) -> None:
+    """Remove expired entries and trim to max size."""
+    now = time.time()
+    # Remove expired
+    expired = [k for k, v in cache.items() if (now - v.get("_fetched_at", 0)) >= _CACHE_TTL]
+    for k in expired:
+        cache.pop(k, None)
+    # Trim to max size (remove oldest first)
+    while len(cache) > _MAX_CACHE_ENTRIES:
+        oldest_key = min(cache, key=lambda k: cache[k].get("_fetched_at", 0), default=None)
+        if oldest_key:
+            cache.pop(oldest_key)
+        else:
+            break
+
+
 async def _fetch_discovery(discovery_url: str) -> dict:
     """Fetch and cache OIDC discovery document."""
+    _evict_cache(_discovery_cache)
     now = time.time()
     cached = _discovery_cache.get(discovery_url)
     if cached and (now - cached["_fetched_at"]) < _CACHE_TTL:
@@ -42,6 +60,7 @@ async def _fetch_discovery(discovery_url: str) -> dict:
 
 async def _fetch_jwks(jwks_uri: str) -> list[dict]:
     """Fetch and cache JWKS keys."""
+    _evict_cache(_jwks_cache)
     now = time.time()
     cached = _jwks_cache.get(jwks_uri)
     if cached and (now - cached["_fetched_at"]) < _CACHE_TTL:
