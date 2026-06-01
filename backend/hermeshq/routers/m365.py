@@ -302,10 +302,18 @@ _SCOPE_TO_INTEGRATION: dict[str, str] = {
     "Mail.Send": "ms365-mail",
     "Calendars.Read": "ms365-calendar",
     "Calendars.ReadWrite": "ms365-calendar",
-    "Files.Read.All": "sharepoint",     # Delegated access to SharePoint/OneDrive files
+    "Files.Read.All": "sharepoint",
     "Chat.Read": "ms365-teams",
     "Chat.ReadWrite": "ms365-teams",
     "Team.ReadBasic.All": "ms365-teams",
+}
+
+# Companion skill each integration ships with (must match manifest skill_identifier)
+_INTEGRATION_SKILL: dict[str, str] = {
+    "ms365-mail": "local/ms365-mail",
+    "ms365-calendar": "local/ms365-calendar",
+    "sharepoint": "local/sharepoint",
+    "ms365-teams": "local/ms365-teams",
 }
 
 
@@ -336,14 +344,22 @@ async def update_agent_m365_scopes(
         scopes = payload.allowed_scopes or []
         activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
         current_configs = dict(agent.integration_configs or {})
+        current_skills = list(agent.skills or [])
         changed = False
         for integration_slug in activated_integrations:
             if integration_slug not in current_configs:
                 current_configs[integration_slug] = {}
                 changed = True
-                logger.info("Auto-enabled delegated integration '%s' for agent %s based on M365 scopes", integration_slug, agent_id)
+                logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
+            # Also add companion skill if not already present
+            skill_id = _INTEGRATION_SKILL.get(integration_slug)
+            if skill_id and skill_id not in current_skills:
+                current_skills.append(skill_id)
+                changed = True
+                logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
         if changed:
             agent.integration_configs = current_configs
+            agent.skills = current_skills
 
     await db.commit()
     return {"allowed_scopes": assignment.m365_allowed_scopes}
