@@ -489,7 +489,7 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token, expires_at = create_access_token(user.id, subject_kind="id")
+    token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
 
@@ -684,7 +684,7 @@ async def oidc_callback(
             _build_frontend_redirect(request, auth_error="This HermesHQ user is inactive"),
             status_code=status.HTTP_302_FOUND,
         )
-    token, _ = create_access_token(local_user.id, subject_kind="id")
+    token, _ = create_access_token(local_user.id, subject_kind="id", role=local_user.role or "user")
     redirect = RedirectResponse(_build_frontend_redirect(request, token=token), status_code=status.HTTP_302_FOUND)
     _set_auth_cookie(redirect, token)
     return redirect

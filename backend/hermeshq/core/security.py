@@ -30,13 +30,18 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(subject: str, *, subject_kind: str = "id") -> tuple[str, datetime]:
+def create_access_token(
+    subject: str,
+    *,
+    subject_kind: str = "id",
+    role: str = "user",
+    agent_ids: list[str] | None = None,
+) -> tuple[str, datetime]:
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_minutes)
-    token = jwt.encode(
-        {"sub": subject, "sub_kind": subject_kind, "exp": expires_at},
-        settings.jwt_secret,
-        algorithm=settings.jwt_algorithm,
-    )
+    payload: dict = {"sub": subject, "sub_kind": subject_kind, "role": role, "exp": expires_at}
+    if agent_ids is not None:
+        payload["agent_ids"] = agent_ids
+    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token, expires_at
 
 
@@ -51,6 +56,14 @@ def decode_access_token_subject(token: str) -> tuple[str | None, str | None]:
     except JWTError:
         return None, None
     return payload.get("sub"), payload.get("sub_kind")
+
+
+def decode_access_token_claims(token: str) -> dict | None:
+    """Decode JWT and return all claims without DB lookup. Returns None if invalid."""
+    try:
+        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return None
 
 
 def create_agent_service_token(agent_id: str) -> str:

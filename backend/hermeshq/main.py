@@ -356,14 +356,36 @@ async def stream(websocket: WebSocket) -> None:
             await websocket.close(code=4401)
             return
 
-    async with AsyncSessionLocal() as session:
-        from hermeshq.core.security import decode_access_token_subject, get_user_by_subject
-        subject, subject_kind = decode_access_token_subject(token or "")
-        user = await get_user_by_subject(session, subject, subject_kind)
-        if not user or not user.is_active:
-            await websocket.close(code=4401)
-            return
-        accessible_agent_ids = await get_accessible_agent_ids(session, user)
+    from hermeshq.core.security import decode_access_token_claims
+    claims = decode_access_token_claims(token or "")
+    if not claims or not claims.get("sub"):
+        await websocket.close(code=4401)
+        return
+
+    user_id: str = claims["sub"]
+    user_role: str = claims.get("role", "user")
+    user_is_admin: bool = user_role == "admin"
+
+    # Use agent_ids from token if available (no DB needed), otherwise fall back to DB query
+    token_agent_ids: list[str] | None = claims.get("agent_ids")
+    if token_agent_ids is not None:
+        accessible_agent_ids = token_agent_ids
+    else:
+        async with AsyncSessionLocal() as session:
+            from hermeshq.core.security import get_user_by_subject
+            user = await get_user_by_subject(session, user_id, claims.get("sub_kind"))
+            if not user or not user.is_active:
+                await websocket.close(code=4401)
+                return
+            accessible_agent_ids = await get_accessible_agent_ids(session, user)
+
+    # Build a lightweight user-like object for the broker subscription
+    class _TokenUser:
+        id = user_id
+        role = user_role
+        is_active = True
+
+    user = _TokenUser()
 
     # If we already accepted (message-based auth), don't accept again.
     if websocket.client_state.name == "CONNECTED":
