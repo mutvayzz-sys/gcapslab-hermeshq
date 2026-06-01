@@ -219,8 +219,15 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     host = forwarded_host or request.headers.get("host") or request.url.netloc
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
-    query = urlencode({k: v for k, v in {"token": token, "auth_error": auth_error}.items() if v})
-    return f"{base_url}?{query}" if query else base_url
+    if token:
+        # Successful auth: redirect to root with token so App.tsx can detect it
+        query = urlencode({"token": token})
+        return f"{base_url}?{query}"
+    if auth_error:
+        # Failed auth: redirect to /login so LoginPage.tsx can display the error
+        query = urlencode({"auth_error": auth_error})
+        return f"{base_url}login?{query}"
+    return base_url
 
 
 def _create_oidc_state() -> str:
