@@ -54,13 +54,8 @@ async def bootstrap_defaults() -> None:
     admin_password = settings.admin_password
     if not admin_password or not admin_password.strip():
         admin_password = _secrets.token_urlsafe(16)
-        msg = f"
-{'='*60}
-HermesHQ admin credentials
-  username: {settings.admin_username}
-  password: {admin_password}
-{'='*60}
-"
+        sep = "=" * 60
+        msg = f"\n{sep}\nHermesHQ admin credentials\n  username: {settings.admin_username}\n  password: {admin_password}\n{sep}\n"
         sys.stderr.write(msg)
         sys.stderr.flush()
 
