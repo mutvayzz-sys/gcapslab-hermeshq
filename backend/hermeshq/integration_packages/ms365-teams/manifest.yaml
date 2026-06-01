@@ -11,7 +11,7 @@ required_fields: []
 fields: []
 secret_provider: null
 plugin_slug: hermeshq_ms365_teams
-skill_dir: skill
+skill_dir: ms365-teams
 skill_identifier: local/ms365-teams
 test_action: health
 env_map: {}
