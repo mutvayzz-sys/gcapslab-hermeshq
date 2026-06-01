@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
 import { useMe } from "./api/auth";
@@ -30,7 +30,9 @@ import { TasksPage } from "./pages/TasksPage";
 import { UsersPage } from "./pages/UsersPage";
 
 export default function App() {
+  const location = useLocation();
   const token = useSessionStore((state) => state.token);
+  const setSession = useSessionStore((state) => state.setSession);
   const setUser = useSessionStore((state) => state.setUser);
   const currentUser = useSessionStore((state) => state.user);
   const { data: branding } = usePublicBranding();
@@ -45,6 +47,16 @@ export default function App() {
   const effectiveLocale = token
     ? resolveEffectiveLocale(branding?.default_locale, currentUser?.locale_preference)
     : (branding?.default_locale ?? "en");
+
+  // Detect OIDC token in URL (e.g. /?token=...) before App redirects to /login
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const urlToken = params.get("token");
+    if (urlToken && !token) {
+      setSession(urlToken, null);
+      window.history.replaceState({}, "", location.pathname);
+    }
+  }, [location.search, token, setSession]);
 
   useEffect(() => {
     if (me) {
