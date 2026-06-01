@@ -316,6 +316,14 @@ _INTEGRATION_SKILL: dict[str, str] = {
     "ms365-teams": "local/ms365-teams",
 }
 
+# Plugin slug each integration ships with (must match manifest plugin_slug)
+_INTEGRATION_PLUGIN: dict[str, str] = {
+    "ms365-mail": "hermeshq_ms365_mail",
+    "ms365-calendar": "hermeshq_ms365_calendar",
+    "sharepoint": "hermeshq_sharepoint",
+    "ms365-teams": "hermeshq_ms365_teams",
+}
+
 
 @router.put("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def update_agent_m365_scopes(
@@ -345,21 +353,30 @@ async def update_agent_m365_scopes(
         activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
         current_configs = dict(agent.integration_configs or {})
         current_skills = list(agent.skills or [])
+        current_toolsets = list(agent.enabled_toolsets or [])
         changed = False
         for integration_slug in activated_integrations:
+            # 1. Enable in integration_configs
             if integration_slug not in current_configs:
                 current_configs[integration_slug] = {}
                 changed = True
                 logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
-            # Also add companion skill if not already present
+            # 2. Add companion skill (provides SKILL.md context)
             skill_id = _INTEGRATION_SKILL.get(integration_slug)
             if skill_id and skill_id not in current_skills:
                 current_skills.append(skill_id)
                 changed = True
                 logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
+            # 3. Add plugin to enabled_toolsets (provides actual tools)
+            plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
+            if plugin_id and plugin_id not in current_toolsets:
+                current_toolsets.append(plugin_id)
+                changed = True
+                logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
         if changed:
             agent.integration_configs = current_configs
             agent.skills = current_skills
+            agent.enabled_toolsets = current_toolsets
 
     await db.commit()
     return {"allowed_scopes": assignment.m365_allowed_scopes}
