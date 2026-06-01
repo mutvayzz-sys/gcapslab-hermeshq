@@ -11,6 +11,7 @@ required_fields: []
 fields: []
 secret_provider: null
 plugin_slug: hermeshq_ms365_calendar
+skill_dir: skill
 skill_identifier: local/ms365-calendar
 test_action: health
 env_map: {}
