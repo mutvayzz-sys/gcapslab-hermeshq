@@ -10,7 +10,7 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
   const { data: me } = useMe(Boolean(token));
   const isAdmin = me?.role === "admin";
 
-  const { data: status, isLoading: statusLoading } = useMyM365Status();
+  const { data: status } = useMyM365Status();
   const { data: scopeData, isLoading } = useAgentM365Scopes(status?.connected ? agentId : null);
   const update = useUpdateAgentM365Scopes(agentId);
 
@@ -25,13 +25,8 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
     }
   }, [scopeData]);
 
-  // Loading state
-  if (statusLoading) {
-    return <p className="text-sm text-[var(--text-secondary)]">Cargando...</p>;
-  }
-
   // Admin without M365 connected: show informational message instead of "connect your account"
-  if (!status?.connected) {
+  if (status !== undefined && !status?.connected) {
     if (isAdmin) {
       return (
         <p className="text-sm text-[var(--text-secondary)]">

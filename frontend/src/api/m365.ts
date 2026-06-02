@@ -65,6 +65,7 @@ export function useMyM365Status() {
       const { data } = await apiClient.get<M365UserStatus>("/m365/me");
       return data;
     },
+    retry: false,
   });
 }
 
