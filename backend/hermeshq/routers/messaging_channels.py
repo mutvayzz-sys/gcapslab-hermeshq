@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import ensure_agent_access, get_current_user, is_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
@@ -98,20 +97,19 @@ async def _log_channel_event(
     )
 
 
-@router.get("", response_model=PaginatedResponse[MessagingChannelRead])
+@router.get("", response_model=list[MessagingChannelRead])
 async def list_channels(
     agent_id: str,
-    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> PaginatedResponse[MessagingChannelRead]:
+) -> list[MessagingChannelRead]:
     await ensure_agent_access(db, current_user, agent_id)
-    statement = (
+    result = await db.execute(
         select(MessagingChannel)
         .where(MessagingChannel.agent_id == agent_id)
         .order_by(MessagingChannel.platform.asc())
     )
-    return await paginate(statement, db, pagination, MessagingChannelRead.model_validate)
+    return [MessagingChannelRead.model_validate(item) for item in result.scalars().all()]
 
 
 @router.put("/{platform}", response_model=MessagingChannelRead)

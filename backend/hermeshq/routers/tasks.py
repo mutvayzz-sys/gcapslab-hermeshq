@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
@@ -17,12 +16,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.get("", response_model=PaginatedResponse[TaskRead])
+@router.get("", response_model=list[TaskRead])
 async def list_tasks(
-    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> PaginatedResponse[TaskRead]:
+) -> list[TaskRead]:
     statement = select(Task).order_by(desc(Task.queued_at))
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
@@ -33,7 +31,8 @@ async def list_tasks(
                 Task.agent_id.in_(accessible_ids),
                 Task.created_by_user_id == current_user.id,
             )
-    return await paginate(statement, db, pagination, TaskRead.model_validate)
+    result = await db.execute(statement)
+    return [TaskRead.model_validate(t) for t in result.scalars().all()]
 
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
