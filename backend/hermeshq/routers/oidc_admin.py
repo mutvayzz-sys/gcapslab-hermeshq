@@ -1,5 +1,6 @@
 """OIDC Provider admin router — CRUD for enterprise OIDC providers."""
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from hermeshq.schemas.oidc_provider import (
     OidcProviderUpdate,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/oidc-providers", tags=["oidc-providers"])
 
 

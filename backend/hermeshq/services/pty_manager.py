@@ -49,11 +49,7 @@ class PTYManager:
         self._session_locks: dict[str, asyncio.Lock] = {}
 
     def _get_session_lock(self, agent_id: str) -> asyncio.Lock:
-        lock = self._session_locks.get(agent_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._session_locks[agent_id] = lock
-        return lock
+        return self._session_locks.setdefault(agent_id, asyncio.Lock())
 
     async def create_session(
         self,

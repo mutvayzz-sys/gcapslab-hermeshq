@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -25,6 +26,8 @@ from hermeshq.services.managed_capabilities import get_managed_integration, list
 from hermeshq.services.runtime_profiles import get_runtime_profile, normalize_runtime_profile_slug
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 from hermeshq.services.workspace_manager import WorkspaceManager
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -53,6 +56,12 @@ GATEWAY_NOTIFICATIONS_MODE_OPTIONS = {"all", "result", "off"}
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
+
+async def _load_agent_map(db: AsyncSession) -> dict[str, Agent]:
+    """Load all non-archived agents as a dict keyed by ID."""
+    result = await db.execute(select(Agent).where(Agent.is_archived.is_(False)).order_by(Agent.created_at.asc()))
+    return {agent.id: agent for agent in result.scalars().all()}
 
 
 def _active_agent_clause():
@@ -133,7 +142,6 @@ async def _load_bulk_agents(
     agent_ids: list[str],
 ) -> list[Agent]:
     from hermeshq.models.user import User  # avoid circular-ish import at module level is fine
-
     ordered_ids = list(dict.fromkeys(str(agent_id).strip() for agent_id in agent_ids if str(agent_id).strip()))
     if not ordered_ids:
         raise HTTPException(status_code=400, detail="Select at least one agent")

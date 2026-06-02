@@ -37,6 +37,9 @@ import hermeshq.models.task  # noqa: F401, E402
 import hermeshq.models.template  # noqa: F401, E402
 import hermeshq.models.terminal_session  # noqa: F401, E402
 import hermeshq.models.user  # noqa: F401, E402
+import hermeshq.models.oidc_provider  # noqa: F401, E402
+import hermeshq.models.password_reset  # noqa: F401, E402
+import hermeshq.models.user_m365_token  # noqa: F401, E402
 
 # --- Alembic config ---------------------------------------------------------
 

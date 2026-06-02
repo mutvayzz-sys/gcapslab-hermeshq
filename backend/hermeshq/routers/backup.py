@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 
 import tempfile
 from pathlib import Path
@@ -17,6 +18,7 @@ from hermeshq.schemas.backup import (
 )
 from hermeshq.services.instance_backup import InstanceBackupError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/backup", tags=["backup"])
 
 

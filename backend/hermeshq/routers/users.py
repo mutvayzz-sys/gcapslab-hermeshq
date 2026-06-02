@@ -1,11 +1,13 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.config import get_settings
+from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import hash_password, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
@@ -19,6 +21,7 @@ from hermeshq.services.avatar import (
     resolve_media_type,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -84,15 +87,20 @@ async def _to_read(request: Request, db: AsyncSession, user: User) -> UserManage
     return _serialize_user(request, user, await _load_assigned_agent_ids(db, user.id))
 
 
-@router.get("", response_model=list[UserManagedRead])
+@router.get("", response_model=PaginatedResponse[UserManagedRead])
 async def list_users(
     request: Request,
+    pagination: PaginationParams = Depends(),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
-) -> list[UserManagedRead]:
-    result = await db.execute(select(User).order_by(User.created_at.asc()))
-    users = result.scalars().all()
-    return [await _to_read(request, db, user) for user in users]
+) -> PaginatedResponse[UserManagedRead]:
+    statement = select(User).order_by(User.created_at.asc())
+    users = (await db.execute(statement.offset(pagination.offset).limit(pagination.limit))).scalars().all()
+    count_stmt = select(func.count()).select_from(User)
+    total = (await db.execute(count_stmt)).scalar_one()
+    items = [await _to_read(request, db, user) for user in users]
+    total_pages = max(1, -(-total // pagination.page_size))
+    return PaginatedResponse(items=items, total=total, page=pagination.page, page_size=pagination.page_size, total_pages=total_pages)
 
 
 @router.post("", response_model=UserManagedRead, status_code=status.HTTP_201_CREATED)

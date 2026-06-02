@@ -11,8 +11,8 @@ class TerminalSession(TimestampMixin, Base):
     __tablename__ = "terminal_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id"), index=True)
-    node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"), nullable=True, index=True)
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id", ondelete="SET NULL"), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(32), default="hybrid")
     cwd: Mapped[str | None] = mapped_column(Text, nullable=True)
     command_json: Mapped[list[str]] = mapped_column(JSON, default=list)

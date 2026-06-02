@@ -1,5 +1,8 @@
+import logging
 from functools import lru_cache
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,7 +15,7 @@ class Settings(BaseSettings):
     auth_mode: str = "local"
 
     database_url: str = "postgresql+asyncpg://hermeshq:hermeshq@localhost:5432/hermeshq"
-    jwt_secret: str = "change-me"
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60 * 12
     fernet_key: str | None = None
@@ -37,7 +40,7 @@ class Settings(BaseSettings):
     password_reset_token_minutes: int = 15
 
     admin_username: str = "admin"
-    admin_password: str = "admin123"
+    admin_password: str = ""
     admin_display_name: str = "Hermes Operator"
 
     workspaces_root: Path = Field(
@@ -65,6 +68,10 @@ class Settings(BaseSettings):
     )
 
     def model_post_init(self, __context) -> None:
+        if self.jwt_secret in ("", "change-me"):
+            logger.warning("⚠️ JWT_SECRET is not set or using default value. This is insecure for production!")
+        if self.admin_password in ("", "admin123"):
+            logger.warning("⚠️ ADMIN_PASSWORD is not set or using default value. This is insecure for production!")
         self.workspaces_root = self.workspaces_root.resolve()
         if self.branding_root is None:
             self.branding_root = self.workspaces_root / "_branding"

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,8 @@ from hermeshq.services.scheduler import SchedulerService
 from hermeshq.services.secret_vault import SecretVault
 from hermeshq.services.workspace_manager import WorkspaceManager
 from hermeshq.versioning import get_app_version
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 DEFAULT_ENABLED_INTEGRATION_PACKAGES = (
@@ -142,7 +145,13 @@ async def lifespan(app: FastAPI):
     await bootstrap_defaults()
     app.state.event_broker = EventBroker()
     app.state.workspace_manager = WorkspaceManager(settings.workspaces_root)
-    app.state.secret_vault = SecretVault(settings.fernet_key or settings.jwt_secret)
+    secret_vault_seed = settings.fernet_key or settings.jwt_secret
+    if not settings.fernet_key:
+        logger.warning(
+            "⚠️ FERNET_KEY not set — SecretVault is using jwt_secret as fallback. "
+            "Generate a key with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
+    app.state.secret_vault = SecretVault(secret_vault_seed)
     app.state.hermes_version_manager = HermesVersionManager(AsyncSessionLocal)
     await app.state.hermes_version_manager.ensure_default_catalog_entries()
     app.state.instance_backup_service = InstanceBackupService(AsyncSessionLocal)
@@ -255,6 +264,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# Request logging middleware (added first = executes last, so it logs the final response)
+from hermeshq.core.request_logging import RequestLoggingMiddleware
+app.add_middleware(RequestLoggingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -298,7 +312,17 @@ app.include_router(m365.router, prefix=settings.api_prefix)
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok", timestamp=datetime.now(timezone.utc), version=get_app_version())
+    db_ok = True
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(select(1))
+    except Exception:
+        db_ok = False
+    return HealthResponse(
+        status="ok" if db_ok else "degraded",
+        timestamp=datetime.now(timezone.utc),
+        version=get_app_version(),
+    )
 
 
 @app.websocket("/ws/stream")
@@ -348,7 +372,7 @@ async def stream(websocket: WebSocket) -> None:
                 if data.get("type") == "pong":
                     continue
             except Exception:
-                pass
+                logger.debug("WebSocket received non-JSON message", exc_info=True)
     except WebSocketDisconnect:
         broker.disconnect(websocket)
     except Exception as exc:
@@ -387,8 +411,8 @@ async def pty_stream(websocket: WebSocket, agent_id: str) -> None:
         env = await app.state.installation_manager.build_process_env(agent)
         runtime_selection = await app.state.installation_manager.resolve_hermes_runtime(agent)
         command = [runtime_selection.hermes_bin]
-    session = await app.state.pty_manager.create_session(agent_id, mode, cwd, command=command, env=env)
-    await app.state.pty_manager.attach(session, websocket)
+    pty_session = await app.state.pty_manager.create_session(agent_id, mode, cwd, command=command, env=env)
+    await app.state.pty_manager.attach(pty_session, websocket)
     try:
         while True:
             message = await websocket.receive_json()
@@ -400,14 +424,14 @@ async def pty_stream(websocket: WebSocket, agent_id: str) -> None:
             elif message.get("type") == "resize":
                 await app.state.pty_manager.resize(
                     agent_id,
-                    int(message.get("cols", session.cols)),
-                    int(message.get("rows", session.rows)),
+                    int(message.get("cols", pty_session.cols)),
+                    int(message.get("rows", pty_session.rows)),
                 )
             elif message.get("type") == "detach":
                 break
     except WebSocketDisconnect:
         pass
     finally:
-        await app.state.pty_manager.detach(session, websocket)
-        if session.mode == "hybrid" and not session.connections:
+        await app.state.pty_manager.detach(pty_session, websocket)
+        if pty_session.mode == "hybrid" and not pty_session.connections:
             await app.state.pty_manager.destroy_session(agent_id)

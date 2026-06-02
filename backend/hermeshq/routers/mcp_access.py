@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -22,6 +23,8 @@ from hermeshq.services.mcp_access import (
     token_display_prefix,
     validate_mcp_agent_ids,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mcp-access", tags=["mcp-access"])
 
@@ -180,7 +183,6 @@ async def rotate_mcp_access_token(
     # Extend expiration if applicable
     if access.expires_at:
         from datetime import timedelta
-
         remaining = access.expires_at - datetime.now(timezone.utc)
         if remaining.total_seconds() > 0:
             access.expires_at = datetime.now(timezone.utc) + remaining

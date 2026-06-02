@@ -72,6 +72,23 @@ class M365ConnectStatusRead(BaseModel):
     account_name: str | None = None
 
 
+class M365AdminTokenRead(BaseModel):
+    id: str
+    user_id: str
+    account_email: str | None = None
+    account_name: str | None = None
+    scopes: list[str] = []
+    expires_at: datetime | None = None
+    revoked: bool
+    created_at: datetime | None = None
+
+
+class AgentM365ScopesRead(BaseModel):
+    allowed_scopes: list[str] | None = None
+    user_scopes: list[str] = []
+    available_scopes: dict[str, str] = {}
+
+
 # ─── Admin: configuración de la instancia ───────────────────────────────────
 
 @router.get("/config", response_model=M365AppConfigRead)
@@ -135,7 +152,7 @@ async def update_m365_config(
 
 # ─── Admin: ver tokens de usuarios ──────────────────────────────────────────
 
-@router.get("/admin/tokens", response_model=list[dict])
+@router.get("/admin/tokens", response_model=list[M365AdminTokenRead])
 async def list_user_tokens(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
@@ -215,7 +232,7 @@ async def poll_connect_status(
 ) -> M365ConnectStatusRead:
     flow_state = _pending_flows.get(current_user.id)
     if not flow_state:
-        raise HTTPException(status_code=404, detail="No hay un flujo de autenticación pendiente.")
+        raise HTTPException(status_code=404, detail="No pending authentication flow.")
 
     vault = request.app.state.secret_vault
 
@@ -242,15 +259,15 @@ async def poll_connect_status(
     except Exception as exc:
         logger.exception("M365 unexpected error for user %s", current_user.id)
         _pending_flows.pop(current_user.id, None)
-        raise HTTPException(status_code=500, detail="Error inesperado durante la autenticación.") from exc
+        raise HTTPException(status_code=500, detail="Unexpected error during authentication.") from exc
 
 
-@router.get("/me/agents/{agent_id}/scopes", response_model=dict)
+@router.get("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def get_agent_m365_scopes(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> AgentM365ScopesRead:
     from hermeshq.models.agent_assignment import AgentAssignment
     from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
     result = await db.execute(
@@ -261,7 +278,7 @@ async def get_agent_m365_scopes(
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+        raise HTTPException(status_code=404, detail="Assignment not found.")
     token_result = await db.execute(
         select(UserM365Token).where(UserM365Token.user_id == current_user.id)
     )
@@ -278,13 +295,13 @@ class AgentScopesUpdate(BaseModel):
     allowed_scopes: list[str] | None
 
 
-@router.put("/me/agents/{agent_id}/scopes", response_model=dict)
+@router.put("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def update_agent_m365_scopes(
     agent_id: str,
     payload: AgentScopesUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> AgentM365ScopesRead:
     from hermeshq.models.agent_assignment import AgentAssignment
     result = await db.execute(
         select(AgentAssignment).where(
@@ -294,7 +311,7 @@ async def update_agent_m365_scopes(
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+        raise HTTPException(status_code=404, detail="Assignment not found.")
     assignment.m365_allowed_scopes = payload.allowed_scopes
     await db.commit()
     return {"allowed_scopes": assignment.m365_allowed_scopes}
@@ -333,7 +350,7 @@ async def get_agent_m365_token(
     )
     assignment = assignment_result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=403, detail="Este agente no está asignado a ese usuario.")
+        raise HTTPException(status_code=403, detail="This agent is not assigned to this user.")
 
     vault = request.app.state.secret_vault
     try:
@@ -342,7 +359,7 @@ async def get_agent_m365_token(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if not access_token:
-        raise HTTPException(status_code=403, detail="El usuario no tiene cuenta M365 conectada.")
+        raise HTTPException(status_code=403, detail="User does not have an M365 account connected.")
 
     allowed = assignment.m365_allowed_scopes
     if allowed is not None:

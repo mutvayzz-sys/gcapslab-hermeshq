@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends
 
 from hermeshq.core.security import get_current_user
@@ -6,6 +7,7 @@ from hermeshq.schemas.runtime_profile import RuntimeCapabilityOverviewRead, Runt
 from hermeshq.services.runtime_capabilities import build_runtime_capability_overview
 from hermeshq.services.runtime_profiles import list_runtime_profiles
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runtime-profiles", tags=["runtime-profiles"])
 
 

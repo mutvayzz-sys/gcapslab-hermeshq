@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.models.activity import ActivityLog
 
+_STALE_TOKEN_SECONDS = 86400  # 24 hours
+
 
 @dataclass
 class _Bucket:
@@ -42,6 +44,18 @@ class McpAnalytics:
     _total_errors: int = 0
     _start_time: float = field(default_factory=time.monotonic)
 
+    # ── Eviction ─────────────────────────────────────────────────────────
+
+    def evict_stale(self) -> None:
+        """Remove tokens not seen in the last 24 hours."""
+        now = time.monotonic()
+        stale = [
+            tid for tid, methods in self._buckets.items()
+            if all(now - b.last_ts > _STALE_TOKEN_SECONDS for b in methods.values())
+        ]
+        for tid in stale:
+            self._buckets.pop(tid, None)
+
     # ── Recording ────────────────────────────────────────────────────────
 
     def record(
@@ -52,6 +66,8 @@ class McpAnalytics:
         latency_ms: float,
         error: bool = False,
     ) -> None:
+        if self._total_requests % 1000 == 0:
+            self.evict_stale()
         b = self._buckets[token_id][method]
         b.total += 1
         b.latency_sum += latency_ms

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from hermeshq.models.task import Task
 from hermeshq.models.user import User
 from hermeshq.schemas.runtime_ledger import RuntimeLedgerEntryRead, RuntimeLedgerResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runtime-ledger", tags=["runtime-ledger"])
 
 

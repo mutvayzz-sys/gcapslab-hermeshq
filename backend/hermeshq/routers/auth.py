@@ -3,6 +3,7 @@ import logging
 import re
 import secrets
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
@@ -45,6 +46,28 @@ from hermeshq.services.avatar import (
     validate_and_save_avatar,
     resolve_media_type,
 )
+
+# Simple in-memory rate limiter for login attempts
+_LOGIN_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_WINDOW_SECONDS = 60
+
+
+def _check_login_rate_limit(ip_address: str) -> None:
+    """Rate limit login attempts per IP address."""
+    now = time.monotonic()
+    cutoff = now - _LOGIN_WINDOW_SECONDS
+    attempts = _LOGIN_RATE_LIMITS[ip_address]
+    # Evict old entries
+    _LOGIN_RATE_LIMITS[ip_address] = [t for t in attempts if t > cutoff]
+    if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later.",
+        )
+    _LOGIN_RATE_LIMITS[ip_address].append(now)
+
 
 logger = logging.getLogger(__name__)
 
@@ -426,7 +449,7 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
                 )
             )
     except Exception:
-        pass  # Table may not exist yet
+        logger.debug("OIDC provider discovery failed; table may not exist yet", exc_info=True)
 
     # Add env-configured + always-visible providers (google, microsoft)
     for slug in _get_public_oidc_provider_slugs():
@@ -451,12 +474,28 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
+async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
+    _check_login_rate_limit(request.client.host if request.client else "unknown")
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token, expires_at = create_access_token(user.id, subject_kind="id")
+    _set_auth_cookie(response, token)
+    return TokenResponse(access_token=token, expires_at=expires_at)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> TokenResponse:
+    """Issue a fresh JWT for the currently authenticated user.
+
+    The client calls this before the existing token expires to extend
+    the session without requiring a full re-login.
+    """
+    token, expires_at = create_access_token(current_user.id, subject_kind="id")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
 
@@ -476,7 +515,7 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
                 auth_url = await oidc_svc.build_authorization_url(db_provider, redirect_uri, state)
                 return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
         except Exception:
-            pass  # Fall through to env-based flow
+            logger.debug("DB-backed OIDC login failed; falling through to env-based flow", exc_info=True)
 
     # --- Legacy env-based OIDC flow ---
     auth_mode = _get_auth_mode()
@@ -535,7 +574,7 @@ async def oidc_logout(
                     _clear_auth_cookie(redirect)
                     return redirect
         except Exception:
-            pass
+            logger.debug("OIDC logout failed; falling through to local logout", exc_info=True)
 
     # --- Legacy env-based logout ---
     if not _oidc_enabled():

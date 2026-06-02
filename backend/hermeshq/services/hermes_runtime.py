@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,8 @@ from hermeshq.services.hermes_installation import HermesInstallationManager
 from hermeshq.services.provider_catalog import normalize_runtime_provider
 from hermeshq.services.runtime_profiles import resolve_effective_toolsets
 from hermeshq.services.secret_vault import SecretVault
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -284,7 +287,7 @@ class HermesRuntime:
             auth_type = getattr(pconfig, "auth_type", None) if pconfig else None
             return str(auth_type or "").strip().lower() == "aws_sdk"
         except Exception:
-            pass
+            logger.debug("Bedrock provider detection failed; falling back to string comparison", exc_info=True)
         return provider == "bedrock"
 
     def _extract_tool_calls(self, messages: list[dict]) -> list[dict]:

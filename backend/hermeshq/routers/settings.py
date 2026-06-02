@@ -28,6 +28,8 @@ from hermeshq.schemas.settings import (
 from hermeshq.services.resource_monitor import resource_monitor
 from hermeshq.versioning import get_app_version
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/settings", tags=["settings"])
 settings = get_settings()
 MAX_LOGO_BYTES = 2 * 1024 * 1024
@@ -363,7 +365,7 @@ async def get_resource_status(
             )
             active_count = result.scalar() or 0
     except Exception:
-        pass
+        logger.warning("Failed to count running tasks for resource status", exc_info=True)
 
     semaphore_info = resource_monitor.get_semaphore_info(active_count)
 

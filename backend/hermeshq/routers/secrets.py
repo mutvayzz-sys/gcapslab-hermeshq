@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
 from hermeshq.schemas.secret import SecretCreate, SecretRead, SecretUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/secrets", tags=["secrets"])
 
 

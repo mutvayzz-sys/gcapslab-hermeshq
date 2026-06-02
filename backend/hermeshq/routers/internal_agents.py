@@ -1,3 +1,5 @@
+import hmac
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -8,10 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
+from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.models.task import Task
 from hermeshq.schemas.message import MessageCreate
+from hermeshq.schemas.internal_agent import InternalDelegateRead, InternalDirectRead, InternalRosterRead
 from hermeshq.services.agent_hierarchy import delegate_route, route_label, validate_delegate_hierarchy
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal/agents/self", tags=["internal-agents"], include_in_schema=False)
 
 
@@ -36,17 +41,12 @@ async def _get_internal_agent(
     if not agent_id or not agent_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
     expected = create_agent_service_token(agent_id)
-    if agent_token != expected:
+    if not hmac.compare_digest(agent_token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
     agent = await db.get(Agent, agent_id)
     if not agent or agent.is_archived:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown agent")
     return agent
-
-
-async def _load_agent_map(db: AsyncSession) -> dict[str, Agent]:
-    result = await db.execute(select(Agent).where(Agent.is_archived.is_(False)).order_by(Agent.created_at.asc()))
-    return {agent.id: agent for agent in result.scalars().all()}
 
 
 def _display_name(agent: Agent) -> str:
@@ -85,7 +85,7 @@ def _resolve_target_agent(agent_map: dict[str, Agent], target: str, source_agent
     return best_matches[0]
 
 
-@router.get("/roster")
+@router.get("/roster", response_model=InternalRosterRead)
 async def roster(
     current_agent: Agent = Depends(_get_internal_agent),
     db: AsyncSession = Depends(get_db_session),
@@ -123,7 +123,7 @@ async def roster(
     }
 
 
-@router.post("/direct")
+@router.post("/direct", response_model=InternalDirectRead)
 async def direct_message(
     payload: InternalDirectRequest,
     request: Request,
@@ -151,7 +151,7 @@ async def direct_message(
     }
 
 
-@router.post("/delegate")
+@router.post("/delegate", response_model=InternalDelegateRead)
 async def delegate_task(
     payload: InternalDelegateRequest,
     request: Request,

@@ -1,7 +1,9 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import ensure_agent_access, get_current_user, is_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
@@ -9,6 +11,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
 from hermeshq.schemas.messaging_channel import (
+    ChannelLogsRead,
     MessagingChannelRead,
     MessagingChannelRuntimeRead,
     MessagingChannelUpdate,
@@ -16,6 +19,7 @@ from hermeshq.schemas.messaging_channel import (
 from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.models.activity import ActivityLog
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
 SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"}
 
@@ -94,19 +98,20 @@ async def _log_channel_event(
     )
 
 
-@router.get("", response_model=list[MessagingChannelRead])
+@router.get("", response_model=PaginatedResponse[MessagingChannelRead])
 async def list_channels(
     agent_id: str,
+    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> list[MessagingChannelRead]:
+) -> PaginatedResponse[MessagingChannelRead]:
     await ensure_agent_access(db, current_user, agent_id)
-    result = await db.execute(
+    statement = (
         select(MessagingChannel)
         .where(MessagingChannel.agent_id == agent_id)
         .order_by(MessagingChannel.platform.asc())
     )
-    return [MessagingChannelRead.model_validate(item) for item in result.scalars().all()]
+    return await paginate(statement, db, pagination, MessagingChannelRead.model_validate)
 
 
 @router.put("/{platform}", response_model=MessagingChannelRead)
@@ -394,7 +399,7 @@ async def stop_channel(
     return MessagingChannelRuntimeRead(**runtime)
 
 
-@router.get("/{platform}/logs")
+@router.get("/{platform}/logs", response_model=ChannelLogsRead)
 async def get_channel_logs(
     agent_id: str,
     platform: str,

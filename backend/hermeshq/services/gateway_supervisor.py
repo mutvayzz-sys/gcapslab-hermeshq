@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,7 +38,7 @@ class GatewayProcessHandle:
     monitor_task: asyncio.Task | None = None
     activity_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     known_activity_keys: dict[str, set[str]] = field(default_factory=dict)
-    session_file_state: dict[str, dict[str, tuple[int, int]]] = field(default_factory=dict)
+    session_file_state: dict[str, dict[str, tuple[int, int, int]]] = field(default_factory=dict)
 
 
 class GatewaySupervisor:
@@ -53,6 +54,8 @@ class GatewaySupervisor:
         self.processes: dict[str, GatewayProcessHandle] = {}
         self._agent_locks: dict[str, asyncio.Lock] = {}
         self._enterprise_gateways: object | None = None
+        self._activity_key_cache: dict[str, tuple[float, set[str]]] = {}
+        self._ACTIVITY_KEY_CACHE_TTL = 30  # seconds
 
     def set_enterprise_gateways(self, manager: object) -> None:
         """Inject the EnterpriseGatewayManager after construction."""
@@ -909,7 +912,7 @@ class GatewaySupervisor:
         workspace_path: str,
         platform: str,
         known_activity_keys: set[str],
-        session_file_state: dict[str, tuple[int, int]],
+        session_file_state: dict[str, tuple[int, int, int]],
     ) -> None:
         sessions_dir = self._sessions_dir(workspace_path)
         while True:
@@ -988,6 +991,11 @@ class GatewaySupervisor:
         return list(result.scalars().all())
 
     async def _recent_activity_source_keys(self, session: AsyncSession, agent_id: str, platform: str) -> list[str]:
+        cache_key = f"{agent_id}:{platform}"
+        now = time.time()
+        cached = self._activity_key_cache.get(cache_key)
+        if cached and (now - cached[0]) < self._ACTIVITY_KEY_CACHE_TTL:
+            return list(cached[1])
         result = await session.execute(
             select(ActivityLog.details)
             .where(
@@ -995,7 +1003,7 @@ class GatewaySupervisor:
                 ActivityLog.event_type.in_((f"channel.{platform}.inbound", f"channel.{platform}.outbound")),
             )
             .order_by(desc(ActivityLog.created_at))
-            .limit(1000)
+            .limit(200)
         )
         keys: list[str] = []
         for details in result.scalars():
@@ -1003,6 +1011,8 @@ class GatewaySupervisor:
                 source_key = details.get("source_key")
                 if isinstance(source_key, str) and source_key:
                     keys.append(source_key)
+        result_set = set(keys)
+        self._activity_key_cache[cache_key] = (now, result_set)
         return keys
 
     def _gateway_log_path(self, workspace_path: str) -> Path:
@@ -1110,17 +1120,18 @@ class GatewaySupervisor:
         self,
         sessions_dir: Path,
         platform: str,
-    ) -> tuple[set[str], dict[str, tuple[int, int]]]:
+    ) -> tuple[set[str], dict[str, tuple[int, int, int]]]:
         known_activity_keys: set[str] = set()
-        session_file_state: dict[str, tuple[int, int]] = {}
+        session_file_state: dict[str, tuple[int, int, int]] = {}
         if not sessions_dir.exists():
             return known_activity_keys, session_file_state
         for path in sorted(sessions_dir.glob("*.jsonl")):
             if not path.is_file():
                 continue
             stat = path.stat()
-            session_file_state[path.as_posix()] = (stat.st_mtime_ns, stat.st_size)
-            for entry in self._read_session_entries(path, platform):
+            entries, end_offset = self._read_session_entries(path, platform)
+            session_file_state[path.as_posix()] = (stat.st_mtime_ns, stat.st_size, end_offset)
+            for entry in entries:
                 known_activity_keys.add(entry["key"])
         return known_activity_keys, session_file_state
 
@@ -1129,7 +1140,7 @@ class GatewaySupervisor:
         sessions_dir: Path,
         platform: str,
         known_activity_keys: set[str],
-        session_file_state: dict[str, tuple[int, int]],
+        session_file_state: dict[str, tuple[int, int, int]],
     ) -> list[dict]:
         if not sessions_dir.exists():
             return []
@@ -1142,10 +1153,23 @@ class GatewaySupervisor:
             current_files.add(path.as_posix())
             stat = path.stat()
             fingerprint = (stat.st_mtime_ns, stat.st_size)
-            if session_file_state.get(path.as_posix()) == fingerprint:
+            prev = session_file_state.get(path.as_posix())
+            if prev is not None and (prev[0], prev[1]) == fingerprint:
                 continue
-            session_file_state[path.as_posix()] = fingerprint
-            for entry in self._read_session_entries(path, platform):
+
+            # Determine read offset: resume from previous, or start from 0
+            last_offset = 0
+            if prev is not None:
+                if prev[1] > stat.st_size:
+                    # File shrank (truncated/rewritten), read from beginning
+                    last_offset = 0
+                else:
+                    # File grew or stayed same size with changed mtime, read new bytes
+                    last_offset = prev[2]
+
+            entries, end_offset = self._read_session_entries(path, platform, last_offset)
+            session_file_state[path.as_posix()] = (stat.st_mtime_ns, stat.st_size, end_offset)
+            for entry in entries:
                 if entry["key"] in known_activity_keys:
                     continue
                 known_activity_keys.add(entry["key"])
@@ -1156,13 +1180,35 @@ class GatewaySupervisor:
                 session_file_state.pop(tracked, None)
         return new_entries
 
-    def _read_session_entries(self, path: Path, platform: str) -> list[dict]:
+    def _read_session_entries(
+        self, path: Path, platform: str, last_offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        """Read new entries from a JSONL session file starting at *last_offset*.
+
+        Returns ``(entries, new_offset)`` where *new_offset* is the byte
+        position after the last byte read (i.e. ``st_size`` on success).
+        """
         try:
             if path.suffix != ".jsonl":
-                return []
-            lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+                return [], last_offset
+            file_size = path.stat().st_size
+            if file_size == 0:
+                return [], 0
+            if file_size < last_offset:
+                # File was truncated/rewritten — start from the beginning
+                last_offset = 0
+            if file_size == last_offset:
+                return [], last_offset
+
+            # Read only the new bytes appended since last_offset
+            with open(path, "r", encoding="utf-8") as f:
+                f.seek(last_offset)
+                new_text = f.read()
+            new_offset = file_size
+
+            lines = [line for line in new_text.splitlines() if line.strip()]
             if not lines:
-                return []
+                return [], new_offset
             payloads = []
             for line in lines:
                 try:
@@ -1170,16 +1216,17 @@ class GatewaySupervisor:
                 except json.JSONDecodeError:
                     continue
             if not payloads or payloads[0].get("platform") != platform:
-                return []
+                return [], new_offset
             messages = [item for item in payloads if item.get("role") in {"user", "assistant"}]
-            return self._extract_entries_from_messages(
+            entries = self._extract_entries_from_messages(
                 messages=messages,
                 session_id=path.stem,
                 session_file=path.name,
                 session_format="jsonl",
             )
+            return entries, new_offset
         except Exception:
-            return []
+            return [], last_offset
 
     def _extract_entries_from_messages(
         self,

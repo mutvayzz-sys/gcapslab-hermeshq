@@ -34,8 +34,8 @@ export function ResetPasswordPage() {
     try {
       await resetPassword(token, newPassword);
       setSuccess(true);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || t("resetPassword.error");
+    } catch (err: unknown) {
+      const detail = (err instanceof Error ? err.message : null) || (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || t("resetPassword.error");
       setError(detail);
     } finally {
       setLoading(false);

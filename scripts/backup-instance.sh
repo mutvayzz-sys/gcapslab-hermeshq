@@ -91,6 +91,10 @@ EOF
 printf 'Packing backup bundle\n'
 tar czf "$OUT_DIR/$BUNDLE_NAME" -C "$TMP_DIR" .
 
+# Generate SHA-256 checksum
+sha256sum "$OUT_DIR/$BUNDLE_NAME" > "$OUT_DIR/${BUNDLE_NAME}.sha256"
+echo "Checksum written to ${BUNDLE_NAME}.sha256"
+
 printf '\nBackup complete\n'
 printf '  bundle: %s\n' "$OUT_DIR/$BUNDLE_NAME"
 printf '  volume: %s\n' "$WORKSPACES_VOLUME"

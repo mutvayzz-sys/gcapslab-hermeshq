@@ -116,6 +116,13 @@ export function useDeleteMyAvatar() {
   });
 }
 
+export async function refreshToken() {
+  const { data } = await apiClient.post<{ access_token: string; expires_at: string }>(
+    "/auth/refresh",
+  );
+  return data;
+}
+
 export async function forgotPassword(email: string) {
   const { data } = await apiClient.post<{ message: string }>("/auth/forgot-password", { email });
   return data;

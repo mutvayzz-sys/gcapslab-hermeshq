@@ -3,6 +3,7 @@ import { useEffect } from "react";
 
 import { useMe } from "./api/auth";
 import { usePublicBranding, resolveAssetUrl } from "./api/settings";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppShell } from "./components/layout/AppShell";
 import { I18nProvider, resolveEffectiveLocale } from "./lib/i18n";
 import {
@@ -89,34 +90,38 @@ export default function App() {
   if (!token) {
     return (
       <I18nProvider locale={effectiveLocale}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </I18nProvider>
     );
   }
 
   return (
     <I18nProvider locale={effectiveLocale}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/schedules" element={<ScheduledTasksPage />} />
-          <Route path="/account" element={<MyAccountPage />} />
-          <Route path="/manual" element={<ManualPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/nodes" element={<NodesPage />} />
-          <Route path="/comms" element={<CommsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/schedules" element={<ScheduledTasksPage />} />
+            <Route path="/account" element={<MyAccountPage />} />
+            <Route path="/manual" element={<ManualPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/nodes" element={<NodesPage />} />
+            <Route path="/comms" element={<CommsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ErrorBoundary>
     </I18nProvider>
   );
 }

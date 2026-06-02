@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from hermeshq.core.pagination import PaginatedResponse, PaginationParams, paginate
 from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
@@ -36,6 +38,8 @@ from hermeshq.services.agent_identity import derive_agent_identity, ensure_uniqu
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
 from hermeshq.models.activity import ActivityLog
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
@@ -59,21 +63,21 @@ def _aux_to_plain_dict(value: dict) -> dict | None:
 # ------------------------------------------------------------------
 
 
-@router.get("", response_model=list[AgentRead])
+@router.get("", response_model=PaginatedResponse[AgentRead])
 async def list_agents(
     request: Request,
     include_archived: bool = Query(default=False),
+    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> list[AgentRead]:
+) -> PaginatedResponse[AgentRead]:
     statement = select(Agent).options(selectinload(Agent.node)).order_by(Agent.created_at.asc())
     if not include_archived:
         statement = statement.where(_active_agent_clause())
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
         statement = statement.where(Agent.id.in_(accessible_ids)) if accessible_ids else statement.where(false())
-    result = await db.execute(statement)
-    return [_serialize_agent(request, agent) for agent in result.scalars().all()]
+    return await paginate(statement, db, pagination, lambda a: _serialize_agent(request, a))
 
 
 # ------------------------------------------------------------------
@@ -89,7 +93,6 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     from hermeshq.models.node import Node
-
     node = await db.get(Node, payload.node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")

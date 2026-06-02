@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from "react";
+import type { UseMutationResult } from "@tanstack/react-query";
 import { useI18n } from "../../lib/i18n";
+import type { Agent, McpAccessToken, McpAccessTokenCreateResult } from "../../types/api";
 
 interface ExternalAccessTabProps {
-  agents: any[] | undefined;
-  mcpAccessTokens: any[] | undefined;
-  createMcpAccessToken: any;
-  updateMcpAccessToken: any;
-  revokeMcpAccessToken: any;
+  agents: Agent[] | undefined;
+  mcpAccessTokens: McpAccessToken[] | undefined;
+  createMcpAccessToken: UseMutationResult<McpAccessTokenCreateResult, Error, Record<string, unknown>>;
+  updateMcpAccessToken: UseMutationResult<McpAccessToken, Error, { tokenId: string; payload: Record<string, unknown> }>;
+  revokeMcpAccessToken: UseMutationResult<string, Error, string>;
 }
 
 export default function ExternalAccessTab({
