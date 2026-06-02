@@ -280,14 +280,16 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 # Request logging middleware (added first = executes last, so it logs the final response)
 from hermeshq.core.request_logging import RequestLoggingMiddleware
+from hermeshq.core.structured_errors import StructuredErrorMiddleware
+app.add_middleware(StructuredErrorMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
 )
 
 app.include_router(auth.router, prefix=settings.api_prefix)
