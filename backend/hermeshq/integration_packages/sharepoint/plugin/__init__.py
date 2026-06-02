@@ -76,6 +76,11 @@ def _auth_error(detail: str) -> str:
 
 # ── Tool handlers ─────────────────────────────────────────────────────────────
 
+def _default_site_url() -> str:
+    """Get the SharePoint site URL configured for this agent (may be empty)."""
+    return os.environ.get("HERMESHQ_SHAREPOINT_SITE_URL", "").strip().rstrip("/")
+
+
 def _list_files_tool(args: dict, **_kwargs) -> str:
     """List files using Files.Read.All - works with OneDrive and SharePoint."""
     user_id = _task_user_id()
@@ -85,7 +90,8 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
     if not token:
         return _auth_error(err)
 
-    site_url = str(args.get("site_url") or "").strip().rstrip("/")
+    # Use arg site_url, fallback to agent-configured site, fallback to OneDrive
+    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
     folder_path = str(args.get("folder_path") or "").strip().strip("/")
 
     if site_url:
@@ -127,7 +133,7 @@ def _get_file_tool(args: dict, **_kwargs) -> str:
         return _auth_error(err)
 
     file_path = str(args.get("file_path") or "").strip().strip("/")
-    site_url = str(args.get("site_url") or "").strip().rstrip("/")
+    site_url = str(args.get("site_url") or _default_site_url()).strip().rstrip("/")
 
     if not file_path:
         return json.dumps({"success": False, "error": "Se requiere file_path."})

@@ -87,6 +87,7 @@ class AgentM365ScopesRead(BaseModel):
     allowed_scopes: list[str] | None = None
     user_scopes: list[str] = []
     available_scopes: dict[str, str] = {}
+    sharepoint_site_url: str | None = None  # Optional SharePoint site URL for this agent
 
 
 # ─── Admin: configuración de la instancia ───────────────────────────────────
@@ -284,15 +285,22 @@ async def get_agent_m365_scopes(
     )
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
+    # Get SharePoint site URL from agent integration_configs if set
+    agent = await db.get(Agent, agent_id)
+    sharepoint_site_url = None
+    if agent and isinstance((agent.integration_configs or {}).get("sharepoint"), dict):
+        sharepoint_site_url = agent.integration_configs["sharepoint"].get("site_url") or None
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,
         "user_scopes": user_scopes,
         "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
+        "sharepoint_site_url": sharepoint_site_url,
     }
 
 
 class AgentScopesUpdate(BaseModel):
     allowed_scopes: list[str] | None
+    sharepoint_site_url: str | None = None  # Optional SharePoint site URL for this agent
 
 
 # Mapping: which scopes activate which delegated integration
@@ -356,7 +364,7 @@ async def update_agent_m365_scopes(
         current_toolsets = list(agent.enabled_toolsets or [])
         changed = False
         for integration_slug in activated_integrations:
-            # 1. Enable in integration_configs
+            # 1. Enable in integration_configs (preserve existing config like site_url)
             if integration_slug not in current_configs:
                 current_configs[integration_slug] = {}
                 changed = True
@@ -373,13 +381,26 @@ async def update_agent_m365_scopes(
                 current_toolsets.append(plugin_id)
                 changed = True
                 logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
+
+        # Save SharePoint site URL in integration_configs["sharepoint"]["site_url"]
+        site_url = (payload.sharepoint_site_url or "").strip() or None
+        if "sharepoint" in current_configs:
+            existing_cfg = current_configs["sharepoint"] if isinstance(current_configs["sharepoint"], dict) else {}
+            new_cfg = {**existing_cfg, "site_url": site_url}
+            if new_cfg != existing_cfg:
+                current_configs["sharepoint"] = new_cfg
+                changed = True
+
         if changed:
             agent.integration_configs = current_configs
             agent.skills = current_skills
             agent.enabled_toolsets = current_toolsets
 
     await db.commit()
-    return {"allowed_scopes": assignment.m365_allowed_scopes}
+    return {
+        "allowed_scopes": assignment.m365_allowed_scopes,
+        "sharepoint_site_url": (payload.sharepoint_site_url or "").strip() or None,
+    }
 
 
 @router.get("/agent-token")

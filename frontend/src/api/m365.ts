@@ -90,6 +90,7 @@ export interface AgentM365Scopes {
   allowed_scopes: string[] | null;
   user_scopes: string[];
   available_scopes: Record<string, string>;
+  sharepoint_site_url: string | null;
 }
 
 export function useAgentM365Scopes(agentId: string | null) {
@@ -107,10 +108,10 @@ export function useAgentM365Scopes(agentId: string | null) {
 export function useUpdateAgentM365Scopes(agentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (allowedScopes: string[] | null) => {
-      const { data } = await apiClient.put<{ allowed_scopes: string[] | null }>(
+    mutationFn: async (payload: { allowed_scopes: string[] | null; sharepoint_site_url?: string | null }) => {
+      const { data } = await apiClient.put<AgentM365Scopes>(
         `/m365/me/agents/${agentId}/scopes`,
-        { allowed_scopes: allowedScopes },
+        payload,
       );
       return data;
     },

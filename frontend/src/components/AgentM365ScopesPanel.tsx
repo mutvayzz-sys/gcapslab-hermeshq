@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { useAgentM365Scopes, useMyM365Status, useUpdateAgentM365Scopes } from "../api/m365";
 
+const SHAREPOINT_SCOPE = "Files.Read.All";
+
 export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
   const { data: status } = useMyM365Status();
   const { data: scopeData, isLoading } = useAgentM365Scopes(status?.connected ? agentId : null);
   const update = useUpdateAgentM365Scopes(agentId);
 
   const [selected, setSelected] = useState<string[] | null>(null);
+  const [sharepointSiteUrl, setSharepointSiteUrl] = useState<string>("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (scopeData) {
       setSelected(scopeData.allowed_scopes ?? scopeData.user_scopes);
+      setSharepointSiteUrl(scopeData.sharepoint_site_url ?? "");
     }
   }, [scopeData]);
 
@@ -46,12 +50,16 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
   }
 
   async function handleSave() {
-    await update.mutateAsync(selected);
+    await update.mutateAsync({
+      allowed_scopes: selected,
+      sharepoint_site_url: sharepointSiteUrl.trim() || null,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
   const allAllowed = scopeData.user_scopes.every((s) => selected?.includes(s));
+  const sharepointEnabled = selected?.includes(SHAREPOINT_SCOPE) ?? false;
 
   return (
     <div className="space-y-4">
@@ -95,6 +103,22 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
           );
         })}
       </div>
+
+      {sharepointEnabled && (
+        <div className="rounded border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-2">
+          <p className="text-sm font-medium text-[var(--text-primary)]">📁 Sitio SharePoint del agente</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Indica la URL del sitio SharePoint donde este agente trabajará. Déjalo vacío para que el agente pueda acceder a cualquier sitio dentro de tu cuenta.
+          </p>
+          <input
+            type="url"
+            value={sharepointSiteUrl}
+            onChange={(e) => { setSharepointSiteUrl(e.target.value); setSaved(false); }}
+            placeholder="https://empresa.sharepoint.com/sites/MiSitio  (opcional)"
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          />
+        </div>
+      )}
 
       <div className="flex items-center gap-4">
         <button

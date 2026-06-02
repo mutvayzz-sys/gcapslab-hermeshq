@@ -491,6 +491,21 @@ class HermesInstallationManager:
                     aux_section[task_name] = entry
             if aux_section:
                 config["auxiliary"] = aux_section
+        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ───────
+        # Hermes requires an explicit plugins.enabled list in config.yaml to
+        # load plugins from the plugins/ directory; without it, plugins are
+        # discovered but skipped. We include every plugin slug in enabled_toolsets
+        # that has a corresponding directory in HERMES_HOME/plugins/.
+        plugins_root = hermes_home / "plugins"
+        if plugins_root.exists():
+            installed_plugin_dirs = {p.name for p in plugins_root.iterdir() if p.is_dir()}
+            # enabled_toolsets contains slugs like "hermeshq_ms365_mail"
+            plugins_to_enable = [
+                slug for slug in (agent.enabled_toolsets or [])
+                if slug in installed_plugin_dirs
+            ]
+            if plugins_to_enable:
+                config["plugins"] = {"enabled": plugins_to_enable}
         config_path = hermes_home / "config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
@@ -988,6 +1003,12 @@ class HermesInstallationManager:
                 continue
             config_dict = config if isinstance(config, dict) else {}
             env_map = integration.get("env_map") or {}
+
+            # SharePoint: expose site_url as env var for the plugin
+            if slug == "sharepoint":
+                site_url = str(config_dict.get("site_url") or "").strip()
+                if site_url:
+                    managed["HERMESHQ_SHAREPOINT_SITE_URL"] = site_url
 
             base_url = str(config_dict.get("base_url") or "").strip()
             if base_url and env_map.get("base_url"):
