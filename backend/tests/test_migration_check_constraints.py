@@ -262,7 +262,7 @@ class TestRevisionMetadata:
 
     def test_down_revision(self):
         mod = _import_migration()
-        assert mod.down_revision == "a3b4c5d6e7f8"
+        assert mod.down_revision == "565106c3b23c"
 
     def test_no_branch_labels(self):
         mod = _import_migration()
