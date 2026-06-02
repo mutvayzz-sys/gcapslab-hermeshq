@@ -269,6 +269,7 @@ async def get_agent_m365_scopes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentM365ScopesRead:
+    from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment
     from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
     result = await db.execute(
