@@ -10,8 +10,10 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
   const { data: me } = useMe(Boolean(token));
   const isAdmin = me?.role === "admin";
 
-  const { data: status } = useMyM365Status();
-  const { data: scopeData, isLoading } = useAgentM365Scopes(status?.connected ? agentId : null);
+  const { data: status, isLoading: statusLoading } = useMyM365Status();
+  const { data: scopeData, isLoading: scopesLoading, isError: scopesError } = useAgentM365Scopes(
+    status?.connected ? agentId : null,
+  );
   const update = useUpdateAgentM365Scopes(agentId);
 
   const [selected, setSelected] = useState<string[] | null>(null);
@@ -25,8 +27,13 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
     }
   }, [scopeData]);
 
-  // Admin without M365 connected: show informational message instead of "connect your account"
-  if (status !== undefined && !status?.connected) {
+  // Still fetching M365 status
+  if (statusLoading) {
+    return <p className="text-sm text-[var(--text-secondary)]">Cargando...</p>;
+  }
+
+  // Not connected
+  if (!status?.connected) {
     if (isAdmin) {
       return (
         <p className="text-sm text-[var(--text-secondary)]">
@@ -45,14 +52,27 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
     );
   }
 
-  if (isLoading || selected === null) {
-    return <p className="text-sm text-[var(--text-secondary)]">Cargando...</p>;
+  // Loading scopes
+  if (scopesLoading) {
+    return <p className="text-sm text-[var(--text-secondary)]">Cargando permisos...</p>;
   }
 
+  // Error loading scopes
+  if (scopesError) {
+    return (
+      <p className="text-sm text-[var(--text-secondary)]">
+        Error al cargar permisos. Intenta recargar la página.
+      </p>
+    );
+  }
+
+  // No scopes available
   if (!scopeData || scopeData.user_scopes.length === 0) {
     return (
       <p className="text-sm text-[var(--text-secondary)]">
-        No tienes permisos M365 disponibles. Reconecta tu cuenta con los permisos necesarios.
+        No tienes permisos M365 disponibles. Reconecta tu cuenta en{" "}
+        <a href="/account" className="text-[var(--accent)] underline">Mi cuenta</a>{" "}
+        con los permisos necesarios.
       </p>
     );
   }
@@ -74,8 +94,9 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
     setTimeout(() => setSaved(false), 2500);
   }
 
-  const allAllowed = scopeData.user_scopes.every((s) => selected?.includes(s));
-  const sharepointEnabled = selected?.includes(SHAREPOINT_SCOPE) ?? false;
+  const currentSelected = selected ?? scopeData.user_scopes;
+  const allAllowed = scopeData.user_scopes.every((s) => currentSelected.includes(s));
+  const sharepointEnabled = currentSelected.includes(SHAREPOINT_SCOPE);
 
   return (
     <div className="space-y-4">
@@ -99,7 +120,7 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
       <div className="grid gap-2 sm:grid-cols-2">
         {scopeData.user_scopes.map((scope) => {
           const label = scopeData.available_scopes[scope] ?? scope;
-          const checked = selected?.includes(scope) ?? false;
+          const checked = currentSelected.includes(scope);
           return (
             <label
               key={scope}
@@ -124,7 +145,7 @@ export function AgentM365ScopesPanel({ agentId }: { agentId: string }) {
         <div className="rounded border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-2">
           <p className="text-sm font-medium text-[var(--text-primary)]">📁 Sitio SharePoint del agente</p>
           <p className="text-xs text-[var(--text-secondary)]">
-            Indica la URL del sitio SharePoint donde este agente trabajará. Déjalo vacío para que el agente pueda acceder a cualquier sitio dentro de tu cuenta.
+            Indica la URL del sitio SharePoint donde este agente trabajará. Déjalo vacío para acceder a cualquier sitio.
           </p>
           <input
             type="url"
