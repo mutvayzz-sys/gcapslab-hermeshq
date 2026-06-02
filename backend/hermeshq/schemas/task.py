@@ -40,3 +40,8 @@ class TaskRead(ORMModel):
     started_at: datetime | None
     completed_at: datetime | None
     metadata: dict = Field(validation_alias="metadata_json", serialization_alias="metadata")
+
+
+class TaskQueueStateRead(BaseModel):
+    queued: int
+    running: int

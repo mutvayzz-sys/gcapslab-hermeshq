@@ -13,6 +13,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.models.task import Task
 from hermeshq.schemas.message import MessageCreate
+from hermeshq.schemas.internal_agent import InternalDelegateRead, InternalDirectRead, InternalRosterRead
 from hermeshq.services.agent_hierarchy import delegate_route, route_label, validate_delegate_hierarchy
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def _resolve_target_agent(agent_map: dict[str, Agent], target: str, source_agent
     return best_matches[0]
 
 
-@router.get("/roster")
+@router.get("/roster", response_model=InternalRosterRead)
 async def roster(
     current_agent: Agent = Depends(_get_internal_agent),
     db: AsyncSession = Depends(get_db_session),
@@ -122,7 +123,7 @@ async def roster(
     }
 
 
-@router.post("/direct")
+@router.post("/direct", response_model=InternalDirectRead)
 async def direct_message(
     payload: InternalDirectRequest,
     request: Request,
@@ -150,7 +151,7 @@ async def direct_message(
     }
 
 
-@router.post("/delegate")
+@router.post("/delegate", response_model=InternalDelegateRead)
 async def delegate_task(
     payload: InternalDelegateRequest,
     request: Request,

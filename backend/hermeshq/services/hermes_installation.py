@@ -1155,7 +1155,7 @@ class HermesInstallationManager:
                 if isinstance(loaded, dict):
                     auth_store.update(loaded)
             except Exception:
-                pass
+                logger.warning("Failed to load auth store from %s", auth_path, exc_info=True)
 
         credential_pool = auth_store.get("credential_pool")
         if not isinstance(credential_pool, dict):
@@ -1235,7 +1235,7 @@ class HermesInstallationManager:
             if envs:
                 return list(envs)
         except Exception:
-            pass
+            logger.debug("Provider registry env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": [],
             "zai": ["ZAI_API_KEY", "GLM_API_KEY", "Z_AI_API_KEY"],
@@ -1259,7 +1259,7 @@ class HermesInstallationManager:
             if isinstance(base_url_env, str) and base_url_env.strip():
                 return base_url_env.strip()
         except Exception:
-            pass
+            logger.debug("Provider base_url_env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": "BEDROCK_BASE_URL",
             "zai": "GLM_BASE_URL",

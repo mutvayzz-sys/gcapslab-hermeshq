@@ -54,3 +54,8 @@ class MessagingChannelRuntimeRead(BaseModel):
     bridge_log_path: str | None = None
     pairing_qr_text: str | None = None
     paired_at: datetime | None = None
+
+
+class ChannelLogsRead(BaseModel):
+    platform: str
+    content: str

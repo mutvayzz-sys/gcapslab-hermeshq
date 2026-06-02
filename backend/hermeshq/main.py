@@ -276,6 +276,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# Request logging middleware (added first = executes last, so it logs the final response)
+from hermeshq.core.request_logging import RequestLoggingMiddleware
+app.add_middleware(RequestLoggingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -401,7 +406,7 @@ async def stream(websocket: WebSocket) -> None:
                 if data.get("type") == "pong":
                     continue
             except Exception:
-                pass
+                logger.debug("WebSocket received non-JSON message", exc_info=True)
     except WebSocketDisconnect:
         pass
     except Exception as exc:

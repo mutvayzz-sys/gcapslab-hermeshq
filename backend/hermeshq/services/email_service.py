@@ -74,7 +74,7 @@ class EmailService:
                 if db_settings.app_name:
                     self._app_name = db_settings.app_name
         except Exception:
-            pass  # Fallback to env vars only
+            logger.debug("Failed to load email settings from DB; using env vars", exc_info=True)
 
     async def send_password_reset(
         self,

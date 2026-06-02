@@ -9,6 +9,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.message import AgentMessage
 from hermeshq.models.user import User
 from hermeshq.schemas.message import BroadcastCreate, MessageCreate, MessageRead
+from hermeshq.schemas.topology import CommsTopologyRead
 from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.services.agent_hierarchy import validate_delegate_hierarchy
 
@@ -82,7 +83,7 @@ async def history(
     return [MessageRead.model_validate(item) for item in result.scalars().all()]
 
 
-@router.get("/topology")
+@router.get("/topology", response_model=CommsTopologyRead)
 async def topology(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),

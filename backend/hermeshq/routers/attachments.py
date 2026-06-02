@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
+from hermeshq.schemas.attachment import AttachmentDeleteRead, AttachmentUploadRead
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["attachments"])
@@ -63,7 +64,7 @@ def _uploads_dir(workspace_manager, agent_id: str) -> Path:
     return uploads
 
 
-@router.post("/{agent_id}/attachments")
+@router.post("/{agent_id}/attachments", response_model=AttachmentUploadRead)
 async def upload_attachment(
     agent_id: str,
     request: Request,
@@ -132,7 +133,7 @@ async def download_attachment(
     return FileResponse(file_path, media_type=media_type, filename=file_path.name)
 
 
-@router.delete("/{agent_id}/attachments/{file_id}")
+@router.delete("/{agent_id}/attachments/{file_id}", response_model=AttachmentDeleteRead)
 async def delete_attachment(
     agent_id: str,
     file_id: str,
