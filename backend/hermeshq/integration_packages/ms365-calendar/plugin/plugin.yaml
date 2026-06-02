@@ -1,4 +1,4 @@
-name: hermeshq-ms365-calendar
+name: hermeshq_ms365_calendar
 version: "1.0.0"
 description: Microsoft 365 Calendar tools using delegated user permissions
 author: HermesHQ

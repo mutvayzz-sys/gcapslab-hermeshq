@@ -1,4 +1,4 @@
-name: hermeshq-ms365-teams
+name: hermeshq_ms365_teams
 version: "1.0.0"
 description: Microsoft Teams chat and team tools using delegated user permissions
 author: HermesHQ
