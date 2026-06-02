@@ -10,6 +10,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
 from hermeshq.schemas.messaging_channel import (
+    ChannelLogsRead,
     MessagingChannelRead,
     MessagingChannelRuntimeRead,
     MessagingChannelUpdate,
@@ -396,7 +397,7 @@ async def stop_channel(
     return MessagingChannelRuntimeRead(**runtime)
 
 
-@router.get("/{platform}/logs")
+@router.get("/{platform}/logs", response_model=ChannelLogsRead)
 async def get_channel_logs(
     agent_id: str,
     platform: str,

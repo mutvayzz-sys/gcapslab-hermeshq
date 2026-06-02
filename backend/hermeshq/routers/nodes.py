@@ -10,7 +10,14 @@ from hermeshq.core.security import require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.node import Node
 from hermeshq.models.user import User
-from hermeshq.schemas.node import NodeCreate, NodeRead, NodeUpdate
+from hermeshq.schemas.node import (
+    NodeCreate,
+    NodeMetricsRead,
+    NodeProvisionRead,
+    NodeRead,
+    NodeTestRead,
+    NodeUpdate,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -71,7 +78,7 @@ async def update_node(
     return NodeRead.model_validate(node)
 
 
-@router.post("/{node_id}/test")
+@router.post("/{node_id}/test", response_model=NodeTestRead)
 async def test_node(
     node_id: str,
     _: User = Depends(require_admin),
@@ -101,7 +108,7 @@ async def test_node(
     }
 
 
-@router.post("/{node_id}/provision")
+@router.post("/{node_id}/provision", response_model=NodeProvisionRead)
 async def provision_node(
     node_id: str,
     _: User = Depends(require_admin),
@@ -122,7 +129,7 @@ async def provision_node(
     return {"status": "ok", "node_id": node_id, "message": "Local node is provisioned"}
 
 
-@router.get("/{node_id}/metrics")
+@router.get("/{node_id}/metrics", response_model=NodeMetricsRead)
 async def node_metrics(
     node_id: str,
     _: User = Depends(require_admin),

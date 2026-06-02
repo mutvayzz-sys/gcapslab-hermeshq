@@ -9,7 +9,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
-from hermeshq.schemas.task import TaskBoardUpdate, TaskCreate, TaskRead
+from hermeshq.schemas.task import TaskBoardUpdate, TaskCreate, TaskQueueStateRead, TaskRead
 from hermeshq.services.task_board import is_valid_board_column, next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ async def update_task_board(
     return TaskRead.model_validate(task)
 
 
-@router.get("/queue/state")
+@router.get("/queue/state", response_model=TaskQueueStateRead)
 async def queue_state(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),

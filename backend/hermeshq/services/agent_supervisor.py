@@ -691,7 +691,7 @@ class AgentSupervisor:
                 await bot.send_message(chat_id=chat_id, text=message_text, message_thread_id=thread_value)
                 await bot.shutdown()
             except Exception:
-                pass
+                logger.warning("Failed to send Telegram notification to chat %s", chat_id, exc_info=True)
 
         self._pending_callbacks.append(_after_commit)
 

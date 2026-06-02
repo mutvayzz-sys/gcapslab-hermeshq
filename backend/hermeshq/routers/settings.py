@@ -365,7 +365,7 @@ async def get_resource_status(
             )
             active_count = result.scalar() or 0
     except Exception:
-        pass
+        logger.warning("Failed to count running tasks for resource status", exc_info=True)
 
     semaphore_info = resource_monitor.get_semaphore_info(active_count)
 

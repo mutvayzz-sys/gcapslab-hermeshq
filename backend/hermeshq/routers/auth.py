@@ -449,7 +449,7 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
                 )
             )
     except Exception:
-        pass  # Table may not exist yet
+        logger.debug("OIDC provider discovery failed; table may not exist yet", exc_info=True)
 
     # Add env-configured + always-visible providers (google, microsoft)
     for slug in _get_public_oidc_provider_slugs():
@@ -500,7 +500,7 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
                 auth_url = await oidc_svc.build_authorization_url(db_provider, redirect_uri, state)
                 return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
         except Exception:
-            pass  # Fall through to env-based flow
+            logger.debug("DB-backed OIDC login failed; falling through to env-based flow", exc_info=True)
 
     # --- Legacy env-based OIDC flow ---
     auth_mode = _get_auth_mode()
@@ -559,7 +559,7 @@ async def oidc_logout(
                     _clear_auth_cookie(redirect)
                     return redirect
         except Exception:
-            pass
+            logger.debug("OIDC logout failed; falling through to local logout", exc_info=True)
 
     # --- Legacy env-based logout ---
     if not _oidc_enabled():

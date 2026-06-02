@@ -17,7 +17,7 @@ from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentRead
+from hermeshq.schemas.agent import AgentRead, AvatarGenerationRead
 from hermeshq.services.avatar import (
     delete_avatar_files as _delete_avatar_files_shared,
     resolve_media_type,
@@ -47,7 +47,7 @@ async def get_agent_avatar(agent_id: str, db: AsyncSession = Depends(get_db_sess
     return FileResponse(avatar_path, media_type=resolve_media_type(avatar_path))
 
 
-@router.post("/{agent_id}/avatar/generate-ai")
+@router.post("/{agent_id}/avatar/generate-ai", response_model=AvatarGenerationRead)
 async def generate_ai_avatar(
     agent_id: str,
     request: Request,
@@ -104,7 +104,7 @@ async def generate_ai_avatar(
         try:
             await request.app.state.supervisor.submit_task(task.id)
         except Exception:
-            pass  # Task will be picked up on next start
+            logger.debug("Failed to submit avatar-update task; will be picked up on next start", exc_info=True)
 
     return {
         "status": "submitted",
