@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
 from hermeshq.schemas.messaging_channel import (
+    ChannelLogsRead,
     MessagingChannelRead,
     MessagingChannelRuntimeRead,
     MessagingChannelUpdate,
@@ -16,6 +18,7 @@ from hermeshq.schemas.messaging_channel import (
 from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.models.activity import ActivityLog
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
 SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"}
 
@@ -394,7 +397,7 @@ async def stop_channel(
     return MessagingChannelRuntimeRead(**runtime)
 
 
-@router.get("/{platform}/logs")
+@router.get("/{platform}/logs", response_model=ChannelLogsRead)
 async def get_channel_logs(
     agent_id: str,
     platform: str,

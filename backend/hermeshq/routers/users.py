@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -19,6 +20,7 @@ from hermeshq.services.avatar import (
     resolve_media_type,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -90,9 +92,9 @@ async def list_users(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[UserManagedRead]:
-    result = await db.execute(select(User).order_by(User.created_at.asc()))
-    users = result.scalars().all()
-    return [await _to_read(request, db, user) for user in users]
+    statement = select(User).order_by(User.created_at.asc())
+    result = await db.execute(statement)
+    return [await _to_read(request, db, user) for user in result.scalars().all()]
 
 
 @router.post("", response_model=UserManagedRead, status_code=status.HTTP_201_CREATED)

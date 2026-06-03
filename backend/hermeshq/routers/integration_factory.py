@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
@@ -35,6 +36,7 @@ from hermeshq.services.integration_factory import (
     write_draft_file,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integration-factory", tags=["integration-factory"])
 
 

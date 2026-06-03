@@ -197,6 +197,7 @@ export function AgentDetailPage() {
   const generateAIAvatar = useGenerateAIAgentAvatar();
   const testAgentIntegration = useTestAgentIntegration();
   const runAgentIntegrationAction = useRunAgentIntegrationAction();
+  const [integrationPending, setIntegrationPending] = useState<Record<string, string | null>>({});
   const updateAgent = useUpdateAgent();
   const createTask = useCreateTask();
   const [identityForm, setIdentityForm] = useState({
@@ -556,32 +557,36 @@ export function AgentDetailPage() {
 
   async function onTestIntegration(integrationSlug: string) {
     const currentDraft = integrationDrafts[integrationSlug] ?? {};
-    const result = await testAgentIntegration.mutateAsync({
-      agentId: currentAgent.id,
-      integrationSlug,
-      config: currentDraft,
-    });
-    setIntegrationTestResults((current) => ({
-      ...current,
-      [integrationSlug]: result,
-    }));
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: "test" }));
+    try {
+      const result = await testAgentIntegration.mutateAsync({
+        agentId: currentAgent.id,
+        integrationSlug,
+        config: currentDraft,
+      });
+      setIntegrationTestResults((current) => ({ ...current, [integrationSlug]: result }));
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onRunIntegrationAction(integrationSlug: string, actionSlug: string) {
     const currentDraft = integrationDrafts[integrationSlug] ?? {};
-    const result = await runAgentIntegrationAction.mutateAsync({
-      agentId: currentAgent.id,
-      integrationSlug,
-      actionSlug,
-      config: currentDraft,
-    });
-    setIntegrationActionResults((current) => ({
-      ...current,
-      [integrationSlug]: {
-        ...(current[integrationSlug] ?? {}),
-        [actionSlug]: result,
-      },
-    }));
+    setIntegrationPending((p) => ({ ...p, [integrationSlug]: actionSlug }));
+    try {
+      const result = await runAgentIntegrationAction.mutateAsync({
+        agentId: currentAgent.id,
+        integrationSlug,
+        actionSlug,
+        config: currentDraft,
+      });
+      setIntegrationActionResults((current) => ({
+        ...current,
+        [integrationSlug]: { ...(current[integrationSlug] ?? {}), [actionSlug]: result },
+      }));
+    } finally {
+      setIntegrationPending((p) => ({ ...p, [integrationSlug]: null }));
+    }
   }
 
   async function onAvatarSelected(file: File | null) {
@@ -1577,24 +1582,24 @@ export function AgentDetailPage() {
                       <button
                         type="button"
                         className="panel-button-secondary"
-                        disabled={updateAgent.isPending}
+                        disabled={updateAgent.isPending || integrationPending[integration.slug] === "save"}
                         onClick={() => void onSaveIntegration(integration.slug)}
                       >
-                        {enabled ? t("agent.saveIntegration") : t("agent.enableIntegration")}
+                        {integrationPending[integration.slug] === "save" ? t("common.loading") : enabled ? t("agent.saveIntegration") : t("agent.enableIntegration")}
                       </button>
                       <button
                         type="button"
                         className="panel-button-secondary"
-                        disabled={testAgentIntegration.isPending}
+                        disabled={integrationPending[integration.slug] === "test"}
                         onClick={() => void onTestIntegration(integration.slug)}
                       >
-                        {testAgentIntegration.isPending ? t("common.loading") : t("agent.testIntegration")}
+                        {integrationPending[integration.slug] === "test" ? t("common.loading") : t("agent.testIntegration")}
                       </button>
                       {enabled ? (
                         <button
                           type="button"
                           className="panel-button-secondary"
-                          disabled={updateAgent.isPending}
+                          disabled={updateAgent.isPending || integrationPending[integration.slug] === "disable"}
                           onClick={() => void onDisableIntegration(integration.slug)}
                         >
                           {t("agent.disableIntegration")}
@@ -1611,11 +1616,11 @@ export function AgentDetailPage() {
                             key={action.slug}
                             type="button"
                             className="panel-button-secondary"
-                            disabled={runAgentIntegrationAction.isPending}
+                            disabled={integrationPending[integration.slug] === action.slug}
                             onClick={() => void onRunIntegrationAction(integration.slug, action.slug)}
                             title={action.description ?? undefined}
                           >
-                            {runAgentIntegrationAction.isPending ? t("common.loading") : action.label}
+                            {integrationPending[integration.slug] === action.slug ? t("common.loading") : action.label}
                           </button>
                         ))}
                       </div>

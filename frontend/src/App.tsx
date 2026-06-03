@@ -1,8 +1,9 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
 import { useMe } from "./api/auth";
 import { usePublicBranding, resolveAssetUrl } from "./api/settings";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppShell } from "./components/layout/AppShell";
 import { I18nProvider, resolveEffectiveLocale } from "./lib/i18n";
 import {
@@ -30,7 +31,9 @@ import { TasksPage } from "./pages/TasksPage";
 import { UsersPage } from "./pages/UsersPage";
 
 export default function App() {
+  const location = useLocation();
   const token = useSessionStore((state) => state.token);
+  const setSession = useSessionStore((state) => state.setSession);
   const setUser = useSessionStore((state) => state.setUser);
   const currentUser = useSessionStore((state) => state.user);
   const { data: branding } = usePublicBranding();
@@ -45,6 +48,16 @@ export default function App() {
   const effectiveLocale = token
     ? resolveEffectiveLocale(branding?.default_locale, currentUser?.locale_preference)
     : (branding?.default_locale ?? "en");
+
+  // Detect OIDC token in URL (e.g. /?token=...) before App redirects to /login
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const urlToken = params.get("token");
+    if (urlToken && !token) {
+      setSession(urlToken, null);
+      window.history.replaceState({}, "", location.pathname);
+    }
+  }, [location.search, token, setSession]);
 
   useEffect(() => {
     if (me) {
@@ -89,34 +102,38 @@ export default function App() {
   if (!token) {
     return (
       <I18nProvider locale={effectiveLocale}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </I18nProvider>
     );
   }
 
   return (
     <I18nProvider locale={effectiveLocale}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/schedules" element={<ScheduledTasksPage />} />
-          <Route path="/account" element={<MyAccountPage />} />
-          <Route path="/manual" element={<ManualPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/nodes" element={<NodesPage />} />
-          <Route path="/comms" element={<CommsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/schedules" element={<ScheduledTasksPage />} />
+            <Route path="/account" element={<MyAccountPage />} />
+            <Route path="/manual" element={<ManualPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/nodes" element={<NodesPage />} />
+            <Route path="/comms" element={<CommsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ErrorBoundary>
     </I18nProvider>
   );
 }

@@ -16,6 +16,20 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+# ---------------------------------------------------------------------------
+# Shared HTTP client (lazily initialized, reused across calls)
+# ---------------------------------------------------------------------------
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating one if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=30)
+    return _http_client
+
 from hermeshq.models.agent import Agent
 from hermeshq.models.base import utcnow
 from hermeshq.models.messaging_channel import MessagingChannel
@@ -78,16 +92,16 @@ async def _get_service_account_token(service_account_json: str) -> str:
     signature = private_key_obj.sign(sign_input, padding.PKCS1v15(), hashes.SHA256())
     jwt_token = f"{header_b64}.{payload_b64}.{_b64(signature)}"
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            token_uri,
-            data={
-                "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                "assertion": jwt_token,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["access_token"]
+    client = _get_http_client()
+    resp = await client.post(
+        token_uri,
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": jwt_token,
+        },
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +124,10 @@ async def _send_message(
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, json=body, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_http_client()
+    resp = await client.post(url, json=body, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def _get_space(
@@ -123,10 +137,10 @@ async def _get_space(
     """Get space info from Google Chat."""
     url = f"{_CHAT_API_BASE}/{space_name}"
     headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_http_client()
+    resp = await client.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------

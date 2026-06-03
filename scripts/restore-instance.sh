@@ -70,6 +70,18 @@ need_cmd tar
 [ -n "$BUNDLE_PATH" ] || fail "Usage: scripts/restore-instance.sh /path/to/hermeshq-backup.tar.gz"
 [ -f "$BUNDLE_PATH" ] || fail "Backup bundle not found: $BUNDLE_PATH"
 
+# Verify checksum if available
+CHECKSUM_FILE="${BUNDLE_PATH}.sha256"
+if [[ -f "$CHECKSUM_FILE" ]]; then
+  echo "Verifying backup integrity..."
+  if ! sha256sum -c "$CHECKSUM_FILE" >/dev/null 2>&1; then
+    fail "Checksum verification failed. The backup file may be corrupted."
+  fi
+  echo "Checksum verified."
+else
+  echo "Warning: No checksum file found (${CHECKSUM_FILE}). Skipping integrity verification."
+fi
+
 printf 'Extracting backup bundle\n'
 tar xzf "$BUNDLE_PATH" -C "$TMP_DIR"
 

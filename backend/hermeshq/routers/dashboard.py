@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import desc, false, func, select
@@ -6,12 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_accessible_agent_ids, get_current_user, is_admin
 from hermeshq.database import get_db_session
+from hermeshq.schemas.dashboard import (
+    DashboardActivityItemRead,
+    DashboardAgentSummaryRead,
+    DashboardAnalyticsRead,
+    DashboardChannelRead,
+    DashboardFleetHealthRead,
+    DashboardOverviewRead,
+    DashboardTaskStatsRead,
+    DashboardTokenStatsRead,
+)
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
@@ -19,7 +31,7 @@ def _active_agent_clause():
     return Agent.is_archived.is_(False)
 
 
-@router.get("/overview")
+@router.get("/overview", response_model=DashboardOverviewRead)
 async def overview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -70,7 +82,7 @@ async def overview(
     }
 
 
-@router.get("/agents")
+@router.get("/agents", response_model=list[DashboardAgentSummaryRead])
 async def agents_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -95,7 +107,7 @@ async def agents_summary(
     ]
 
 
-@router.get("/tokens")
+@router.get("/tokens", response_model=DashboardTokenStatsRead)
 async def token_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -115,7 +127,7 @@ async def token_stats(
     }
 
 
-@router.get("/tasks/stats")
+@router.get("/tasks/stats", response_model=DashboardTaskStatsRead)
 async def task_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -131,7 +143,7 @@ async def task_stats(
     return {"counts": counts, "total": len(all_tasks)}
 
 
-@router.get("/activity")
+@router.get("/activity", response_model=list[DashboardActivityItemRead])
 async def activity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -153,7 +165,7 @@ async def activity(
     ]
 
 
-@router.get("/channels")
+@router.get("/channels", response_model=list[DashboardChannelRead])
 async def channels_overview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -196,7 +208,7 @@ async def channels_overview(
     return channels
 
 
-@router.get("/health")
+@router.get("/health", response_model=DashboardFleetHealthRead)
 async def fleet_health(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -263,7 +275,7 @@ async def fleet_health(
     }
 
 
-@router.get("/analytics")
+@router.get("/analytics", response_model=DashboardAnalyticsRead)
 async def task_analytics(
     days: int = 14,
     current_user: User = Depends(get_current_user),

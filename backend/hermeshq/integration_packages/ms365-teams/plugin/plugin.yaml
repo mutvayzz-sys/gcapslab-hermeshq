@@ -1,0 +1,9 @@
+name: hermeshq_ms365_teams
+version: "1.0.0"
+description: Microsoft Teams chat and team tools using delegated user permissions
+author: HermesHQ
+provides_tools:
+  - teams_list_teams
+  - teams_list_chats
+  - teams_get_chat_messages
+  - teams_send_chat_message

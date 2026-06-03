@@ -72,6 +72,24 @@ class M365ConnectStatusRead(BaseModel):
     account_name: str | None = None
 
 
+class M365AdminTokenRead(BaseModel):
+    id: str
+    user_id: str
+    account_email: str | None = None
+    account_name: str | None = None
+    scopes: list[str] = []
+    expires_at: datetime | None = None
+    revoked: bool
+    created_at: datetime | None = None
+
+
+class AgentM365ScopesRead(BaseModel):
+    allowed_scopes: list[str] | None = None
+    user_scopes: list[str] = []
+    available_scopes: dict[str, str] = {}
+    sharepoint_site_url: str | None = None  # Optional SharePoint site URL for this agent
+
+
 # ─── Admin: configuración de la instancia ───────────────────────────────────
 
 @router.get("/config", response_model=M365AppConfigRead)
@@ -135,7 +153,7 @@ async def update_m365_config(
 
 # ─── Admin: ver tokens de usuarios ──────────────────────────────────────────
 
-@router.get("/admin/tokens", response_model=list[dict])
+@router.get("/admin/tokens", response_model=list[M365AdminTokenRead])
 async def list_user_tokens(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
@@ -215,7 +233,7 @@ async def poll_connect_status(
 ) -> M365ConnectStatusRead:
     flow_state = _pending_flows.get(current_user.id)
     if not flow_state:
-        raise HTTPException(status_code=404, detail="No hay un flujo de autenticación pendiente.")
+        raise HTTPException(status_code=404, detail="No pending authentication flow.")
 
     vault = request.app.state.secret_vault
 
@@ -242,15 +260,16 @@ async def poll_connect_status(
     except Exception as exc:
         logger.exception("M365 unexpected error for user %s", current_user.id)
         _pending_flows.pop(current_user.id, None)
-        raise HTTPException(status_code=500, detail="Error inesperado durante la autenticación.") from exc
+        raise HTTPException(status_code=500, detail="Unexpected error during authentication.") from exc
 
 
-@router.get("/me/agents/{agent_id}/scopes", response_model=dict)
+@router.get("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def get_agent_m365_scopes(
     agent_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> AgentM365ScopesRead:
+    from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment
     from hermeshq.services.m365_oauth import AVAILABLE_SCOPES
     result = await db.execute(
@@ -261,31 +280,80 @@ async def get_agent_m365_scopes(
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+        # Auto-create assignment so users can configure M365 scopes for any agent
+        from uuid import uuid4
+        from hermeshq.models.agent_assignment import AgentAssignment as _AgentAssignment
+        assignment = _AgentAssignment(
+            id=str(uuid4()),
+            user_id=current_user.id,
+            agent_id=agent_id,
+            m365_allowed_scopes=None,
+        )
+        db.add(assignment)
+        await db.commit()
     token_result = await db.execute(
         select(UserM365Token).where(UserM365Token.user_id == current_user.id)
     )
     token = token_result.scalar_one_or_none()
     user_scopes = token.scopes.split() if token and token.scopes else []
+    # Get SharePoint site URL from agent integration_configs if set
+    agent = await db.get(Agent, agent_id)
+    sharepoint_site_url = None
+    if agent and isinstance((agent.integration_configs or {}).get("sharepoint"), dict):
+        sharepoint_site_url = agent.integration_configs["sharepoint"].get("site_url") or None
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,
         "user_scopes": user_scopes,
         "available_scopes": {k: v for k, v in AVAILABLE_SCOPES.items() if k in user_scopes},
+        "sharepoint_site_url": sharepoint_site_url,
     }
 
 
 class AgentScopesUpdate(BaseModel):
     allowed_scopes: list[str] | None
+    sharepoint_site_url: str | None = None  # Optional SharePoint site URL for this agent
 
 
-@router.put("/me/agents/{agent_id}/scopes", response_model=dict)
+# Mapping: which scopes activate which delegated integration
+# Keys must match the actual Azure AD granted permissions
+_SCOPE_TO_INTEGRATION: dict[str, str] = {
+    "Mail.Read": "ms365-mail",
+    "Mail.Send": "ms365-mail",
+    "Calendars.Read": "ms365-calendar",
+    "Calendars.ReadWrite": "ms365-calendar",
+    "Files.Read.All": "sharepoint",
+    "Chat.Read": "ms365-teams",
+    "Chat.ReadWrite": "ms365-teams",
+    "Team.ReadBasic.All": "ms365-teams",
+}
+
+# Companion skill each integration ships with (must match manifest skill_identifier)
+_INTEGRATION_SKILL: dict[str, str] = {
+    "ms365-mail": "local/ms365-mail",
+    "ms365-calendar": "local/ms365-calendar",
+    "sharepoint": "local/sharepoint",
+    "ms365-teams": "local/ms365-teams",
+}
+
+# Plugin slug each integration ships with (must match manifest plugin_slug)
+_INTEGRATION_PLUGIN: dict[str, str] = {
+    "ms365-mail": "hermeshq_ms365_mail",
+    "ms365-calendar": "hermeshq_ms365_calendar",
+    "sharepoint": "hermeshq_sharepoint",
+    "ms365-teams": "hermeshq_ms365_teams",
+}
+
+
+@router.put("/me/agents/{agent_id}/scopes", response_model=AgentM365ScopesRead)
 async def update_agent_m365_scopes(
     agent_id: str,
     payload: AgentScopesUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> AgentM365ScopesRead:
+    from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment
+
     result = await db.execute(
         select(AgentAssignment).where(
             AgentAssignment.user_id == current_user.id,
@@ -294,10 +362,56 @@ async def update_agent_m365_scopes(
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada.")
+        raise HTTPException(status_code=404, detail="Assignment not found.")
     assignment.m365_allowed_scopes = payload.allowed_scopes
+
+    # Auto-enable delegated M365 integrations based on the scopes granted
+    agent = await db.get(Agent, agent_id)
+    if agent:
+        scopes = payload.allowed_scopes or []
+        activated_integrations = {_SCOPE_TO_INTEGRATION[s] for s in scopes if s in _SCOPE_TO_INTEGRATION}
+        current_configs = dict(agent.integration_configs or {})
+        current_skills = list(agent.skills or [])
+        current_toolsets = list(agent.enabled_toolsets or [])
+        changed = False
+        for integration_slug in activated_integrations:
+            # 1. Enable in integration_configs (preserve existing config like site_url)
+            if integration_slug not in current_configs:
+                current_configs[integration_slug] = {}
+                changed = True
+                logger.info("Auto-enabled integration '%s' for agent %s", integration_slug, agent_id)
+            # 2. Add companion skill (provides SKILL.md context)
+            skill_id = _INTEGRATION_SKILL.get(integration_slug)
+            if skill_id and skill_id not in current_skills:
+                current_skills.append(skill_id)
+                changed = True
+                logger.info("Auto-added skill '%s' to agent %s", skill_id, agent_id)
+            # 3. Add plugin to enabled_toolsets (provides actual tools)
+            plugin_id = _INTEGRATION_PLUGIN.get(integration_slug)
+            if plugin_id and plugin_id not in current_toolsets:
+                current_toolsets.append(plugin_id)
+                changed = True
+                logger.info("Auto-added toolset '%s' to agent %s", plugin_id, agent_id)
+
+        # Save SharePoint site URL in integration_configs["sharepoint"]["site_url"]
+        site_url = (payload.sharepoint_site_url or "").strip() or None
+        if "sharepoint" in current_configs:
+            existing_cfg = current_configs["sharepoint"] if isinstance(current_configs["sharepoint"], dict) else {}
+            new_cfg = {**existing_cfg, "site_url": site_url}
+            if new_cfg != existing_cfg:
+                current_configs["sharepoint"] = new_cfg
+                changed = True
+
+        if changed:
+            agent.integration_configs = current_configs
+            agent.skills = current_skills
+            agent.enabled_toolsets = current_toolsets
+
     await db.commit()
-    return {"allowed_scopes": assignment.m365_allowed_scopes}
+    return {
+        "allowed_scopes": assignment.m365_allowed_scopes,
+        "sharepoint_site_url": (payload.sharepoint_site_url or "").strip() or None,
+    }
 
 
 @router.get("/agent-token")
@@ -333,7 +447,7 @@ async def get_agent_m365_token(
     )
     assignment = assignment_result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=403, detail="Este agente no está asignado a ese usuario.")
+        raise HTTPException(status_code=403, detail="This agent is not assigned to this user.")
 
     vault = request.app.state.secret_vault
     try:
@@ -342,7 +456,7 @@ async def get_agent_m365_token(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if not access_token:
-        raise HTTPException(status_code=403, detail="El usuario no tiene cuenta M365 conectada.")
+        raise HTTPException(status_code=403, detail="User does not have an M365 account connected.")
 
     allowed = assignment.m365_allowed_scopes
     if allowed is not None:

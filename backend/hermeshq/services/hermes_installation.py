@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import stat
+import time
 from pathlib import Path
 
 import yaml
@@ -62,6 +63,29 @@ def _build_safe_env() -> dict[str, str]:
     return safe
 
 
+# ---------------------------------------------------------------------------
+# In-memory cache for sync_agent_installation results (avoids redundant
+# disk I/O + DB queries when the same agent is checked repeatedly).
+# ---------------------------------------------------------------------------
+_INSTALL_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_INSTALL_CACHE_TTL = 60  # seconds
+
+
+def _get_install_cached(agent_id: str) -> list[dict] | None:
+    entry = _INSTALL_CACHE.get(agent_id)
+    if entry and (time.monotonic() - entry[0]) < _INSTALL_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _set_install_cached(agent_id: str, result: list[dict]) -> None:
+    _INSTALL_CACHE[agent_id] = (time.monotonic(), result)
+
+
+def _invalidate_install_cached(agent_id: str) -> None:
+    _INSTALL_CACHE.pop(agent_id, None)
+
+
 class HermesInstallationError(RuntimeError):
     pass
 
@@ -103,6 +127,10 @@ class HermesInstallationManager:
         return self.resolve_workspace_path(workspace_path) / ".hermes"
 
     async def sync_agent_installation(self, agent: Agent) -> list[dict]:
+        cached = _get_install_cached(agent.id)
+        if cached is not None:
+            return cached
+
         hermes_home = self.build_hermes_home(agent.workspace_path)
         self._ensure_home_dirs(hermes_home)
         enabled_integrations = await self._load_enabled_integration_slugs()
@@ -120,6 +148,7 @@ class HermesInstallationManager:
         self._write_soul(agent, hermes_home, app_name)
         await self._sync_auth_store(agent, hermes_home)
         await self._sync_dotenv(agent, hermes_home, messaging_channels)
+        _set_install_cached(agent.id, installed_skills)
         return installed_skills
 
     async def build_process_env(self, agent: Agent, *, include_channels: bool = True) -> dict[str, str]:
@@ -227,6 +256,7 @@ class HermesInstallationManager:
                 ]
 
         shutil.rmtree(target_dir)
+        _invalidate_install_cached(agent.id)
         return await self.sync_agent_installation(agent)
 
     async def search_catalog(self, query: str, limit: int = 20) -> list[dict]:
@@ -461,6 +491,21 @@ class HermesInstallationManager:
                     aux_section[task_name] = entry
             if aux_section:
                 config["auxiliary"] = aux_section
+        # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ───────
+        # Hermes requires an explicit plugins.enabled list in config.yaml to
+        # load plugins from the plugins/ directory; without it, plugins are
+        # discovered but skipped. We include every plugin slug in enabled_toolsets
+        # that has a corresponding directory in HERMES_HOME/plugins/.
+        plugins_root = hermes_home / "plugins"
+        if plugins_root.exists():
+            installed_plugin_dirs = {p.name for p in plugins_root.iterdir() if p.is_dir()}
+            # enabled_toolsets contains slugs like "hermeshq_ms365_mail"
+            plugins_to_enable = [
+                slug for slug in (agent.enabled_toolsets or [])
+                if slug in installed_plugin_dirs
+            ]
+            if plugins_to_enable:
+                config["plugins"] = {"enabled": plugins_to_enable}
         config_path = hermes_home / "config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
@@ -959,6 +1004,12 @@ class HermesInstallationManager:
             config_dict = config if isinstance(config, dict) else {}
             env_map = integration.get("env_map") or {}
 
+            # SharePoint: expose site_url as env var for the plugin
+            if slug == "sharepoint":
+                site_url = str(config_dict.get("site_url") or "").strip()
+                if site_url:
+                    managed["HERMESHQ_SHAREPOINT_SITE_URL"] = site_url
+
             base_url = str(config_dict.get("base_url") or "").strip()
             if base_url and env_map.get("base_url"):
                 managed[env_map["base_url"]] = base_url
@@ -1104,7 +1155,7 @@ class HermesInstallationManager:
                 if isinstance(loaded, dict):
                     auth_store.update(loaded)
             except Exception:
-                pass
+                logger.warning("Failed to load auth store from %s", auth_path, exc_info=True)
 
         credential_pool = auth_store.get("credential_pool")
         if not isinstance(credential_pool, dict):
@@ -1184,7 +1235,7 @@ class HermesInstallationManager:
             if envs:
                 return list(envs)
         except Exception:
-            pass
+            logger.debug("Provider registry env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": [],
             "zai": ["ZAI_API_KEY", "GLM_API_KEY", "Z_AI_API_KEY"],
@@ -1208,7 +1259,7 @@ class HermesInstallationManager:
             if isinstance(base_url_env, str) and base_url_env.strip():
                 return base_url_env.strip()
         except Exception:
-            pass
+            logger.debug("Provider base_url_env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": "BEDROCK_BASE_URL",
             "zai": "GLM_BASE_URL",

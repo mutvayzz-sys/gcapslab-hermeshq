@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -19,6 +20,7 @@ from hermeshq.services.managed_capabilities import (
     uninstall_uploaded_integration_package,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integration-packages", tags=["integration-packages"])
 
 

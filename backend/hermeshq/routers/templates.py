@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from hermeshq.models.template import AgentTemplate
 from hermeshq.models.user import User
 from hermeshq.schemas.template import TemplateCreate, TemplateRead, TemplateUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/templates", tags=["templates"])
 
 

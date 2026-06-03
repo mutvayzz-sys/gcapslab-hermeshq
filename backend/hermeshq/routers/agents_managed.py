@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from hermeshq.services.managed_integration_health import ManagedIntegrationTestE
 from hermeshq.routers.agents_shared import _load_enabled_integration_slugs
 from hermeshq.models.activity import ActivityLog
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 

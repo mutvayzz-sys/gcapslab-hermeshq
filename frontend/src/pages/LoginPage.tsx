@@ -111,14 +111,14 @@ export function LoginPage() {
     if (token) {
       setSession(token, null);
       window.history.replaceState({}, "", location.pathname);
-      navigate("/", { replace: true });
+      // App.tsx detects the token and redirects - avoids race condition
       return;
     }
     if (authError) {
       setError(authError);
       window.history.replaceState({}, "", location.pathname);
     }
-  }, [location.pathname, location.search, navigate, setSession]);
+  }, [location.pathname, location.search, setSession]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

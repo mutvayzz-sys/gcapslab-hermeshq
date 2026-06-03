@@ -1,29 +1,28 @@
 import { useState, useEffect, type FormEvent, useMemo } from "react";
+import type { UseMutationResult, UseQueryResult, QueryClient } from "@tanstack/react-query";
 import { useI18n } from "../../lib/i18n";
 import { resolveAssetUrl } from "../../api/settings";
-
-interface InstanceBackupSummary {
-  schema_version: string;
-  app_version: string;
-  source_hostname: string;
-  counts: Record<string, number>;
-  warnings: string[];
-}
+import type {
+  AppSettings,
+  InstanceBackupSummary,
+  InstanceBackupValidation,
+  InstanceBackupRestoreResult,
+} from "../../types/api";
 
 interface GeneralTabProps {
-  settings: any;
-  updateSettings: any;
-  uploadLogo: any;
-  uploadFavicon: any;
-  deleteLogo: any;
-  deleteFavicon: any;
-  uploadTuiSkin: any;
-  deleteTuiSkin: any;
-  createInstanceBackup: any;
-  validateInstanceBackup: any;
-  restoreInstanceBackup: any;
-  restoreJob: any;
-  queryClient: any;
+  settings: AppSettings | undefined;
+  updateSettings: UseMutationResult<AppSettings, Error, Record<string, unknown>>;
+  uploadLogo: UseMutationResult<AppSettings, Error, File>;
+  uploadFavicon: UseMutationResult<AppSettings, Error, File>;
+  deleteLogo: UseMutationResult<AppSettings, Error, void>;
+  deleteFavicon: UseMutationResult<AppSettings, Error, void>;
+  uploadTuiSkin: UseMutationResult<AppSettings, Error, File>;
+  deleteTuiSkin: UseMutationResult<AppSettings, Error, void>;
+  createInstanceBackup: UseMutationResult<{ filename: string; blob: Blob }, Error, import("../../types/api").InstanceBackupCreateRequest>;
+  validateInstanceBackup: UseMutationResult<InstanceBackupValidation, Error, { file: File; passphrase?: string }>;
+  restoreInstanceBackup: UseMutationResult<InstanceBackupRestoreResult, Error, { file: File; passphrase: string; mode: "replace" | "merge" }>;
+  restoreJob: InstanceBackupRestoreResult | undefined;
+  queryClient: QueryClient;
 }
 
 export default function GeneralTab({

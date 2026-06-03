@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, utcnow
@@ -17,8 +17,8 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    parent_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
-    source_agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id"), nullable=True)
+    parent_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    source_agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     prompt: Mapped[str] = mapped_column(Text)
     system_override: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -37,5 +37,12 @@ class Task(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'queued', 'running', 'completed', 'failed', 'cancelled')",
+            name="ck_tasks_status",
+        ),
+    )
 
     agent = relationship("Agent", back_populates="tasks", foreign_keys=[agent_id])

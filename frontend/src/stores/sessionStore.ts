@@ -50,6 +50,7 @@ interface SessionState {
   user: User | null;
   setSession: (token: string, user: User | null) => void;
   setUser: (user: User | null) => void;
+  setToken: (token: string) => void;
   logout: () => void;
 }
 
@@ -69,6 +70,10 @@ export const useSessionStore = create<SessionState>((set) => ({
     set({ token, user });
   },
   setUser: (user) => set({ user }),
+  setToken: (token) => {
+    safeWriteLocalStorage("hermeshq.token", token);
+    set({ token });
+  },
   logout: () => {
     safeRemoveLocalStorage("hermeshq.token");
     set({ token: null, user: null });

@@ -21,12 +21,30 @@ logger = logging.getLogger(__name__)
 # Discovery + JWKS cache
 # ---------------------------------------------------------------------------
 _CACHE_TTL = 3600  # 1 hour
+_MAX_CACHE_ENTRIES = 50
 _discovery_cache: dict[str, dict] = {}
 _jwks_cache: dict[str, dict] = {}
 
 
+def _evict_cache(cache: dict[str, dict]) -> None:
+    """Remove expired entries and trim to max size."""
+    now = time.time()
+    # Remove expired
+    expired = [k for k, v in cache.items() if (now - v.get("_fetched_at", 0)) >= _CACHE_TTL]
+    for k in expired:
+        cache.pop(k, None)
+    # Trim to max size (remove oldest first)
+    while len(cache) > _MAX_CACHE_ENTRIES:
+        oldest_key = min(cache, key=lambda k: cache[k].get("_fetched_at", 0), default=None)
+        if oldest_key:
+            cache.pop(oldest_key)
+        else:
+            break
+
+
 async def _fetch_discovery(discovery_url: str) -> dict:
     """Fetch and cache OIDC discovery document."""
+    _evict_cache(_discovery_cache)
     now = time.time()
     cached = _discovery_cache.get(discovery_url)
     if cached and (now - cached["_fetched_at"]) < _CACHE_TTL:
@@ -42,6 +60,7 @@ async def _fetch_discovery(discovery_url: str) -> dict:
 
 async def _fetch_jwks(jwks_uri: str) -> list[dict]:
     """Fetch and cache JWKS keys."""
+    _evict_cache(_jwks_cache)
     now = time.time()
     cached = _jwks_cache.get(jwks_uri)
     if cached and (now - cached["_fetched_at"]) < _CACHE_TTL:
@@ -145,14 +164,20 @@ async def exchange_code_and_get_claims(
 
         claims: dict = {}
 
+        logger.debug("OIDC token_payload keys: %s", list(token_payload.keys()))
+
         # Validate id_token if present
         id_token = token_payload.get("id_token")
         if id_token and isinstance(id_token, str):
             claims = await _validate_id_token(id_token, provider, discovery)
+            logger.debug("OIDC id_token claims keys: %s", list(claims.keys()))
+        else:
+            logger.debug("OIDC: no id_token in token response")
 
         # Fetch userinfo for additional claims
         access_token = token_payload.get("access_token")
         userinfo_endpoint = discovery.get("userinfo_endpoint")
+        logger.debug("OIDC userinfo_endpoint: %s, has access_token: %s", userinfo_endpoint, bool(access_token))
         if userinfo_endpoint and access_token:
             try:
                 ui_resp = await client.get(
@@ -160,9 +185,15 @@ async def exchange_code_and_get_claims(
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
                 ui_resp.raise_for_status()
-                claims = {**claims, **ui_resp.json()}
-            except Exception:
-                logger.warning("Failed to fetch userinfo from %s", provider.slug, exc_info=True)
+                userinfo = ui_resp.json()
+                logger.debug("OIDC userinfo keys: %s", list(userinfo.keys()))
+                claims = {**claims, **userinfo}
+            except Exception as exc:
+                logger.warning("Failed to fetch OIDC userinfo from %s: %s", provider.slug, exc, exc_info=True)
+        else:
+            logger.debug("OIDC skipping userinfo: endpoint=%s, token=%s", bool(userinfo_endpoint), bool(access_token))
+
+        logger.debug("OIDC final claims keys: %s", list(claims.keys()))
 
         if not claims.get("sub"):
             raise ValueError("OIDC claims did not include 'sub'")

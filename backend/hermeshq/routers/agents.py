@@ -12,6 +12,7 @@ The original monolithic module has been split into focused sub-modules:
 Shared constants and helper functions live in agents_shared.py.
 """
 
+import logging
 from hermeshq.routers.agents_crud import router as crud_router
 from hermeshq.routers.agents_runtime import router as runtime_router
 from hermeshq.routers.agents_avatar import router as avatar_router
@@ -22,6 +23,7 @@ from hermeshq.routers.agents_managed import router as managed_router
 
 from fastapi import APIRouter
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agents"])
 
 router.include_router(crud_router)

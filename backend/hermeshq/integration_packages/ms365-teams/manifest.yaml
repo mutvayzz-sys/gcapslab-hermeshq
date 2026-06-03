@@ -1,0 +1,22 @@
+slug: ms365-teams
+name: Microsoft 365 Teams
+description: Managed Microsoft Teams integration for chat and team management. Uses delegated permissions — each user must connect their own Microsoft 365 account from their profile.
+version: "1.0.0"
+standard_compatible: true
+supported_profiles:
+  - standard
+  - technical
+  - security
+required_fields: []
+fields: []
+secret_provider: null
+plugin_slug: hermeshq_ms365_teams
+skill_dir: ms365-teams
+skill_identifier: local/ms365-teams
+test_action: health
+env_map: {}
+delegated: true
+actions:
+  - slug: health
+    label: Check connection
+    description: Verify the Microsoft 365 Teams integration is reachable.

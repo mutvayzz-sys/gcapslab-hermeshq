@@ -83,11 +83,11 @@ export function AuthenticationTab() {
     if (preset) {
       setForm((f) => ({
         ...f,
-        slug: f.slug || slug,
-        name: f.name || slug.charAt(0).toUpperCase() + slug.slice(1),
-        discovery_url: f.discovery_url || preset.discovery_url,
-        scopes: f.scopes || preset.scopes,
-        icon_slug: f.icon_slug || preset.icon_slug,
+        slug,
+        name: slug.charAt(0).toUpperCase() + slug.slice(1),
+        discovery_url: preset.discovery_url,
+        scopes: preset.scopes,
+        icon_slug: preset.icon_slug,
       }));
     }
   }

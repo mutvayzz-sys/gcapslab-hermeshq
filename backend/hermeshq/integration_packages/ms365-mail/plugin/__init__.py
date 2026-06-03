@@ -28,7 +28,7 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
     if not base_url or not agent_id or not agent_token:
         return None, "HermesHQ internal control no configurado"
 
-    url = f"{base_url}/m365/agent-token?user_id={user_id}"
+    url = f"{base_url}/control/m365/agent-token?user_id={user_id}"
     req = urllib.request.Request(
         url,
         method="GET",
@@ -53,7 +53,8 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
 
 
 def _graph(method: str, path: str, access_token: str, payload: dict | None = None) -> dict:
-    url = f"{GRAPH_BASE}{path}"
+    # Ensure no raw spaces or control chars in URL (encode spaces as %20)
+    url = f"{GRAPH_BASE}{path}".replace(" ", "%20")
     data = json.dumps(payload).encode("utf-8") if payload else None
     req = urllib.request.Request(
         url,
@@ -95,7 +96,7 @@ def _list_emails_tool(args: dict, **_kwargs) -> str:
     count = min(int(args.get("count") or 10), 50)
     folder = str(args.get("folder") or "inbox")
     fields = "id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview"
-    path = f"/me/mailFolders/{folder}/messages?$top={count}&$select={fields}&$orderby=receivedDateTime desc"
+    path = f"/me/mailFolders/{folder}/messages?$top={count}&$select={fields}&$orderby=receivedDateTime%20desc"
     result = _graph("GET", path, token)
     if "error" in result:
         return json.dumps({"success": False, "error": result["error"]})
@@ -157,7 +158,7 @@ def _search_emails_tool(args: dict, **_kwargs) -> str:
     if not query:
         return json.dumps({"success": False, "error": "Se requiere query."})
     fields = "id,subject,from,receivedDateTime,isRead,bodyPreview"
-    path = f'/me/messages?$search="{query}"&$top={count}&$select={fields}'
+    path = f'/me/messages?$search=%22{query}%22&$top={count}&$select={fields}'
     result = _graph("GET", path, token)
     if "error" in result:
         return json.dumps({"success": False, "error": result["error"]})

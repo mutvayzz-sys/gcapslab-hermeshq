@@ -16,17 +16,21 @@ if TYPE_CHECKING:
     pass
 
 # Scopes disponibles que el admin puede habilitar, mapeados a nombre legible
+# Deben coincidir exactamente con los permisos concedidos en el registro de Azure AD
 AVAILABLE_SCOPES: dict[str, str] = {
     "User.Read": "Perfil del usuario",
+    # Mail
     "Mail.Read": "Leer correos",
     "Mail.Send": "Enviar correos",
+    # Calendar
     "Calendars.Read": "Leer calendario",
     "Calendars.ReadWrite": "Leer y escribir calendario",
-    "Files.Read": "Leer archivos (OneDrive)",
-    "Files.ReadWrite": "Leer y escribir archivos (OneDrive)",
-    "Sites.Read.All": "Leer sitios SharePoint",
-    "Sites.ReadWrite.All": "Leer y escribir sitios SharePoint",
+    # Files / SharePoint / OneDrive (delegated)
+    "Files.Read.All": "Leer archivos SharePoint y OneDrive",
+    # Teams / Chat
+    "Chat.Read": "Leer chats de Teams",
     "Chat.ReadWrite": "Leer y escribir chats de Teams",
+    "Team.ReadBasic.All": "Leer equipos de Teams",
 }
 
 # User.Read siempre requerido para identificar al usuario

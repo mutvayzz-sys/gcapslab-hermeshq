@@ -363,7 +363,8 @@ export interface ManagedIntegrationDefinition {
 
 export interface IntegrationDraftFile {
   path: string;
-  size: number;
+  name: string;
+  size?: number;
 }
 
 export interface IntegrationDraftCheck {

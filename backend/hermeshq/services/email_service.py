@@ -9,6 +9,20 @@ from hermeshq.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Shared HTTP client (lazily initialized, reused across calls)
+# ---------------------------------------------------------------------------
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating one if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=30)
+    return _http_client
+
 
 class EmailServiceError(RuntimeError):
     """Raised when the email service fails to send."""
@@ -60,7 +74,7 @@ class EmailService:
                 if db_settings.app_name:
                     self._app_name = db_settings.app_name
         except Exception:
-            pass  # Fallback to env vars only
+            logger.debug("Failed to load email settings from DB; using env vars", exc_info=True)
 
     async def send_password_reset(
         self,
@@ -90,15 +104,16 @@ class EmailService:
             "html": html,
         }
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(
-                    "https://api.resend.com/emails",
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
+            client = _get_http_client()
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=15,
+            )
             if resp.status_code >= 400:
                 body = resp.text[:500]
                 logger.error("Resend API error %d: %s", resp.status_code, body)

@@ -229,6 +229,28 @@ class WorkspaceFileWrite(BaseModel):
     )
 
 
+class WorkspaceListingRead(BaseModel):
+    entries: list
+    size: int
+
+
+class WorkspaceFileRead(BaseModel):
+    path: str
+    content: str
+
+
+class WorkspaceFileWriteResult(BaseModel):
+    status: str
+    path: str
+
+
+class AvatarGenerationRead(BaseModel):
+    status: str
+    task_id: str
+    operator_id: str
+    operator_status: str
+
+
 def auxiliary_models_to_db(
     aux: dict[str, AuxiliaryModelEntry] | None,
 ) -> dict[str, dict[str, Any]] | None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from typing import Any
 
@@ -34,6 +35,8 @@ from hermeshq.services.mcp_analytics import McpAnalytics
 from hermeshq.services.mcp_rate_limiter import McpRateLimiter
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 from hermeshq.versioning import get_app_version
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mcp"])
 
@@ -910,7 +913,6 @@ async def mcp_analytics_endpoint(
 ) -> JSONResponse:
     """Detailed MCP usage analytics. Requires admin JWT or MCP bearer token."""
     from hermeshq.core.security import decode_access_token_subject, get_user_by_subject
-
     # Try JWT auth first, then MCP token
     try:
         auth_header = authorization or ""

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import traceback
@@ -6,6 +8,123 @@ from typing import Any
 from telegram import Bot
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+logger = logging.getLogger(__name__)
+
+
+class _StreamBuffer:
+    """Accumulates streaming deltas and flushes them to the DB in batches."""
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        task_id: str,
+        agent_id: str,
+        log_func,
+        event_broker: EventBroker,
+        flush_interval: float = 0.5,
+    ) -> None:
+        self._session_factory = session_factory
+        self._task_id = task_id
+        self._agent_id = agent_id
+        self._log_func = log_func
+        self._event_broker = event_broker
+        self._flush_interval = flush_interval
+        self._deltas: list[tuple[str, int | None]] = []
+        self._flush_task: asyncio.Task | None = None
+
+    # -- public API ----------------------------------------------------------
+
+    def start_flush_loop(self) -> None:
+        """Start the periodic flush background task."""
+        self._flush_task = asyncio.create_task(self._flush_loop())
+
+    async def stop_flush_loop(self) -> None:
+        """Cancel the periodic flush and drain remaining deltas."""
+        if self._flush_task is not None:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+            self._flush_task = None
+        # Final drain of any remaining buffered deltas.
+        await self.flush()
+
+    async def push(self, delta: str, index: int | None = None) -> None:
+        """Append a delta to the buffer and publish an event immediately."""
+        self._deltas.append((delta, index))
+        await self._event_broker.publish(
+            {
+                "type": "task.progress",
+                "task_id": self._task_id,
+                "agent_id": self._agent_id,
+                "message": delta,
+                "step": index,
+            }
+        )
+
+    async def flush(self) -> None:
+        """Write all buffered deltas to the DB in a single transaction."""
+        if not self._deltas:
+            return
+
+        snapshots = self._deltas[:]
+        self._deltas.clear()
+
+        # Collapse deltas into a single content string per batch so that
+        # messages_json grows by *one* entry per flush instead of N.
+        combined_content = "".join(d for d, _ in snapshots)
+        max_index: int | None = None
+        for _, idx in snapshots:
+            if idx is not None:
+                max_index = idx if max_index is None else max(max_index, idx)
+
+        async with self._session_factory() as session:
+            task_row = await session.get(Task, self._task_id)
+            agent_row = (
+                await session.get(Agent, task_row.agent_id) if task_row else None
+            )
+            if not task_row or not agent_row:
+                return
+
+            task_row.messages_json = [
+                *task_row.messages_json,
+                {"role": "assistant", "content": combined_content},
+            ]
+            if max_index is not None:
+                task_row.iterations = max(task_row.iterations, max_index)
+            await self._log_func(
+                session,
+                "agent.output",
+                agent=agent_row,
+                task=task_row,
+                message=combined_content[:240],
+                details=(
+                    {"step": max_index}
+                    if max_index is not None
+                    else {
+                        "engine": "hermes-agent",
+                        "batch_size": len(snapshots),
+                    }
+                ),
+            )
+            agent_row.last_activity = utcnow()
+            await session.commit()
+
+    # -- internals -----------------------------------------------------------
+
+    async def _flush_loop(self) -> None:
+        """Periodic background flush."""
+        try:
+            while True:
+                await asyncio.sleep(self._flush_interval)
+                try:
+                    await self.flush()
+                except Exception:
+                    logger.exception("StreamBuffer periodic flush error")
+        except asyncio.CancelledError:
+            return
 
 from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
@@ -252,47 +371,29 @@ class AgentSupervisor:
                 }
             )
 
-            async def stream_callback(delta: str, index: int | None = None) -> None:
-                async with self.session_factory() as inner_session:
-                    task_row = await inner_session.get(Task, task_id)
-                    agent_row = await inner_session.get(Agent, task_row.agent_id) if task_row else None
-                    if not task_row or not agent_row:
-                        return
-                    task_row.messages_json = [
-                        *task_row.messages_json,
-                        {"role": "assistant", "content": delta},
-                    ]
-                    if index is not None:
-                        task_row.iterations = max(task_row.iterations, index)
-                    await self._log(
-                        inner_session,
-                        "agent.output",
-                        agent=agent_row,
-                        task=task_row,
-                        message=delta[:240],
-                        details={"step": index}
-                        if index is not None
-                        else {"engine": "hermes-agent" if self.runtime.available else "simulated"},
-                    )
-                    agent_row.last_activity = utcnow()
-                    await inner_session.commit()
-                await self.event_broker.publish(
-                    {
-                        "type": "task.progress",
-                        "task_id": task_id,
-                        "agent_id": task.agent_id,
-                        "message": delta,
-                        "step": index,
-                    }
-                )
-
-            execution = await self.runtime.execute(
-                agent,
-                task,
-                stream_callback,
-                conversation_history=conversation_history,
-                session_id=session_id,
+            stream_buffer = _StreamBuffer(
+                session_factory=self.session_factory,
+                task_id=task_id,
+                agent_id=task.agent_id,
+                log_func=self._log,
+                event_broker=self.event_broker,
             )
+            stream_buffer.start_flush_loop()
+
+            async def stream_callback(delta: str, index: int | None = None) -> None:
+                await stream_buffer.push(delta, index)
+
+            try:
+                execution = await self.runtime.execute(
+                    agent,
+                    task,
+                    stream_callback,
+                    conversation_history=conversation_history,
+                    session_id=session_id,
+                )
+            finally:
+                # Ensure every buffered delta is persisted before proceeding.
+                await stream_buffer.stop_flush_loop()
             async with self.session_factory() as session:
                 task = await session.get(Task, task_id)
                 agent = await session.get(Agent, task.agent_id) if task else None
@@ -590,7 +691,7 @@ class AgentSupervisor:
                 await bot.send_message(chat_id=chat_id, text=message_text, message_thread_id=thread_value)
                 await bot.shutdown()
             except Exception:
-                pass
+                logger.warning("Failed to send Telegram notification to chat %s", chat_id, exc_info=True)
 
         self._pending_callbacks.append(_after_commit)
 

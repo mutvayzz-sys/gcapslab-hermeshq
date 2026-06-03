@@ -1,0 +1,10 @@
+name: hermeshq_ms365_calendar
+version: "1.0.0"
+description: Microsoft 365 Calendar tools using delegated user permissions
+author: HermesHQ
+provides_tools:
+  - ms365_calendar_list_events
+  - ms365_calendar_get_event
+  - ms365_calendar_create_event
+  - ms365_calendar_update_event
+  - ms365_calendar_delete_event

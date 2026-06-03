@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -57,12 +57,19 @@ class Agent(TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     supervisor_agent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("agents.id"), nullable=True
+        ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     team_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     total_tasks: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('stopped', 'running', 'error', 'starting')",
+            name="ck_agents_status",
+        ),
+    )
 
     node = relationship("Node", back_populates="agents")
     tasks = relationship(

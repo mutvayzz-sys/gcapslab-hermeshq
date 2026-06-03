@@ -1,31 +1,22 @@
 slug: sharepoint
 name: SharePoint
-description: Managed SharePoint integration for document and site workflows.
-version: "0.1.0"
+description: Managed SharePoint integration for document and site workflows. Uses delegated permissions — each user must connect their own Microsoft 365 account from their profile.
+version: "0.2.0"
 standard_compatible: true
 supported_profiles:
   - standard
   - technical
   - security
-required_fields:
-  - tenant_id
-  - client_id
-  - client_secret_ref
-  - site_url
-fields:
-  - name: tenant_id
-    label: Microsoft tenant ID
-    kind: text
-  - name: client_id
-    label: Microsoft app client ID
-    kind: text
-  - name: client_secret_ref
-    label: Microsoft client secret
-    kind: secret_ref
-    secret_provider: ms365
-  - name: site_url
-    label: SharePoint site URL
-    kind: url
-secret_provider: ms365
+required_fields: []
+fields: []
+secret_provider: null
+plugin_slug: hermeshq_sharepoint
+skill_dir: sharepoint
+skill_identifier: local/sharepoint
 test_action: health
 env_map: {}
+delegated: true
+actions:
+  - slug: health
+    label: Check connection
+    description: Verify the SharePoint integration is reachable.

@@ -1,4 +1,4 @@
-name: hermeshq-ms365-mail
+name: hermeshq_ms365_mail
 version: "1.0.0"
 description: Microsoft 365 Mail tools using delegated user permissions
 author: HermesHQ

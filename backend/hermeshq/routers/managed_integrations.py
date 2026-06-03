@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_current_user
@@ -7,6 +8,8 @@ from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
 from hermeshq.schemas.managed_integration import ManagedIntegrationRead
 from hermeshq.services.managed_capabilities import list_managed_integrations
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/managed-integrations", tags=["managed-integrations"])
 

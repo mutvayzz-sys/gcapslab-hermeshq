@@ -1,7 +1,9 @@
 """Mobile app attachment endpoints – upload, download, delete media files."""
 
 from __future__ import annotations
+import logging
 
+import re
 import uuid
 from pathlib import Path
 
@@ -12,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
+from hermeshq.schemas.attachment import AttachmentDeleteRead, AttachmentUploadRead
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["attachments"])
 
 ALLOWED_EXTENSIONS = {
@@ -45,6 +49,8 @@ MIME_MAP = {
     ".zip": "application/zip",
 }
 
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
 
 def _resolve_media_type(filename: str) -> str:
     ext = Path(filename).suffix.lower()
@@ -58,7 +64,7 @@ def _uploads_dir(workspace_manager, agent_id: str) -> Path:
     return uploads
 
 
-@router.post("/{agent_id}/attachments")
+@router.post("/{agent_id}/attachments", response_model=AttachmentUploadRead)
 async def upload_attachment(
     agent_id: str,
     request: Request,
@@ -114,6 +120,9 @@ async def download_attachment(
     """Download an attachment by file_id."""
     await ensure_agent_access(db, current_user, agent_id)
 
+    if not _UUID_RE.match(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID format")
+
     uploads = _uploads_dir(request.app.state.workspace_manager, agent_id)
     matches = list(uploads.glob(f"{file_id}.*"))
     if not matches:
@@ -124,7 +133,7 @@ async def download_attachment(
     return FileResponse(file_path, media_type=media_type, filename=file_path.name)
 
 
-@router.delete("/{agent_id}/attachments/{file_id}")
+@router.delete("/{agent_id}/attachments/{file_id}", response_model=AttachmentDeleteRead)
 async def delete_attachment(
     agent_id: str,
     file_id: str,
@@ -134,6 +143,9 @@ async def delete_attachment(
 ) -> dict:
     """Delete an attachment by file_id."""
     await ensure_agent_access(db, current_user, agent_id)
+
+    if not _UUID_RE.match(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID format")
 
     uploads = _uploads_dir(request.app.state.workspace_manager, agent_id)
     matches = list(uploads.glob(f"{file_id}.*"))

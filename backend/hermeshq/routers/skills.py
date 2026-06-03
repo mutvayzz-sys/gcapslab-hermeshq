@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,11 +7,13 @@ from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.user import User
 from hermeshq.services.hermes_installation import HermesInstallationError
+from hermeshq.schemas.skill import AgentSkillsRead, SkillCatalogRead
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/skills", tags=["skills"])
 
 
-@router.get("/catalog")
+@router.get("/catalog", response_model=SkillCatalogRead)
 async def get_skill_catalog(
     request: Request,
     q: str = Query(default=""),
@@ -22,7 +25,7 @@ async def get_skill_catalog(
     return {"skills": skills, "count": len(skills), "query": q}
 
 
-@router.get("/agents/{agent_id}")
+@router.get("/agents/{agent_id}", response_model=AgentSkillsRead)
 async def get_agent_skills(
     agent_id: str,
     request: Request,
@@ -40,7 +43,7 @@ async def get_agent_skills(
     }
 
 
-@router.delete("/agents/{agent_id}/installed")
+@router.delete("/agents/{agent_id}/installed", response_model=AgentSkillsRead)
 async def delete_agent_installed_skill(
     agent_id: str,
     request: Request,

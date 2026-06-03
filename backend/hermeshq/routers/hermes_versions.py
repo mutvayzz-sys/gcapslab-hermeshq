@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,7 @@ from hermeshq.schemas.hermes_version import (
 )
 from hermeshq.services.hermes_version_manager import HermesVersionError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hermes-versions", tags=["hermes-versions"])
 
 

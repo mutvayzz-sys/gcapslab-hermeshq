@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 
 from typing import Any
 
@@ -44,6 +45,7 @@ from hermeshq.schemas.secret import SecretCreate, SecretRead, SecretUpdate
 from hermeshq.schemas.user_management import UserCreate, UserManagedRead, UserUpdate
 from hermeshq.services.managed_capabilities import get_managed_integration
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal/control", tags=["internal-control"], include_in_schema=False)
 
 
@@ -826,3 +828,17 @@ async def control_delete_scheduled_task(
         target_agent_id=target_agent_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── M365 delegated token for plugins ──────────────────────────────────────
+
+@router.get("/m365/agent-token", include_in_schema=False)
+async def internal_get_m365_agent_token(
+    request: Request,
+    user_id: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Called by M365 managed integration plugins to get a delegated access token.
+    Uses its own hmac-based agent validation (does not require system agent)."""
+    from hermeshq.routers.m365 import get_agent_m365_token
+    return await get_agent_m365_token(request, user_id, db)

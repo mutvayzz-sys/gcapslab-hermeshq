@@ -1,19 +1,26 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { UseMutationResult, QueryClient } from "@tanstack/react-query";
 
 import { useIntegrationDraftFile } from "../../api/integrationFactory";
 import { useI18n } from "../../lib/i18n";
+import type {
+  IntegrationDraft,
+  IntegrationDraftFileContent,
+  IntegrationDraftValidation,
+  IntegrationDraftPublishResult,
+} from "../../types/api";
 
 interface FactoryTabProps {
-  integrationDrafts: any[] | undefined;
-  createIntegrationDraft: any;
-  updateIntegrationDraft: any;
-  deleteIntegrationDraft: any;
-  saveIntegrationDraftFile: any;
-  deleteIntegrationDraftFile: any;
-  validateIntegrationDraft: any;
-  publishIntegrationDraft: any;
-  integrationDraftFiles: any;
-  queryClient: any;
+  integrationDrafts: IntegrationDraft[] | undefined;
+  createIntegrationDraft: UseMutationResult<IntegrationDraft, Error, { slug: string; name: string; description?: string; template: "rest-api" | "empty"; version?: string }>;
+  updateIntegrationDraft: UseMutationResult<IntegrationDraft, Error, { draftId: string; name?: string; description?: string; version?: string; notes?: string }>;
+  deleteIntegrationDraft: UseMutationResult<string, Error, string>;
+  saveIntegrationDraftFile: UseMutationResult<IntegrationDraft, Error, { draftId: string; path: string; content: string }>;
+  deleteIntegrationDraftFile: UseMutationResult<IntegrationDraft, Error, { draftId: string; path: string }>;
+  validateIntegrationDraft: UseMutationResult<IntegrationDraftValidation, Error, string>;
+  publishIntegrationDraft: UseMutationResult<IntegrationDraftPublishResult, Error, string>;
+  integrationDraftFiles: IntegrationDraftFileContent | undefined;
+  queryClient: QueryClient;
 }
 
 export default function FactoryTab({
@@ -301,7 +308,7 @@ export default function FactoryTab({
                   <div className="mt-4 border-t border-[var(--border)] pt-4">
                     <p className="panel-label">{t("settings.integrationDraftValidation")}</p>
                     <div className="mt-3 space-y-2">
-                      {selectedDraft.last_validation.checks.map((check: { status: string; message: string; code?: string; level?: string; path?: string }, index: number) => (
+                      {selectedDraft.last_validation.checks.map((check, index) => (
                         <div key={`${check.code}-${index}`} className="rounded-xl border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                           <p className="font-mono text-xs uppercase tracking-[0.08em] text-[var(--text-disabled)]">{check.level} / {check.code}</p>
                           <p className="mt-1">{check.message}</p>
@@ -321,7 +328,7 @@ export default function FactoryTab({
                   <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-disabled)]">{selectedDraft.files.length}</p>
                 </div>
                 <div className="mt-4 space-y-2">
-                  {selectedDraft.files.map((file: { path: string; name: string; size?: number }) => (
+                  {selectedDraft.files.map((file) => (
                     <button
                       key={file.path}
                       type="button"
