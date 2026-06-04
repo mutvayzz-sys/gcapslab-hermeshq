@@ -14,6 +14,33 @@ def normalize_runtime_provider(provider: str | None) -> str | None:
 
 BUILTIN_PROVIDERS: list[dict] = [
     {
+        "slug": "nous-api",
+        "name": "Nous Research API",
+        "runtime_provider": "nous",
+        "auth_type": "api_key",
+        "base_url": "https://inference-api.nousresearch.com/v1",
+        "default_model": "stepfun/step-3.7-flash:free",
+        "available_models": [
+            "stepfun/step-3.7-flash:free",
+            "stepfun/step-3.7-flash",
+            "stepfun/step-3.5-flash",
+            "nousresearch/hermes-4-70b",
+            "nousresearch/hermes-4-405b",
+            "anthropic/claude-sonnet-4",
+            "openai/gpt-4.1",
+            "google/gemini-2.5-pro",
+            "deepseek/deepseek-r1",
+            "meta-llama/llama-4-maverick",
+        ],
+        "description": "Nous Research inference API — multi-provider access with free tier models.",
+        "docs_url": "https://portal.nousresearch.com/api-docs",
+        "secret_placeholder": "Nous API key",
+        "supports_secret_ref": True,
+        "supports_custom_base_url": True,
+        "enabled": True,
+        "sort_order": 15,
+    },
+    {
         "slug": "kimi-coding",
         "name": "Kimi Coding",
         "runtime_provider": "kimi-coding",

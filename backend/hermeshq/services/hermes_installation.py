@@ -1238,6 +1238,7 @@ class HermesInstallationManager:
             logger.debug("Provider registry env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": [],
+            "nous": ["NOUS_API_KEY"],
             "zai": ["ZAI_API_KEY", "GLM_API_KEY", "Z_AI_API_KEY"],
             "openrouter": ["OPENROUTER_API_KEY"],
             "anthropic": ["ANTHROPIC_API_KEY"],
@@ -1262,6 +1263,7 @@ class HermesInstallationManager:
             logger.debug("Provider base_url_env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": "BEDROCK_BASE_URL",
+            "nous": "NOUS_BASE_URL",
             "zai": "GLM_BASE_URL",
             "openrouter": "OPENROUTER_BASE_URL",
             "openai": "OPENAI_BASE_URL",
