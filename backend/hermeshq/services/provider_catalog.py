@@ -16,7 +16,7 @@ BUILTIN_PROVIDERS: list[dict] = [
     {
         "slug": "nous-api",
         "name": "Nous Research API",
-        "runtime_provider": "nous",
+        "runtime_provider": "openai-codex",
         "auth_type": "api_key",
         "base_url": "https://inference-api.nousresearch.com/v1",
         "default_model": "stepfun/step-3.7-flash:free",

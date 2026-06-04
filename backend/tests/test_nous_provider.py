@@ -35,9 +35,9 @@ class TestNousProviderCatalogEntry:
         entry = _find_provider("nous-api")
         assert entry is not None
 
-    def test_runtime_provider_is_nous(self):
+    def test_runtime_provider_is_openai_codex(self):
         entry = _find_provider("nous-api")
-        assert entry["runtime_provider"] == "nous"
+        assert entry["runtime_provider"] == "openai-codex"
 
     def test_auth_type_is_api_key(self):
         entry = _find_provider("nous-api")
@@ -193,7 +193,7 @@ class TestNousProviderSeedDefaults:
         provider.runtime_provider = "wrong"
         payload = _find_provider("nous-api")
         seed_provider_defaults(provider, payload)
-        assert provider.runtime_provider == "nous"
+        assert provider.runtime_provider == "openai-codex"
 
     def test_seed_returns_none_on_none_existing(self):
         payload = _find_provider("nous-api")
