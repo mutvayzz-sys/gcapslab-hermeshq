@@ -180,20 +180,17 @@ class HermesInstallationManager:
             # zai, openrouter have their own dedicated base_url env vars.
             if runtime_provider in ("openai", "openai-codex", "gemini"):
                 env["OPENAI_BASE_URL"] = effective_base_url
-                # Inject OPENAI_API_KEY so the gateway's auxiliary clients
-                # (vision, compression, etc.) can resolve credentials from
-                # the environment.  For OAuth-based providers (real Codex)
-                # api_key is None so this is a no-op.
                 if api_key and "OPENAI_API_KEY" not in env:
                     env["OPENAI_API_KEY"] = api_key
-                # Gateway vision/compression tools resolve credentials via
-                # AUXILIARY_{TASK}_* env vars.  Seed them from the agent's
-                # main provider so multimodal models (e.g.
-                # stepfun/step-3.7-flash) work out of the box.
-                if api_key and effective_base_url:
-                    for _aux_task in ("vision", "compression", "web_extract"):
-                        env.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
-                        env.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
+        # Seed auxiliary env vars (vision, compression, web_extract) for ALL
+        # providers with an API key + base_url — not just openai/codex/gemini.
+        # This ensures the gateway's vision_analyze tool can resolve
+        # credentials regardless of the main provider (e.g. nous-api,
+        # openai-compatible, gemini-api, etc.).
+        if api_key and effective_base_url:
+            for _aux_task in ("vision", "compression", "web_extract"):
+                env.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
+                env.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
@@ -504,14 +501,13 @@ class HermesInstallationManager:
                 if entry:
                     aux_section[task_name] = entry
         # Auto-seed auxiliary tasks (vision, compression, web_extract) from
-        # the agent's main provider when using an OpenAI-compatible backend
-        # with an explicit API key.  This ensures gateway tools that run
-        # inside the gateway process (e.g. vision_analyze) can resolve
-        # credentials from config.yaml even when env vars aren't injected
-        # into the gateway subprocess.
+        # the agent's main provider when there is an explicit API key and
+        # base URL.  Previously limited to openai/codex/gemini, this now
+        # covers ALL providers so that gateway tools (e.g. vision_analyze)
+        # can resolve credentials from config.yaml regardless of the main
+        # provider (nous-api, openai-compatible, gemini-api, etc.).
         if (
-            runtime_provider in ("openai", "openai-codex", "gemini")
-            and effective_base_url
+            effective_base_url
             and resolved_aux_api_keys is not None
             and resolved_aux_api_keys.get("__main__")
         ):
@@ -985,6 +981,12 @@ class HermesInstallationManager:
                 managed[provider_base_url_env] = effective_base_url
             if runtime_provider in ("openai", "openai-codex", "gemini"):
                 managed["OPENAI_BASE_URL"] = effective_base_url
+        # Seed auxiliary env vars for all providers with credentials,
+        # matching the same logic in build_process_env.
+        if api_key and effective_base_url:
+            for _aux_task in ("vision", "compression", "web_extract"):
+                managed.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
+                managed.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
 
         channels = await self._load_messaging_channels(agent.id)
         managed["WHATSAPP_ENABLED"] = "false"
@@ -1278,13 +1280,17 @@ class HermesInstallationManager:
         fallback = {
             "bedrock": [],
             "nous": ["NOUS_API_KEY"],
+            "nous-api": ["OPENAI_API_KEY"],
             "zai": ["ZAI_API_KEY", "GLM_API_KEY", "Z_AI_API_KEY"],
             "openrouter": ["OPENROUTER_API_KEY"],
             "anthropic": ["ANTHROPIC_API_KEY"],
             "openai": ["OPENAI_API_KEY"],
             "openai-codex": ["OPENAI_API_KEY"],
+            "openai-api": ["OPENAI_API_KEY"],
+            "openai-compatible": ["OPENAI_API_KEY"],
             "kimi-coding": ["KIMI_API_KEY"],
             "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            "gemini-api": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
         }
         return fallback.get(provider, [])
 
