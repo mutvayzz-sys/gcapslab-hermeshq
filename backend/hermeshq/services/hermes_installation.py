@@ -168,8 +168,13 @@ class HermesInstallationManager:
         if runtime_selection.release_tag:
             env["HERMESHQ_HERMES_RELEASE_TAG"] = runtime_selection.release_tag
         api_key = await self._resolve_api_key(agent.api_key_ref)
+        logger.warning("[DBG-NOUS] agent=%s provider=%s runtime=%s api_key_ref=%s api_key=%s base_url=%s",
+                       agent.name, agent.provider, runtime_provider,
+                       agent.api_key_ref, bool(api_key), effective_base_url)
         if api_key:
-            for env_name in self._provider_env_names(runtime_provider):
+            env_names = self._provider_env_names(runtime_provider)
+            logger.warning("[DBG-NOUS] env_names=%s", env_names)
+            for env_name in env_names:
                 env[env_name] = api_key
         if effective_base_url:
             provider_base_url_env = self._provider_base_url_env_name(runtime_provider)
@@ -194,6 +199,7 @@ class HermesInstallationManager:
                     for _aux_task in ("vision", "compression", "web_extract"):
                         env.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
                         env.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
+        logger.warning("[DBG-NOUS] final env keys: %s", sorted(env.keys()))
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
