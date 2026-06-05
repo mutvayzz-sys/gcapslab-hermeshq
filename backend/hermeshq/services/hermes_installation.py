@@ -168,12 +168,7 @@ class HermesInstallationManager:
         if runtime_selection.release_tag:
             env["HERMESHQ_HERMES_RELEASE_TAG"] = runtime_selection.release_tag
         api_key = await self._resolve_api_key(agent.api_key_ref)
-        logger.warning("[DBG-NOUS] agent=%s provider=%s runtime=%s api_key_ref=%s api_key=%s base_url=%s",
-                       agent.name, agent.provider, runtime_provider,
-                       agent.api_key_ref, bool(api_key), effective_base_url)
         if api_key:
-            env_names = self._provider_env_names(runtime_provider)
-            logger.warning("[DBG-NOUS] env_names=%s", env_names)
             for env_name in env_names:
                 env[env_name] = api_key
         if effective_base_url:
@@ -199,7 +194,6 @@ class HermesInstallationManager:
                     for _aux_task in ("vision", "compression", "web_extract"):
                         env.setdefault(f"AUXILIARY_{_aux_task.upper()}_API_KEY", api_key)
                         env.setdefault(f"AUXILIARY_{_aux_task.upper()}_BASE_URL", effective_base_url)
-        logger.warning("[DBG-NOUS] final env keys: %s", sorted(env.keys()))
         managed_env = await self._build_managed_env_map(agent) if include_channels else {}
         for key, value in managed_env.items():
             env[key] = value
@@ -487,8 +481,8 @@ class HermesInstallationManager:
                 else:
                     config[section] = values
         # ── Auxiliary models ────────────────────────────────────────────
+        aux_section = {}
         if agent.auxiliary_models:
-            aux_section = {}
             for task_name, aux_cfg in agent.auxiliary_models.items():
                 if not isinstance(aux_cfg, dict):
                     continue
@@ -509,8 +503,28 @@ class HermesInstallationManager:
                     entry["api_key"] = resolved_aux_api_keys[task_name]
                 if entry:
                     aux_section[task_name] = entry
-            if aux_section:
-                config["auxiliary"] = aux_section
+        # Auto-seed auxiliary tasks (vision, compression, web_extract) from
+        # the agent's main provider when using an OpenAI-compatible backend
+        # with an explicit API key.  This ensures gateway tools that run
+        # inside the gateway process (e.g. vision_analyze) can resolve
+        # credentials from config.yaml even when env vars aren't injected
+        # into the gateway subprocess.
+        if (
+            runtime_provider in ("openai", "openai-codex", "gemini")
+            and effective_base_url
+            and resolved_aux_api_keys is not None
+            and resolved_aux_api_keys.get("__main__")
+        ):
+            main_key = resolved_aux_api_keys["__main__"]
+            for task_name in ("vision", "compression", "web_extract"):
+                if task_name not in aux_section:
+                    aux_section[task_name] = {
+                        "provider": "custom",
+                        "base_url": effective_base_url,
+                        "api_key": main_key,
+                    }
+        if aux_section:
+            config["auxiliary"] = aux_section
         # ── Plugins: enable plugins installed in HERMES_HOME/plugins/ ───────
         # Hermes requires an explicit plugins.enabled list in config.yaml to
         # load plugins from the plugins/ directory; without it, plugins are
@@ -532,16 +546,21 @@ class HermesInstallationManager:
     async def _resolve_auxiliary_api_keys(self, agent: Agent) -> dict[str, str]:
         """Pre-resolve auxiliary API keys so _write_config can include them in config.yaml."""
         result: dict[str, str] = {}
-        if not agent.auxiliary_models:
-            return result
-        for task_name, aux_cfg in agent.auxiliary_models.items():
-            if not isinstance(aux_cfg, dict):
-                continue
-            ref = aux_cfg.get("api_key_ref")
-            if ref:
-                key = await self._resolve_api_key(ref)
-                if key:
-                    result[task_name] = key
+        # Always resolve the main provider API key so _write_config can
+        # auto-seed auxiliary tasks (vision, compression, web_extract) for
+        # OpenAI-compatible providers that don't go through OAuth.
+        main_key = await self._resolve_api_key(agent.api_key_ref)
+        if main_key:
+            result["__main__"] = main_key
+        if agent.auxiliary_models:
+            for task_name, aux_cfg in agent.auxiliary_models.items():
+                if not isinstance(aux_cfg, dict):
+                    continue
+                ref = aux_cfg.get("api_key_ref")
+                if ref:
+                    key = await self._resolve_api_key(ref)
+                    if key:
+                        result[task_name] = key
         return result
 
     def _interaction_runtime_overrides(self, agent: Agent) -> dict[str, dict]:
