@@ -224,7 +224,36 @@ class HermesInstallationManager:
         # user to open the app and scan before the gateway times out.
         if platform == "whatsapp" or (platform is None and env.get("WHATSAPP_ENABLED") == "true"):
             env.setdefault("HERMES_GATEWAY_PLATFORM_CONNECT_TIMEOUT", "120")
+        # Resolve HERMESHQ_RESOLVED_USER_ID so M365 plugins can identify the user
+        # when the native gateway (Telegram, WhatsApp) doesn't inject thread_user_id.
+        if "HERMESHQ_RESOLVED_USER_ID" not in env:
+            resolved = await self._resolve_gateway_user_id(agent, platform)
+            if resolved:
+                env["HERMESHQ_RESOLVED_USER_ID"] = resolved
         return env
+
+    async def _resolve_gateway_user_id(self, agent: Agent, platform: str | None) -> str | None:
+        """Return the HermesHQ user ID for a single-user WhatsApp channel, or None."""
+        from hermeshq.models.user import User
+        if platform not in (None, "whatsapp"):
+            return None
+        channels = await self._load_messaging_channels(agent.id)
+        for channel in channels:
+            if channel.platform != "whatsapp":
+                continue
+            if not self._channel_runtime_enabled(channel):
+                continue
+            allowed = list(channel.allowed_user_ids or [])
+            if not allowed:
+                continue
+            async with self.session_factory() as session:
+                result = await session.execute(
+                    select(User).where(User.whatsapp_user.in_(allowed)).limit(2)
+                )
+                users = result.scalars().all()
+            if len(users) == 1:
+                return users[0].id
+        return None
 
     async def get_runtime_system_prompt(self, agent: Agent) -> str:
         installed = await self.list_installed_skills(agent)
