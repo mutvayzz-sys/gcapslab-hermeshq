@@ -21,6 +21,7 @@ import { CommsPage } from "./pages/CommsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { MfaVerifyPage } from "./pages/MfaVerifyPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ManualPage } from "./pages/ManualPage";
 import { MyAccountPage } from "./pages/MyAccountPage";
@@ -107,6 +108,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/mfa-verify" element={<MfaVerifyPage />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </ErrorBoundary>

@@ -126,7 +126,16 @@ export function LoginPage() {
     setError(null);
     try {
       const data = await login(username, password);
-      setSession(data.access_token, null);
+      if (data.mfa_required && data.mfa_token) {
+        // Store MFA token and redirect to verification page
+        sessionStorage.setItem("hermeshq.mfa_token", data.mfa_token);
+        if (data.email_mask) {
+          sessionStorage.setItem("hermeshq.mfa_email_mask", data.email_mask);
+        }
+        navigate("/mfa-verify");
+        return;
+      }
+      setSession(data.access_token!, null);
       navigate("/");
     } catch {
       setError(t("login.invalidCredentials"));

@@ -75,6 +75,7 @@ def _settings_to_read(item: AppSettings) -> AppSettingsRead:
         from_email=item.from_email,
         from_name=item.from_name,
         public_base_url=item.public_base_url,
+        mfa_email_enabled=bool(item.mfa_email_enabled),
         tui_skin_filename=item.tui_skin_filename,
         logo_url=logo_url,
         favicon_url=favicon_url,

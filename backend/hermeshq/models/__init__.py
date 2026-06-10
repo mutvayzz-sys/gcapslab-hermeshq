@@ -6,9 +6,10 @@ from hermeshq.models.base import Base
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.hermes_version import HermesVersion
 from hermeshq.models.integration_draft import IntegrationDraft
+from hermeshq.models.mcp_access import McpAccessToken
 from hermeshq.models.message import AgentMessage
 from hermeshq.models.messaging_channel import MessagingChannel
-from hermeshq.models.mcp_access import McpAccessToken
+from hermeshq.models.mfa_code import MfaCode
 from hermeshq.models.node import Node
 from hermeshq.models.oidc_provider import OidcProvider
 from hermeshq.models.password_reset import PasswordResetToken
@@ -32,8 +33,9 @@ __all__ = [
     "ConversationThread",
     "HermesVersion",
     "IntegrationDraft",
-    "MessagingChannel",
     "McpAccessToken",
+    "MfaCode",
+    "MessagingChannel",
     "Node",
     "OidcProvider",
     "ProviderDefinition",

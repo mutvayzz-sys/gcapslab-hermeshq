@@ -6,6 +6,7 @@ import comms from "./comms";
 import dashboard from "./dashboard";
 import email from "./email";
 import login from "./login";
+import mfa from "./mfa";
 import nav from "./nav";
 import nodes from "./nodes";
 import providers from "./providers";
@@ -24,6 +25,7 @@ const es: Record<string, string> = {
   ...dashboard,
   ...email,
   ...login,
+  ...mfa,
   ...nav,
   ...nodes,
   ...providers,

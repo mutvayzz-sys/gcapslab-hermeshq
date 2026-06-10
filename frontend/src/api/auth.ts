@@ -4,10 +4,41 @@ import { apiClient } from "./client";
 import { resolveApiBase } from "../lib/apiBase";
 import type { AuthProvidersResponse, User } from "../types/api";
 
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  mfa_token: string;
+  email_mask: string | null;
+  expires_at: string;
+}
+
+export interface LoginResponse {
+  access_token?: string;
+  expires_at?: string;
+  mfa_required?: boolean;
+  mfa_token?: string;
+  email_mask?: string | null;
+}
+
 export async function login(username: string, password: string) {
-  const { data } = await apiClient.post<{ access_token: string; expires_at: string }>(
+  const { data } = await apiClient.post<LoginResponse>(
     "/auth/login",
     { username, password },
+  );
+  return data;
+}
+
+export async function verifyMfa(mfaToken: string, code: string) {
+  const { data } = await apiClient.post<{ access_token: string; expires_at: string }>(
+    "/auth/mfa/verify",
+    { mfa_token: mfaToken, code },
+  );
+  return data;
+}
+
+export async function resendMfa(mfaToken: string) {
+  const { data } = await apiClient.post<MfaRequiredResponse>(
+    "/auth/mfa/resend",
+    { mfa_token: mfaToken },
   );
   return data;
 }

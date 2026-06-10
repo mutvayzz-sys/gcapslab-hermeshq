@@ -178,6 +178,7 @@ export interface AppSettings {
   from_email: string | null;
   from_name: string | null;
   public_base_url: string | null;
+  mfa_email_enabled: boolean;
   tui_skin_filename: string | null;
   logo_url: string | null;
   favicon_url: string | null;

@@ -21,6 +21,7 @@ class AppSettingsUpdate(BaseModel):
     from_email: str | None = None
     from_name: str | None = None
     public_base_url: str | None = None
+    mfa_email_enabled: bool | None = None
 
 
 class AppSettingsRead(ORMModel):
@@ -40,6 +41,7 @@ class AppSettingsRead(ORMModel):
     from_email: str | None = None
     from_name: str | None = None
     public_base_url: str | None = None
+    mfa_email_enabled: bool = False
     tui_skin_filename: str | None = None
     logo_url: str | None = None
     favicon_url: str | None = None
