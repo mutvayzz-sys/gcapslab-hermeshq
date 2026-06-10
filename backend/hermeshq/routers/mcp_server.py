@@ -25,6 +25,7 @@ from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.mcp_access import McpAccessToken
+from hermeshq.models.enums import TaskStatus
 from hermeshq.models.task import Task
 from hermeshq.services.mcp_access import (
     authenticate_mcp_token,
@@ -208,18 +209,25 @@ async def _fresh_task_read(db: AsyncSession, task_id: str) -> Task | None:
 async def _wait_for_task_completion(
     db: AsyncSession, task_id: str, max_wait: float = 60.0, poll_interval: float = 1.0,
 ) -> Task | None:
-    """Poll the task until it reaches a terminal state or *max_wait* expires."""
+    """Poll the task until it reaches a terminal state or *max_wait* expires.
+
+    Uses exponential backoff (0.5s → 3s) to reduce DB load when many MCP
+    clients are waiting concurrently.
+    """
     deadline = time.monotonic() + max_wait
+    current_interval = 0.5  # Start fast for responsiveness
+    max_interval = 3.0
     while time.monotonic() < deadline:
         task = await _fresh_task_read(db, task_id)
         if task is None:
             return None
-        if task.status in ("completed", "failed", "cancelled"):
+        if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value):
             return task
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        await asyncio.sleep(min(poll_interval, remaining))
+        await asyncio.sleep(min(current_interval, remaining))
+        current_interval = min(current_interval * 1.5, max_interval)
     # One final read
     return await _fresh_task_read(db, task_id)
 

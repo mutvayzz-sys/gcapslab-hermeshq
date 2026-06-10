@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from hermeshq.models.enums import AgentStatus, AgentRunMode
 from hermeshq.schemas.common import ORMModel
 from typing import Any
 from hermeshq.schemas.node import NodeRead
@@ -89,7 +90,7 @@ class AgentUpdate(BaseModel):
     skills: list[str] | None = None
     integration_configs: dict[str, dict] | None = None
     team_tags: list[str] | None = None
-    status: str | None = None
+    status: AgentStatus | None = None
     supervisor_agent_id: str | None = None
     mcp_servers: list[dict] | None = None
 
@@ -175,7 +176,7 @@ class AgentBulkOperationResult(ORMModel):
 class AgentModeUpdate(BaseModel):
     """Payload for setting an agent's run mode."""
 
-    mode: str = Field(
+    mode: AgentRunMode = Field(
         ...,
         description="The run mode for the agent. Must be one of: headless, interactive, hybrid",
     )

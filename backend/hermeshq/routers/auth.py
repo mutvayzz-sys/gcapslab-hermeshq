@@ -15,6 +15,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
+# Shared httpx client for connection pooling (reused across OIDC calls)
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return the shared httpx client, creating it if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=15.0)
+    return _http_client
+
+
 from hermeshq.core.security import (
     create_access_token,
     get_current_user,
@@ -47,28 +59,30 @@ from hermeshq.services.avatar import (
     resolve_media_type,
 )
 
-# Simple in-memory rate limiter for login attempts
-_LOGIN_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+# ---------------------------------------------------------------------------
+# Rate limiter for login endpoint
+# ---------------------------------------------------------------------------
 _LOGIN_MAX_ATTEMPTS = 10
-_LOGIN_WINDOW_SECONDS = 60
+_LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+_login_attempts: dict[str, list[float]] = defaultdict(list)
 
 
-def _check_login_rate_limit(ip_address: str) -> None:
-    """Rate limit login attempts per IP address."""
-    now = time.monotonic()
-    cutoff = now - _LOGIN_WINDOW_SECONDS
-    # Evict old entries for this IP
-    _LOGIN_RATE_LIMITS[ip_address] = [t for t in _LOGIN_RATE_LIMITS[ip_address] if t > cutoff]
-    if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
+def _check_login_rate(ip: str) -> None:
+    """Raise 429 if IP has exceeded login rate limit."""
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Prune expired attempts
+    _login_attempts[ip] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    if len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
-    _LOGIN_RATE_LIMITS[ip_address].append(now)
-    # Evict stale IPs to prevent unbounded memory growth (keep only IPs active in last window)
-    stale_ips = [ip for ip, times in _LOGIN_RATE_LIMITS.items() if not times]
-    for ip in stale_ips:
-        del _LOGIN_RATE_LIMITS[ip]
+
+
+def _record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt for rate limiting."""
+    _login_attempts.setdefault(ip, []).append(time.time())
 
 
 logger = logging.getLogger(__name__)
@@ -245,9 +259,9 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
     if token:
-        # Successful auth: redirect to root with token so App.tsx can detect it
-        query = urlencode({"token": token})
-        return f"{base_url}?{query}"
+        # Successful auth: redirect to root with token in fragment (#) so it's
+        # not sent to servers in logs/Referer headers
+        return f"{base_url}#token={token}"
     if auth_error:
         # Failed auth: redirect to /login so LoginPage.tsx can display the error
         query = urlencode({"auth_error": auth_error})
@@ -279,10 +293,10 @@ async def _fetch_oidc_discovery() -> dict:
     if not discovery_base:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OIDC issuer is not configured")
     url = f"{discovery_base}/.well-known/openid-configuration"
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        return response.json()
+    client = _get_http_client()
+    response = await client.get(url)
+    response.raise_for_status()
+    return response.json()
 
 
 def _translate_oidc_browser_endpoint(url: str | None) -> str | None:
@@ -414,10 +428,10 @@ async def _fetch_jwks(jwks_uri: str) -> list[dict]:
     now = time.time()
     if _JWKS_CACHE["keys"] is not None and (now - _JWKS_CACHE["fetched_at"]) < _JWKS_CACHE_TTL:
         return _JWKS_CACHE["keys"]
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(jwks_uri)
-        response.raise_for_status()
-        data = response.json()
+    client = _get_http_client()
+    response = await client.get(jwks_uri)
+    response.raise_for_status()
+    data = response.json()
     _JWKS_CACHE["keys"] = data.get("keys", [])
     _JWKS_CACHE["fetched_at"] = now
     return _JWKS_CACHE["keys"]
@@ -509,10 +523,12 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
-    _check_login_rate_limit(request.client.host if request.client else "unknown")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_login_rate(client_ip)
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
+        _record_login_attempt(client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
     _set_auth_cookie(response, token)
@@ -682,31 +698,31 @@ async def oidc_callback(
             userinfo_endpoint = discovery.get("userinfo_endpoint")
             if not token_endpoint:
                 raise ValueError("OIDC discovery missing token endpoint")
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                token_response = await client.post(
-                    token_endpoint,
-                    data={
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "redirect_uri": _build_oidc_redirect_uri(request),
-                        "client_id": get_settings().oidc_client_id,
-                        "client_secret": get_settings().oidc_client_secret,
-                    },
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+            client = _get_http_client()
+            token_response = await client.post(
+                token_endpoint,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": _build_oidc_redirect_uri(request),
+                    "client_id": get_settings().oidc_client_id,
+                    "client_secret": get_settings().oidc_client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+            claims = await _extract_id_token_claims(token_payload)
+            access_token = token_payload.get("access_token")
+            if userinfo_endpoint and access_token:
+                userinfo_response = await client.get(
+                    userinfo_endpoint,
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
-                token_response.raise_for_status()
-                token_payload = token_response.json()
-                claims = await _extract_id_token_claims(token_payload)
-                access_token = token_payload.get("access_token")
-                if userinfo_endpoint and access_token:
-                    userinfo_response = await client.get(
-                        userinfo_endpoint,
-                        headers={"Authorization": f"Bearer {access_token}"},
-                    )
-                    userinfo_response.raise_for_status()
-                    claims = {**claims, **userinfo_response.json()}
-                if not claims.get("sub"):
-                    raise ValueError("OIDC user claims did not include sub")
+                userinfo_response.raise_for_status()
+                claims = {**claims, **userinfo_response.json()}
+            if not claims.get("sub"):
+                raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
         except Exception as exc:
             return RedirectResponse(

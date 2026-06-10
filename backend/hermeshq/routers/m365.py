@@ -6,7 +6,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -157,8 +157,12 @@ async def update_m365_config(
 async def list_user_tokens(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
+    offset: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=500, description="Max records to return"),
 ) -> list[dict]:
-    result = await db.execute(select(UserM365Token))
+    result = await db.execute(
+        select(UserM365Token).offset(offset).limit(limit).order_by(UserM365Token.created_at.desc())
+    )
     tokens = result.scalars().all()
     return [
         {

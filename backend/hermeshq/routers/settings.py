@@ -3,6 +3,7 @@ import mimetypes
 import re
 from pathlib import Path
 
+import aiofiles
 import yaml
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -193,7 +194,8 @@ async def upload_logo(
     target_name = _validate_upload("logo", file, content)
     settings.branding_root.mkdir(parents=True, exist_ok=True)
     target_path = _branding_path(target_name)
-    target_path.write_bytes(content)
+    async with aiofiles.open(target_path, "wb") as f:
+        await f.write(content)
     item.logo_filename = target_name
     await db.commit()
     await db.refresh(item)
@@ -215,7 +217,8 @@ async def upload_favicon(
         if old_path.exists() and old_name != target_name:
             old_path.unlink()
     target_path = _branding_path(target_name)
-    target_path.write_bytes(content)
+    async with aiofiles.open(target_path, "wb") as f:
+        await f.write(content)
     item.favicon_filename = target_name
     await db.commit()
     await db.refresh(item)
@@ -250,7 +253,8 @@ async def upload_tui_skin(
         old_path = _tui_skin_path(item.tui_skin_filename)
         if old_path.exists():
             old_path.unlink()
-    _tui_skin_path(target_name).write_bytes(content)
+    async with aiofiles.open(_tui_skin_path(target_name), "wb") as f:
+        await f.write(content)
     item.default_tui_skin = skin_slug
     item.tui_skin_filename = target_name
     await db.commit()
@@ -402,7 +406,9 @@ async def update_semaphore(
     lines: list[str] = []
     found = False
     if env_path.exists():
-        for line in env_path.read_text().splitlines():
+        async with aiofiles.open(env_path, "r") as f:
+            text = await f.read()
+        for line in text.splitlines():
             if line.strip().startswith("CONCURRENCY_SEMAPHORE="):
                 lines.append(f"CONCURRENCY_SEMAPHORE={payload.semaphore}")
                 found = True
@@ -412,7 +418,8 @@ async def update_semaphore(
     if not found:
         lines.append(f"CONCURRENCY_SEMAPHORE={payload.semaphore}")
 
-    env_path.write_text("\n".join(lines) + "\n")
+    async with aiofiles.open(env_path, "w") as f:
+        await f.write("\n".join(lines) + "\n")
 
     # Also update runtime value immediately (no restart needed for semaphore)
     from hermeshq.config import update_runtime_setting
