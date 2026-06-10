@@ -104,16 +104,16 @@ async def kapso_whatsapp_webhook(
 
     # Verify signature using raw body (before parsing)
     if signature:
-        webhook_verified = False
-        for gw in kapso_gateways.values():
-            if gw._webhook_secret:
-                if verify_webhook_signature(body, signature, gw._webhook_secret):
-                    webhook_verified = True
-                    break
-                else:
-                    logger.warning("Kapso webhook: signature verification failed")
-                    return Response(status_code=401, content="Invalid signature")
-        if not webhook_verified:
+        gateways_with_secret = [gw for gw in kapso_gateways.values() if gw._webhook_secret]
+        if gateways_with_secret:
+            verified = any(
+                verify_webhook_signature(body, signature, gw._webhook_secret)
+                for gw in gateways_with_secret
+            )
+            if not verified:
+                logger.warning("Kapso webhook: signature verification failed")
+                return Response(status_code=401, content="Invalid signature")
+        else:
             logger.warning(
                 "Kapso webhook: signature present but no webhook_secret configured "
                 "in any gateway — accepting without verification"
