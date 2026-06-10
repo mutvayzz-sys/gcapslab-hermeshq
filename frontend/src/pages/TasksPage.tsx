@@ -44,6 +44,7 @@ export function TasksPage() {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [boardAgentId, setBoardAgentId] = useState("");
+  const [datePeriod, setDatePeriod] = useState<"today" | "week" | "month" | "all">("week");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [infoHovered, setInfoHovered] = useState(false);
 
@@ -52,10 +53,32 @@ export function TasksPage() {
     [agents],
   );
 
-  const filteredTasks = useMemo(
-    () => (tasks ?? []).filter((task) => !boardAgentId || task.agent_id === boardAgentId),
-    [boardAgentId, tasks],
-  );
+  const periodStart = useMemo(() => {
+    const now = new Date();
+    if (datePeriod === "today") {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+    if (datePeriod === "week") {
+      const day = now.getDay(); // 0 = Sunday
+      const diffToMonday = (day === 0 ? -6 : 1 - day);
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday);
+    }
+    if (datePeriod === "month") {
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    return null;
+  }, [datePeriod]);
+
+  const filteredTasks = useMemo(() => {
+    return (tasks ?? []).filter((task) => {
+      if (boardAgentId && task.agent_id !== boardAgentId) return false;
+      if (periodStart) {
+        const taskDate = new Date(task.queued_at);
+        if (taskDate < periodStart) return false;
+      }
+      return true;
+    });
+  }, [boardAgentId, periodStart, tasks]);
 
   const grouped = useMemo(() => {
     const base = new Map<string, Task[]>();
@@ -163,17 +186,28 @@ export function TasksPage() {
             <p className="panel-label">{t("tasks.kanban")}</p>
             <h2 className="mt-2 text-xl md:text-2xl lg:text-3xl text-[var(--text-display)]">{t("tasks.boardTitle")}</h2>
           </div>
-          <label className="panel-field !mt-0 min-w-[16rem]">
-            <span className="panel-label">{t("tasks.filterAgent")}</span>
-            <select value={boardAgentId} onChange={(event) => setBoardAgentId(event.target.value)} className="text-xs md:text-sm">
-              <option value="">{t("tasks.allAgents")}</option>
-              {(agents ?? []).map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agentLabel(agent)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap gap-3">
+            <label className="panel-field !mt-0 min-w-[16rem]">
+              <span className="panel-label">{t("tasks.filterAgent")}</span>
+              <select value={boardAgentId} onChange={(event) => setBoardAgentId(event.target.value)} className="text-xs md:text-sm">
+                <option value="">{t("tasks.allAgents")}</option>
+                {(agents ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agentLabel(agent)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="panel-field !mt-0 min-w-[10rem]">
+              <span className="panel-label">{t("tasks.filterPeriod")}</span>
+              <select value={datePeriod} onChange={(event) => setDatePeriod(event.target.value as typeof datePeriod)} className="text-xs md:text-sm">
+                <option value="today">{t("tasks.period.today")}</option>
+                <option value="week">{t("tasks.period.week")}</option>
+                <option value="month">{t("tasks.period.month")}</option>
+                <option value="all">{t("tasks.period.all")}</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 grid-cols-1">
