@@ -7,8 +7,10 @@
 
 import type { Dispatch, SetStateAction } from "react";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
+import { useUsers } from "../api/users";
+import { CollapsibleMultiSelect } from "./CollapsibleMultiSelect";
 import { useI18n } from "../lib/i18n";
 import type { MessagingChannelRuntime } from "../types/api";
 
@@ -19,7 +21,7 @@ import type { MessagingChannelRuntime } from "../types/api";
 export type ChannelFormState = {
   enabled: boolean;
   secret_ref: string;
-  allowed_user_ids: string;
+  allowed_user_ids: string[];
   home_chat_id: string;
   home_chat_name: string;
   require_mention: boolean;
@@ -39,7 +41,7 @@ export type ChannelFormState = {
 export const defaultFormState: ChannelFormState = {
   enabled: false,
   secret_ref: "",
-  allowed_user_ids: "",
+  allowed_user_ids: [],
   home_chat_id: "",
   home_chat_name: "",
   require_mention: false,
@@ -161,6 +163,63 @@ export function ChannelForm({
   onStop: () => void;
 }) {
   const { t } = useI18n();
+  const { data: allUsers } = useUsers();
+
+  const allowedUserOptions = useMemo(() => {
+    if (!allUsers) return [];
+    const platform = config.platform;
+    return allUsers
+      .filter((u) => {
+        if (platform === "telegram") return !!u.telegram_id;
+        if (platform === "whatsapp") return !!u.whatsapp_user;
+        if (platform === "microsoft_teams") return !!u.teams_id;
+        if (platform === "google_chat") return !!u.google_chat_email;
+        if (platform === "kapso_whatsapp") return !!u.kapso_number;
+        return false;
+      })
+      .map((u) => {
+        let value = "";
+        if (platform === "telegram") value = u.telegram_id!;
+        else if (platform === "whatsapp") value = u.whatsapp_user!;
+        else if (platform === "microsoft_teams") value = u.teams_id!;
+        else if (platform === "google_chat") value = u.google_chat_email!;
+        else if (platform === "kapso_whatsapp") value = u.kapso_number!.replace(/^\+/, "");
+        return { value, label: `${value} — ${u.display_name}` };
+      });
+  }, [allUsers, config.platform]);
+
+  // For Kapso: auto-derive the bot's phone_number_id (kapso_id) from the first
+  // selected user's kapso_id so it can be saved in metadata_json.
+  const kapsoAutoPhoneNumberId = useMemo(() => {
+    if (config.platform !== "kapso_whatsapp" || !allUsers) return null;
+    if (form.allowed_user_ids.length === 0) return null;
+    return (
+      allUsers.find(
+        (u) => u.kapso_number?.replace(/^\+/, "") === form.allowed_user_ids[0],
+      )?.kapso_id ?? null
+    );
+  }, [config.platform, allUsers, form.allowed_user_ids]);
+
+  // When Kapso users are selected, update allowed_user_ids AND auto-fill
+  // kapso_phone_number_id from the matching user's kapso_id.
+  const handleKapsoUsersChange = useCallback(
+    (values: string[]) => {
+      const derivedKapsoId =
+        values.length > 0
+          ? (allUsers?.find(
+              (u) => u.kapso_number?.replace(/^\+/, "") === values[0],
+            )?.kapso_id ?? "")
+          : "";
+      setForm((current) => ({
+        ...current,
+        allowed_user_ids: values,
+        ...(derivedKapsoId
+          ? { kapso_phone_number_id: derivedKapsoId }
+          : {}),
+      }));
+    },
+    [allUsers, setForm],
+  );
 
   const daysConnected = useMemo(() => {
     if (!runtime?.paired_at) return null;
@@ -369,16 +428,23 @@ export function ChannelForm({
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
               <p className="panel-label">{t("agent.kapsoWhatsAppMetadata")}</p>
               <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                <label className="panel-field">
-                  <span className="panel-label">{t("agent.kapsoPhoneNumberId")}</span>
-                  <input
-                    value={form.kapso_phone_number_id}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, kapso_phone_number_id: event.target.value }))
-                    }
-                    placeholder="123456789012345"
-                  />
-                </label>
+                <div className="space-y-3">
+                  <div className="panel-field">
+                    <span className="panel-label">{t("agent.allowedKapsoUsers")}</span>
+                    <CollapsibleMultiSelect
+                      options={allowedUserOptions}
+                      selected={form.allowed_user_ids}
+                      onChange={handleKapsoUsersChange}
+                      placeholder="Select Kapso users..."
+                    />
+                  </div>
+                  {kapsoAutoPhoneNumberId && (
+                    <label className="panel-field">
+                      <span className="panel-label">{t("agent.kapsoPhoneNumberId")} (auto)</span>
+                      <input readOnly value={kapsoAutoPhoneNumberId} className="text-[var(--text-disabled)]" />
+                    </label>
+                  )}
+                </div>
                 <label className="panel-field">
                   <span className="panel-label">{t("agent.kapsoWebhookSecret")}</span>
                   <input
@@ -397,8 +463,8 @@ export function ChannelForm({
             </div>
             )}
 
-            {/* Allowed users — only for platforms that need it */}
-            {config.showAllowedUsers && (
+            {/* Allowed users — only for platforms that need it (Kapso uses the metadata section above) */}
+            {config.showAllowedUsers && config.platform !== "kapso_whatsapp" && (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
               <p className="panel-label">
                 {config.platform === "telegram"
@@ -411,27 +477,33 @@ export function ChannelForm({
                         ? t("agent.allowedKapsoUsers")
                         : t("agent.allowedUsers")}
               </p>
-              <label className="panel-field mt-3">
-                <span className="panel-label">{t("agent.allowedUsers")}</span>
-                <textarea
-                  rows={4}
-                  value={form.allowed_user_ids}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, allowed_user_ids: event.target.value }))
-                  }
-                  placeholder={
-                    config.platform === "telegram"
-                      ? "123456789\n987654321"
-                      : config.platform === "microsoft_teams"
-                        ? "8a8f1234-5678-abcd-ef01-234567890abc\n..."
-                        : config.platform === "google_chat"
-                          ? "user@company.com\nadmin@company.com"
-                          : config.platform === "kapso_whatsapp"
-                            ? "+56912345678\n+56987654321"
-                            : "56912345678@s.whatsapp.net"
-                  }
-                />
-              </label>
+              <div className="mt-3 space-y-3">
+                <div className="panel-field">
+                  <span className="panel-label">{t("agent.allowedUsers")}</span>
+                  <CollapsibleMultiSelect
+                    options={allowedUserOptions}
+                    selected={form.allowed_user_ids}
+                    onChange={(values) => setForm((current) => ({ ...current, allowed_user_ids: values }))}
+                    placeholder={
+                      config.platform === "telegram"
+                        ? "Select Telegram users..."
+                        : config.platform === "microsoft_teams"
+                          ? "Select Teams users..."
+                          : config.platform === "google_chat"
+                            ? "Select Google Chat users..."
+                            : config.platform === "kapso_whatsapp"
+                              ? "Select Kapso users..."
+                              : "Select WhatsApp users..."
+                    }
+                  />
+                </div>
+                {config.platform === "kapso_whatsapp" && kapsoAutoPhoneNumberId && (
+                  <label className="panel-field">
+                    <span className="panel-label">{t("agent.kapsoPhoneNumberId")} (auto)</span>
+                    <input readOnly value={kapsoAutoPhoneNumberId} className="text-[var(--text-disabled)]" />
+                  </label>
+                )}
+              </div>
             </div>
             )}
           </div>

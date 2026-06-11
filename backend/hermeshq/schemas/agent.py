@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from hermeshq.models.enums import AgentStatus, AgentRunMode
 from hermeshq.schemas.common import ORMModel
 from typing import Any
 from hermeshq.schemas.node import NodeRead
@@ -89,7 +90,7 @@ class AgentUpdate(BaseModel):
     skills: list[str] | None = None
     integration_configs: dict[str, dict] | None = None
     team_tags: list[str] | None = None
-    status: str | None = None
+    status: AgentStatus | None = None
     supervisor_agent_id: str | None = None
     mcp_servers: list[dict] | None = None
 
@@ -144,6 +145,29 @@ class AgentRead(ORMModel):
     node: NodeRead | None = None
 
 
+class AgentBulkConfigUpdate(BaseModel):
+    agent_ids: list[str] = Field(default_factory=list)
+    model: str | None = None
+    use_provider_default: bool | None = None
+    provider: str | None = None
+    api_key_ref: str | None = None
+    base_url: str | None = None
+    system_prompt: str | None = None
+    run_mode: str | None = None
+    runtime_profile: str | None = None
+    hermes_version: str | None = None
+    approval_mode: str | None = None
+    tool_progress_mode: str | None = None
+    gateway_notifications_mode: str | None = None
+    team_tags: list[str] | None = None
+    enabled_toolsets: list[str] | None = None
+    disabled_toolsets: list[str] | None = None
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_api_key_ref: str | None = None
+    fallback_base_url: str | None = None
+
+
 class AgentBulkTaskCreate(BaseModel):
     agent_ids: list[str] = Field(default_factory=list)
     title: str
@@ -175,7 +199,7 @@ class AgentBulkOperationResult(ORMModel):
 class AgentModeUpdate(BaseModel):
     """Payload for setting an agent's run mode."""
 
-    mode: str = Field(
+    mode: AgentRunMode = Field(
         ...,
         description="The run mode for the agent. Must be one of: headless, interactive, hybrid",
     )

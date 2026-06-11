@@ -494,7 +494,7 @@ class GatewayProcessManager:
         if return_code is None:
             return
 
-        log_tail = self.read_log_tail(Path(handle.log_path), lines=80).lower()
+        log_tail = self._read_log_tail(Path(handle.log_path), lines=80).lower()
         if "pid file race lost to another gateway instance" in log_tail:
             raise ValueError("PID file race lost to another gateway instance")
         if "whatsapp bridge process exited unexpectedly" in log_tail:

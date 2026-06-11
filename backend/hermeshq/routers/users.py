@@ -79,6 +79,12 @@ def _serialize_user(request: Request, user: User, assigned_agent_ids: list[str])
         assigned_agent_ids=assigned_agent_ids,
         avatar_url=avatar_url,
         has_avatar=bool(user.avatar_filename),
+        telegram_id=user.telegram_id,
+        whatsapp_user=user.whatsapp_user,
+        teams_id=user.teams_id,
+        google_chat_email=user.google_chat_email,
+        kapso_id=user.kapso_id,
+        kapso_number=user.kapso_number,
     )
 
 
@@ -113,6 +119,12 @@ async def create_user(
         password_hash=hash_password(payload.password),
         role=payload.role,
         is_active=payload.is_active,
+        telegram_id=payload.telegram_id,
+        whatsapp_user=payload.whatsapp_user,
+        teams_id=payload.teams_id,
+        google_chat_email=payload.google_chat_email,
+        kapso_id=payload.kapso_id,
+        kapso_number=payload.kapso_number,
     )
     db.add(user)
     await db.flush()
@@ -147,6 +159,10 @@ async def update_user(
         user.is_active = payload.is_active
     if payload.assigned_agent_ids is not None:
         await _sync_assignments(db, user, payload.assigned_agent_ids, current_user.id)
+    _CHANNEL_FIELDS = ("telegram_id", "whatsapp_user", "teams_id", "google_chat_email", "kapso_id", "kapso_number")
+    for field in _CHANNEL_FIELDS:
+        if field in payload.model_fields_set:
+            setattr(user, field, getattr(payload, field))
     await db.commit()
     await db.refresh(user)
     return await _to_read(request, db, user)

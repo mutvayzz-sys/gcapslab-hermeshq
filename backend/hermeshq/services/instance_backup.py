@@ -168,7 +168,7 @@ class InstanceBackupService:
                 tmp_path.unlink()
             raise
 
-        filename = f"hermeshq-backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+        filename = f"hermeshq-backup-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.zip"
         return tmp_path, filename, summary
 
     async def validate_backup_archive(self, archive_path: Path, passphrase: str | None = None) -> InstanceBackupValidationRead:

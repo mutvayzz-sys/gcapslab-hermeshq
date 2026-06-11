@@ -15,6 +15,7 @@ const ns: Record<string, string> = {
   "agent.startRuntime": "Start runtime",
   "agent.stopRuntime": "Stop runtime",
   "agent.delete": "Archive agent",
+  "agent.permanentDelete": "Delete permanently",
   "agent.archived": "Archived",
   "agent.archivedBanner": "This agent is archived. Runtime actions are disabled, but logs, task history and related audit data remain available.",
   "agent.archivedConversationDisabled": "Archived agents are read-only in conversation view.",

@@ -242,6 +242,8 @@ class TestNousProviderEnvFallbacks:
     async def test_build_process_env_sets_provider_api_key(self, monkeypatch):
         """build_process_env should use provider env names when an API key is resolved."""
         from hermeshq.services.hermes_installation import HermesInstallationManager
+        from hermeshq.models.agent import Agent
+        from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
 
         manager = HermesInstallationManager(session_factory=None, secret_vault=None, version_manager=None)
         agent = Agent(

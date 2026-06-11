@@ -12,14 +12,16 @@ TOOLSET = "hermeshq_sharepoint"
 
 def _task_user_id() -> str | None:
     raw = os.environ.get("HERMESHQ_TASK_PAYLOAD", "")
-    if not raw:
-        return None
-    try:
-        payload = json.loads(raw)
-        meta = payload.get("metadata") or {}
-        return str(meta.get("thread_user_id") or meta.get("created_by_user_id") or "").strip() or None
-    except Exception:
-        return None
+    if raw:
+        try:
+            payload = json.loads(raw)
+            meta = payload.get("metadata") or {}
+            uid = str(meta.get("thread_user_id") or meta.get("created_by_user_id") or "").strip()
+            if uid:
+                return uid
+        except Exception:
+            pass
+    return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
 
 
 def _get_m365_token(user_id: str) -> tuple[str | None, str]:

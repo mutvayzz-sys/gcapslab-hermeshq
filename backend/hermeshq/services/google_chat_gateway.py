@@ -16,6 +16,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from hermeshq.services.channel_user_resolver import resolve_channel_user
+
 # ---------------------------------------------------------------------------
 # Shared HTTP client (lazily initialized, reused across calls)
 # ---------------------------------------------------------------------------
@@ -349,6 +351,14 @@ class GoogleChatGateway:
             if not has_user_mention:
                 return None
 
+        # Resolve HermesHQ user from the sender's Google Chat email
+        hermeshq_user_id: str | None = None
+        if sender_email:
+            async with self.session_factory() as session:
+                resolved = await resolve_channel_user(session, "google_chat", sender_email)
+                if resolved:
+                    hermeshq_user_id = resolved.id
+
         # Create task for the agent
         task_id = await self._create_task(
             prompt=text,
@@ -357,6 +367,7 @@ class GoogleChatGateway:
             space_name=space_name,
             thread_name=thread_name,
             message_name=message_name,
+            hermeshq_user_id=hermeshq_user_id,
         )
 
         if task_id:
@@ -376,6 +387,7 @@ class GoogleChatGateway:
         space_name: str,
         thread_name: str | None,
         message_name: str,
+        hermeshq_user_id: str | None = None,
     ) -> str | None:
         """Create a Task and submit it to the supervisor."""
         task_id = str(uuid.uuid4())
@@ -397,6 +409,7 @@ class GoogleChatGateway:
                     "gchat_space_name": space_name,
                     "gchat_thread_name": thread_name,
                     "gchat_message_name": message_name,
+                    "hermeshq_user_id": hermeshq_user_id,
                 },
             )
             session.add(task)

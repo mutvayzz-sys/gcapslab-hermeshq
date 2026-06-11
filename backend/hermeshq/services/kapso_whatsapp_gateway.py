@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -40,6 +41,7 @@ from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
+from hermeshq.services.channel_user_resolver import resolve_channel_user
 from hermeshq.services.secret_vault import SecretVault
 
 logger = logging.getLogger(__name__)
@@ -152,6 +154,74 @@ async def kapso_mark_read(
     except Exception:
         logger.debug("Failed to mark message %s as read", message_id, exc_info=True)
         return None
+
+
+_WA_MAX_CHARS = 4000  # WhatsApp hard limit is 4096 — use 4000 for safety margin
+
+
+def _split_message(text: str) -> list[str]:
+    """
+    Split a long message into chunks of at most _WA_MAX_CHARS characters.
+
+    Strategy (in order):
+      1. Split on double newlines (paragraphs) — preferred break point.
+      2. If a paragraph is still too long, split on single newlines.
+      3. If a line is still too long, split on sentence boundaries (. ! ?).
+      4. Hard-split anything that remains.
+    """
+    if len(text) <= _WA_MAX_CHARS:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+
+    def flush(chunk: str) -> None:
+        chunk = chunk.strip()
+        if chunk:
+            chunks.append(chunk)
+
+    def add_segment(segment: str) -> None:
+        nonlocal current
+        if not segment:
+            return
+        if len(current) + len(segment) + 1 <= _WA_MAX_CHARS:
+            current = (current + "\n" + segment).lstrip("\n")
+        else:
+            flush(current)
+            current = segment
+
+    # Walk paragraph by paragraph
+    for para in re.split(r"\n{2,}", text):
+        if len(para) <= _WA_MAX_CHARS:
+            add_segment(para)
+            continue
+        # Paragraph too long — split on single newlines
+        for line in para.split("\n"):
+            if len(line) <= _WA_MAX_CHARS:
+                add_segment(line)
+                continue
+            # Line too long — split on sentence boundaries
+            for sentence in re.split(r"(?<=[.!?])\s+", line):
+                if len(sentence) <= _WA_MAX_CHARS:
+                    add_segment(sentence)
+                else:
+                    # Hard split
+                    for i in range(0, len(sentence), _WA_MAX_CHARS):
+                        add_segment(sentence[i: i + _WA_MAX_CHARS])
+
+    flush(current)
+    return chunks or [text[:_WA_MAX_CHARS]]
+
+
+async def kapso_send_text_chunked(
+    api_key: str,
+    phone_number_id: str,
+    to: str,
+    text: str,
+) -> None:
+    """Send a (possibly long) text, splitting it into WhatsApp-safe chunks."""
+    for chunk in _split_message(text):
+        await kapso_send_text(api_key, phone_number_id, to, chunk)
 
 
 def verify_webhook_signature(
@@ -400,6 +470,8 @@ class KapsoWhatsAppGateway:
         allowed = config.get("allowed_user_ids", [])
         unauthorized_behavior = config.get("unauthorized_dm_behavior", "pair")
 
+        logger.debug("Kapso access check: sender_wa_id=%s sender_phone=%s allowed=%s",
+                     sender_wa_id, sender_phone, allowed)
         if allowed:
             # Check if sender matches any allowed user
             matched = False
@@ -429,11 +501,22 @@ class KapsoWhatsAppGateway:
                         logger.exception("Failed to send unauthorized reply")
                 return
 
-        # Mark message as read
+        # Mark message as read and send acknowledgment
         if message_id:
             asyncio.create_task(
                 kapso_mark_read(self._api_key, self._phone_number_id, message_id)
             )
+        asyncio.create_task(
+            kapso_send_text(self._api_key, self._phone_number_id, sender_wa_id, "⏳")
+        )
+
+        # Resolve HermesHQ user from the sender's Kapso ID (kapso_id stores the WA phone number)
+        hermeshq_user_id: str | None = None
+        if sender_wa_id:
+            async with self.session_factory() as session:
+                resolved = await resolve_channel_user(session, "kapso_whatsapp", sender_wa_id)
+                if resolved:
+                    hermeshq_user_id = resolved.id
 
         # Create task for the agent
         task_id = await self._create_task(
@@ -443,6 +526,7 @@ class KapsoWhatsAppGateway:
             message_id=message_id,
             conversation_id=conversation_id,
             msg_type=msg_type,
+            hermeshq_user_id=hermeshq_user_id,
         )
 
         if task_id:
@@ -459,6 +543,7 @@ class KapsoWhatsAppGateway:
         message_id: str,
         conversation_id: str,
         msg_type: str,
+        hermeshq_user_id: str | None = None,
     ) -> str | None:
         """Create a Task and submit it to the supervisor."""
         task_id = str(uuid.uuid4())
@@ -480,12 +565,17 @@ class KapsoWhatsAppGateway:
                 status="queued",
                 metadata_json={
                     "source": "kapso_whatsapp",
+                    "platform": "kapso_whatsapp",
                     "sender_wa_id": sender_wa_id,
                     "sender_username": sender_username,
                     "kapso_message_id": message_id,
                     "kapso_conversation_id": conversation_id,
                     "msg_type": msg_type,
                     "kapso_phone_number_id": self._phone_number_id,
+                    "hermeshq_user_id": hermeshq_user_id,
+                    # thread_user_id allows M365 plugins to identify the user
+                    # and retrieve their OAuth token for Graph API calls.
+                    "thread_user_id": hermeshq_user_id,
                 },
             )
             session.add(task)
@@ -529,7 +619,7 @@ class KapsoWhatsAppGateway:
             if not response_text:
                 return
             try:
-                await kapso_send_text(
+                await kapso_send_text_chunked(
                     api_key=self._api_key,
                     phone_number_id=self._phone_number_id,
                     to=delivery["sender_wa_id"],
@@ -568,8 +658,12 @@ async def handle_kapso_webhook(
         phone_number_id = conversation.get("phone_number_id", "")
 
     if not phone_number_id:
-        logger.warning("Kapso webhook: no phone_number_id in payload")
+        logger.warning("Kapso webhook: no phone_number_id in payload — full payload keys: %s", list(payload.keys()))
         return
+
+    logger.debug("Kapso webhook: phone_number_id=%s, registered gateways: %s",
+                 phone_number_id,
+                 {aid: gw._phone_number_id for aid, gw in gateways.items()})
 
     # Find the gateway for this phone number
     for agent_id, gateway in gateways.items():

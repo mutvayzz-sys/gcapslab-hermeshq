@@ -90,3 +90,26 @@ class EmailConfigStatus(BaseModel):
     from_email: str | None = None
     from_name: str | None = None
     public_base_url: str | None = None
+
+
+class MfaRequiredResponse(BaseModel):
+    """Response when login succeeds but MFA is required."""
+    mfa_required: bool = True
+    mfa_token: str
+    email_mask: str | None = None
+    expires_at: datetime
+
+
+class MfaVerifyRequest(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class MfaResendRequest(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+
+
+class MfaStatusResponse(BaseModel):
+    """MFA configuration status."""
+    enabled: bool = False
+    email_configured: bool = False

@@ -31,6 +31,12 @@ export interface AuthProvidersResponse {
 
 export interface ManagedUser extends User {
   assigned_agent_ids: string[];
+  telegram_id?: string | null;
+  whatsapp_user?: string | null;
+  teams_id?: string | null;
+  google_chat_email?: string | null;
+  kapso_id?: string | null;
+  kapso_number?: string | null;
 }
 
 export interface ActivityLogEntry {
@@ -178,6 +184,7 @@ export interface AppSettings {
   from_email: string | null;
   from_name: string | null;
   public_base_url: string | null;
+  mfa_email_enabled: boolean;
   tui_skin_filename: string | null;
   logo_url: string | null;
   favicon_url: string | null;

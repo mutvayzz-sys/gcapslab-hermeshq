@@ -95,6 +95,24 @@ class EmailService:
 
         await self._send(to_email, subject, html)
 
+    async def send_mfa_code(
+        self,
+        to_email: str,
+        code: str,
+        display_name: str,
+    ) -> None:
+        """Send an MFA verification code via email."""
+        if not self.is_configured:
+            raise EmailServiceError(
+                "Resend API key is not configured. "
+                "Set RESEND_API_KEY in Settings → Email or via RESEND_API_KEY env var."
+            )
+
+        subject = f"Verification Code — {self._app_name}"
+        html = self._build_mfa_email_html(code, display_name)
+
+        await self._send(to_email, subject, html)
+
     async def _send(self, to: str, subject: str, html: str) -> dict[str, Any]:
         """Low-level send via Resend REST API."""
         payload = {
@@ -166,6 +184,65 @@ class EmailService:
               If you did not request a password reset, you can safely ignore this email.<br><br>
               Alternatively, copy and paste this URL into your browser:<br>
               <span style="color: #60a5fa; word-break: break-all;">{reset_url}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top: 24px; border-top: 1px solid #262626;
+                        color: #555; font-size: 12px; text-align: center;">
+              {app} — Secure Operations Platform
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    def _build_mfa_email_html(self, code: str, display_name: str) -> str:
+        app = self._app_name
+        return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+             background-color: #0a0a0a; color: #ededed; margin: 0; padding: 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center">
+        <table width="480" cellpadding="0" cellspacing="0"
+               style="background-color: #141414; border: 1px solid #262626;
+                      border-radius: 16px; padding: 40px;">
+          <tr>
+            <td style="padding-bottom: 24px;">
+              <h2 style="margin: 0; color: #ededed; font-size: 22px;">
+                Verification Code
+              </h2>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-bottom: 20px; color: #a0a0a0; font-size: 15px; line-height: 1.6;">
+              Hello {display_name},<br><br>
+              Someone is trying to sign in to your
+              <strong style="color: #ededed;">{app}</strong> account.
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <div style="display: inline-block; background-color: #1a1a2e;
+                          border: 2px solid #2563eb; border-radius: 12px;
+                          padding: 16px 40px; letter-spacing: 8px;
+                          font-size: 32px; font-weight: 700;
+                          font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+                          color: #60a5fa;">
+                {code}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="color: #a0a0a0; font-size: 13px; line-height: 1.6;">
+              This code expires in <strong style="color: #ededed;">5 minutes</strong>.
+              If you did not attempt to sign in, please ignore this email and
+              consider changing your password.
             </td>
           </tr>
           <tr>

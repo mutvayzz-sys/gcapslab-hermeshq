@@ -18,7 +18,7 @@ from hermeshq.core.events import EventBroker, EventSubscription
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
 from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
-from hermeshq.routers import agents, auth, backup, comms, dashboard, hermes_versions, integration_factory, integration_packages, internal_agents, internal_control, logs, managed_integrations, mcp_access, mcp_server, messaging_channels, nodes, oidc_admin, providers, runtime_ledger, runtime_profiles, scheduled_tasks, secrets, settings as settings_router, skills, tasks, templates, terminal_sessions, users, webhooks
+from hermeshq.routers import agents, audit, auth, backup, comms, dashboard, hermes_versions, integration_factory, integration_packages, internal_agents, internal_control, logs, managed_integrations, mcp_access, mcp_server, messaging_channels, nodes, oidc_admin, providers, runtime_ledger, runtime_profiles, scheduled_tasks, secrets, settings as settings_router, skills, tasks, templates, terminal_sessions, users, webhooks
 from hermeshq.routers import attachments
 from hermeshq.routers import m365
 from hermeshq.schemas.common import HealthResponse
@@ -55,10 +55,10 @@ async def bootstrap_defaults() -> None:
     admin_password = settings.admin_password
     if not admin_password or not admin_password.strip():
         admin_password = _secrets.token_urlsafe(16)
-        sep = "=" * 60
-        msg = f"\n{sep}\nHermesHQ admin credentials\n  username: {settings.admin_username}\n  password: {admin_password}\n{sep}\n"
-        sys.stderr.write(msg)
-        sys.stderr.flush()
+        logger.warning(
+            "⚠️ ADMIN_PASSWORD was not set — auto-generated a secure password. "
+            "Set ADMIN_PASSWORD in your environment to control this value."
+        )
 
     async with AsyncSessionLocal() as session:
         user_result = await session.execute(select(User).where(User.username == settings.admin_username))
@@ -319,6 +319,7 @@ app.include_router(terminal_sessions.router, prefix=settings.api_prefix)
 app.include_router(scheduled_tasks.router, prefix=settings.api_prefix)
 app.include_router(oidc_admin.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
+app.include_router(audit.router, prefix=settings.api_prefix)
 app.include_router(mcp_server.router)
 app.include_router(webhooks.router)
 app.include_router(attachments.router, prefix=settings.api_prefix)

@@ -342,6 +342,17 @@ class AgentSupervisor:
                 if not agent:
                     return
                 if agent.status != "running":
+                    task.status = "failed"
+                    await session.commit()
+                    await self.event_broker.publish(
+                        {
+                            "type": "task.failed",
+                            "task_id": task_id,
+                            "agent_id": task.agent_id,
+                            "error": f"Agent is not running (status={agent.status})",
+                            "error_type": "AgentNotRunning",
+                        }
+                    )
                     return
                 conversation_history = await self._build_conversation_history(session, task)
                 metadata = task.metadata_json or {}

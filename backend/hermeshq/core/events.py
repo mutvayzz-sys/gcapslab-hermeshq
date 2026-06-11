@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+import asyncio
 import logging
 
 from fastapi import WebSocket
@@ -44,20 +45,26 @@ class EventBroker:
 
     async def publish(self, event: dict) -> None:
         # Notify internal subscribers first (gateways, services, etc.)
+        internal_tasks = []
         for callback in list(self._internal_subscribers):
-            try:
-                await callback(event)
-            except Exception:
+            internal_tasks.append(callback(event))
+        results = await asyncio.gather(*internal_tasks, return_exceptions=True)
+        for callback, result in zip(self._internal_subscribers, results):
+            if isinstance(result, Exception):
                 logger.exception("Internal subscriber %s failed", getattr(callback, "__qualname__", callback))
 
         # Then push to WebSocket connections (frontend)
         stale_connections: list[WebSocket] = []
         event_agent_id = event.get("agent_id")
+        send_tasks: list[tuple[WebSocket, asyncio.Task]] = []
         for connection, subscription in list(self._connections.items()):
             if event_agent_id and not subscription.is_admin and event_agent_id not in subscription.agent_ids:
                 continue
+            send_tasks.append((connection, asyncio.ensure_future(connection.send_json(event))))
+
+        for connection, task in send_tasks:
             try:
-                await connection.send_json(event)
+                await task
             except Exception:
                 stale_connections.append(connection)
         for connection in stale_connections:

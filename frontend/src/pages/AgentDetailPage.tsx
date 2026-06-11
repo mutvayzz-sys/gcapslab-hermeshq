@@ -439,7 +439,9 @@ export function AgentDetailPage() {
   const archived = currentAgent.is_archived;
 
   async function onDelete() {
-    const confirmed = window.confirm(t("agents.deleteConfirm", { name: currentAgent.name }));
+    const confirmKey = archived ? "agents.permanentDeleteConfirm" : "agents.deleteConfirm";
+    const failKey = archived ? "agents.permanentDeleteFailed" : "agents.deleteFailed";
+    const confirmed = window.confirm(t(confirmKey, { name: currentAgent.name }));
     if (!confirmed) {
       return;
     }
@@ -448,7 +450,7 @@ export function AgentDetailPage() {
       navigate("/agents");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : t("agents.deleteFailed");
+        error instanceof Error ? error.message : t(failKey);
       window.alert(message);
     }
   }
@@ -729,11 +731,11 @@ export function AgentDetailPage() {
             </Link>
             {isAdmin ? (
               <button
-                className="panel-button-secondary border-[var(--accent)] text-[var(--accent)]"
+                className={`panel-button-secondary ${archived ? "border-red-500 text-red-500" : "border-[var(--accent)] text-[var(--accent)]"}`}
                 onClick={onDelete}
                 disabled={deleteAgent.isPending}
               >
-                {t("agent.delete")}
+                {archived ? t("agent.permanentDelete") : t("agent.delete")}
               </button>
             ) : null}
           </div>

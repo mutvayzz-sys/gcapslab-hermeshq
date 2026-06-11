@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -29,3 +29,4 @@ class AppSettings(TimestampMixin, Base):
     m365_client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     m365_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     m365_enabled_scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    mfa_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

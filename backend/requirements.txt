@@ -17,3 +17,4 @@ msal>=1.28,<2.0
 faster-whisper>=1.1,<2.0
 edge-tts>=7.2,<8.0
 piper-tts>=1.4,<2.0
+aiofiles>=24.1,<25.0

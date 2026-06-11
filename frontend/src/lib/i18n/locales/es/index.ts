@@ -1,11 +1,13 @@
 import account from "./account";
 import agent from "./agent";
 import agents from "./agents";
+import audit from "./audit";
 import common from "./common";
 import comms from "./comms";
 import dashboard from "./dashboard";
 import email from "./email";
 import login from "./login";
+import mfa from "./mfa";
 import nav from "./nav";
 import nodes from "./nodes";
 import providers from "./providers";
@@ -19,11 +21,13 @@ const es: Record<string, string> = {
   ...account,
   ...agent,
   ...agents,
+  ...audit,
   ...common,
   ...comms,
   ...dashboard,
   ...email,
   ...login,
+  ...mfa,
   ...nav,
   ...nodes,
   ...providers,

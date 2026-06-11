@@ -322,7 +322,7 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
       const newForm: ChannelFormState = {
         enabled: ch.enabled,
         secret_ref: ch.secret_ref ?? "",
-        allowed_user_ids: formatList(ch.allowed_user_ids),
+        allowed_user_ids: ch.allowed_user_ids ?? [],
         home_chat_id: ch.home_chat_id ?? "",
         home_chat_name: ch.home_chat_name ?? "",
         require_mention: ch.require_mention,
@@ -381,7 +381,7 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
       const payload: Record<string, unknown> = {
         enabled: form.enabled,
         secret_ref: form.secret_ref || null,
-        allowed_user_ids: parseListInput(form.allowed_user_ids),
+        allowed_user_ids: form.allowed_user_ids,
         home_chat_id: form.home_chat_id || null,
         home_chat_name: form.home_chat_name || null,
         require_mention: form.require_mention,
@@ -405,6 +405,8 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
         };
       }
       if (platform === "kapso_whatsapp") {
+        // kapso_phone_number_id is the bot's Meta phone number ID (kapso_id from User),
+        // auto-derived in ChannelForm when users are selected and stored in form state.
         payload.metadata_json = {
           ...(channelData[platform]?.metadata_json ?? {}),
           kapso_phone_number_id: form.kapso_phone_number_id || undefined,

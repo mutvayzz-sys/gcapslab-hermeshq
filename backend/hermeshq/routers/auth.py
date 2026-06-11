@@ -15,6 +15,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
+# Shared httpx client for connection pooling (reused across OIDC calls)
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return the shared httpx client, creating it if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=15.0)
+    return _http_client
+
+
 from hermeshq.core.security import (
     create_access_token,
     get_current_user,
@@ -25,6 +37,8 @@ from hermeshq.config import get_settings
 from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 from hermeshq.models.password_reset import PasswordResetToken
+from hermeshq.models.mfa_code import MfaCode
+from hermeshq.models.app_settings import AppSettings
 from hermeshq.schemas.auth import (
     AuthProviderRead,
     AuthProvidersResponse,
@@ -38,6 +52,10 @@ from hermeshq.schemas.auth import (
     UserPreferencesUpdate,
     UserProfileUpdate,
     UserRead,
+    MfaRequiredResponse,
+    MfaVerifyRequest,
+    MfaResendRequest,
+    MfaStatusResponse,
 )
 from hermeshq.services.email_service import get_email_service, EmailServiceError
 from hermeshq.services.avatar import (
@@ -47,28 +65,30 @@ from hermeshq.services.avatar import (
     resolve_media_type,
 )
 
-# Simple in-memory rate limiter for login attempts
-_LOGIN_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+# ---------------------------------------------------------------------------
+# Rate limiter for login endpoint
+# ---------------------------------------------------------------------------
 _LOGIN_MAX_ATTEMPTS = 10
-_LOGIN_WINDOW_SECONDS = 60
+_LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+_login_attempts: dict[str, list[float]] = defaultdict(list)
 
 
-def _check_login_rate_limit(ip_address: str) -> None:
-    """Rate limit login attempts per IP address."""
-    now = time.monotonic()
-    cutoff = now - _LOGIN_WINDOW_SECONDS
-    # Evict old entries for this IP
-    _LOGIN_RATE_LIMITS[ip_address] = [t for t in _LOGIN_RATE_LIMITS[ip_address] if t > cutoff]
-    if len(_LOGIN_RATE_LIMITS[ip_address]) >= _LOGIN_MAX_ATTEMPTS:
+def _check_login_rate(ip: str) -> None:
+    """Raise 429 if IP has exceeded login rate limit."""
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Prune expired attempts
+    _login_attempts[ip] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    if len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
-    _LOGIN_RATE_LIMITS[ip_address].append(now)
-    # Evict stale IPs to prevent unbounded memory growth (keep only IPs active in last window)
-    stale_ips = [ip for ip, times in _LOGIN_RATE_LIMITS.items() if not times]
-    for ip in stale_ips:
-        del _LOGIN_RATE_LIMITS[ip]
+
+
+def _record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt for rate limiting."""
+    _login_attempts.setdefault(ip, []).append(time.time())
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +107,96 @@ DEFAULT_OIDC_PROVIDER_LABELS = {
     "microsoft": "Microsoft",
 }
 PUBLIC_ENTERPRISE_PROVIDERS = ("google", "microsoft")
+
+# ---------------------------------------------------------------------------
+# MFA configuration helpers
+# ---------------------------------------------------------------------------
+MFA_CODE_EXPIRY_MINUTES = 5
+MFA_CODE_MAX_ATTEMPTS = 5  # max verification attempts per code
+MFA_RESEND_COOLDOWN_SECONDS = 30
+
+
+async def _is_mfa_globally_enabled(db: AsyncSession) -> bool:
+    """Check if MFA via email is enabled in global app settings."""
+    result = await db.execute(select(AppSettings).where(AppSettings.id == "default"))
+    app_settings = result.scalar_one_or_none()
+    if not app_settings:
+        return False
+    return bool(app_settings.mfa_email_enabled)
+
+
+def _create_mfa_token(user_id: str) -> tuple[str, datetime]:
+    """Create a short-lived JWT token for MFA verification step."""
+    settings = get_settings()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
+    payload = {
+        "sub": user_id,
+        "sub_kind": "id",
+        "mfa_pending": True,
+        "exp": expires_at,
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return token, expires_at
+
+
+def _verify_mfa_token(mfa_token: str) -> str | None:
+    """Verify a MFA token and return the user_id, or None if invalid."""
+    try:
+        settings = get_settings()
+        payload = jwt.decode(mfa_token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        if not payload.get("mfa_pending"):
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+
+def _generate_mfa_code() -> str:
+    """Generate a random 6-digit code."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _mask_email(email: str | None) -> str | None:
+    """Mask email for display: a***@domain.com"""
+    if not email or "@" not in email:
+        return email
+    local, domain = email.rsplit("@", 1)
+    if len(local) <= 2:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
+
+
+async def _send_mfa_code(
+    db: AsyncSession,
+    user: User,
+    client_ip: str | None,
+) -> str:
+    """Generate and send an MFA code to the user's email. Returns the raw code for verification."""
+    raw_code = _generate_mfa_code()
+    code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
+
+    mfa_code = MfaCode(
+        user_id=user.id,
+        code_hash=code_hash,
+        expires_at=expires_at,
+        ip_address=client_ip,
+    )
+    db.add(mfa_code)
+    await db.commit()
+
+    # Send email
+    email_service = get_email_service()
+    await email_service.areload_config()
+    await email_service.send_mfa_code(
+        to_email=user.email,
+        code=raw_code,
+        display_name=user.display_name,
+    )
+
+    return raw_code
 
 
 def _user_avatar_base() -> Path:
@@ -214,15 +324,40 @@ def _build_oidc_post_logout_redirect_uri(request: Request) -> str:
     return _build_frontend_redirect(request, auth_error=None)
 
 
+def _validate_redirect_host(forwarded_host: str) -> bool:
+    """Validate that an X-Forwarded-Host header matches an allowed origin.
+
+    Uses the configured cors_origins list as the trusted-host whitelist.
+    Only the hostname (without port) is checked so that different ports on
+    the same domain are still accepted.
+    """
+    from urllib.parse import urlparse as _urlparse
+
+    allowed_hosts: set[str] = set()
+    for origin in get_settings().cors_origins:
+        try:
+            parsed = _urlparse(origin)
+            if parsed.hostname:
+                allowed_hosts.add(parsed.hostname)
+        except Exception:
+            continue
+    # Extract hostname from the forwarded value (may include port)
+    candidate = forwarded_host.split(":")[0]
+    return candidate in allowed_hosts
+
+
 def _build_frontend_redirect(request: Request, *, token: str | None = None, auth_error: str | None = None) -> str:
     forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host and not _validate_redirect_host(forwarded_host):
+        logger.warning("Rejected X-Forwarded-Host %r — not in allowed origins", forwarded_host)
+        forwarded_host = None
     host = forwarded_host or request.headers.get("host") or request.url.netloc
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     base_url = f"{scheme}://{host}/"
     if token:
-        # Successful auth: redirect to root with token so App.tsx can detect it
-        query = urlencode({"token": token})
-        return f"{base_url}?{query}"
+        # Successful auth: redirect to root with token in fragment (#) so it's
+        # not sent to servers in logs/Referer headers
+        return f"{base_url}#token={token}"
     if auth_error:
         # Failed auth: redirect to /login so LoginPage.tsx can display the error
         query = urlencode({"auth_error": auth_error})
@@ -254,10 +389,10 @@ async def _fetch_oidc_discovery() -> dict:
     if not discovery_base:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OIDC issuer is not configured")
     url = f"{discovery_base}/.well-known/openid-configuration"
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        return response.json()
+    client = _get_http_client()
+    response = await client.get(url)
+    response.raise_for_status()
+    return response.json()
 
 
 def _translate_oidc_browser_endpoint(url: str | None) -> str | None:
@@ -389,10 +524,10 @@ async def _fetch_jwks(jwks_uri: str) -> list[dict]:
     now = time.time()
     if _JWKS_CACHE["keys"] is not None and (now - _JWKS_CACHE["fetched_at"]) < _JWKS_CACHE_TTL:
         return _JWKS_CACHE["keys"]
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(jwks_uri)
-        response.raise_for_status()
-        data = response.json()
+    client = _get_http_client()
+    response = await client.get(jwks_uri)
+    response.raise_for_status()
+    data = response.json()
     _JWKS_CACHE["keys"] = data.get("keys", [])
     _JWKS_CACHE["fetched_at"] = now
     return _JWKS_CACHE["keys"]
@@ -482,16 +617,202 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)) -> TokenResponse:
-    _check_login_rate_limit(request.client.host if request.client else "unknown")
+@router.post("/login")
+async def login(payload: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db_session)):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_login_rate(client_ip)
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
+        _record_login_attempt(client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Check if MFA is required
+    mfa_enabled = await _is_mfa_globally_enabled(db)
+    if mfa_enabled and user.email:
+        # Generate MFA token and send code
+        mfa_token, mfa_expires = _create_mfa_token(user.id)
+        try:
+            await _send_mfa_code(db, user, client_ip)
+        except EmailServiceError as exc:
+            logger.warning("Failed to send MFA code to %s: %s", user.email, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MFA is enabled but email delivery is not configured. Contact your administrator.",
+            )
+        return MfaRequiredResponse(
+            mfa_required=True,
+            mfa_token=mfa_token,
+            email_mask=_mask_email(user.email),
+            expires_at=mfa_expires,
+        )
+
+    # No MFA — issue full token directly
     token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
+
+
+# ---------------------------------------------------------------------------
+# MFA Verification Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/mfa/verify")
+async def verify_mfa(
+    payload: MfaVerifyRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Verify an MFA code and issue the full JWT on success."""
+    user_id = _verify_mfa_token(payload.mfa_token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA session.",
+        )
+
+    # Look up user
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive.",
+        )
+
+    # Find the latest unused MFA code for this user
+    code_hash = hashlib.sha256(payload.code.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(MfaCode).where(
+            MfaCode.user_id == user_id,
+            MfaCode.used_at.is_(None),
+        ).order_by(MfaCode.created_at.desc())
+    )
+    mfa_codes = list(result.scalars().all())
+
+    if not mfa_codes:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No pending verification code. Please request a new one.",
+        )
+
+    # Check all pending codes (user might have requested resend)
+    matched_code = None
+    for mc in mfa_codes:
+        # Check expiry
+        expires_at = mc.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if now > expires_at:
+            continue
+        if mc.code_hash == code_hash:
+            matched_code = mc
+            break
+
+    if not matched_code:
+        # Check if the code matches an expired one (give specific error)
+        for mc in mfa_codes:
+            if mc.code_hash == code_hash:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Verification code has expired. Please request a new one.",
+                )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid verification code.",
+        )
+
+    # Mark code as used
+    matched_code.used_at = now
+    # Invalidate all other pending codes for this user
+    for mc in mfa_codes:
+        if mc.id != matched_code.id and mc.used_at is None:
+            mc.used_at = now
+    await db.commit()
+
+    # Issue full JWT
+    token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
+    _set_auth_cookie(response, token)
+    return TokenResponse(access_token=token, expires_at=expires_at)
+
+
+@router.post("/mfa/resend")
+async def resend_mfa(
+    payload: MfaResendRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Resend a new MFA code to the user's email."""
+    user_id = _verify_mfa_token(payload.mfa_token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA session.",
+        )
+
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive.",
+        )
+
+    if not user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no email address configured.",
+        )
+
+    # Rate limit resend: check if a code was created in the last 30 seconds
+    cooldown_threshold = datetime.now(timezone.utc) - timedelta(seconds=MFA_RESEND_COOLDOWN_SECONDS)
+    recent_result = await db.execute(
+        select(MfaCode).where(
+            MfaCode.user_id == user_id,
+            MfaCode.created_at >= cooldown_threshold,
+        ).order_by(MfaCode.created_at.desc())
+    )
+    recent_code = recent_result.scalar_one_or_none()
+    if recent_code:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {MFA_RESEND_COOLDOWN_SECONDS} seconds before requesting a new code.",
+        )
+
+    # Generate and send new code
+    client_ip = request.client.host if request.client else None
+    try:
+        await _send_mfa_code(db, user, client_ip)
+    except EmailServiceError as exc:
+        logger.warning("Failed to resend MFA code to %s: %s", user.email, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email. Please try again later.",
+        )
+
+    # Issue a fresh MFA token (extends the window)
+    mfa_token, mfa_expires = _create_mfa_token(user.id)
+
+    return MfaRequiredResponse(
+        mfa_required=True,
+        mfa_token=mfa_token,
+        email_mask=_mask_email(user.email),
+        expires_at=mfa_expires,
+    )
+
+
+@router.get("/mfa/status", response_model=MfaStatusResponse)
+async def mfa_status(
+    db: AsyncSession = Depends(get_db_session),
+    _user: User = Depends(get_current_user),
+) -> MfaStatusResponse:
+    """Get current MFA configuration status."""
+    mfa_enabled = await _is_mfa_globally_enabled(db)
+    email_service = get_email_service()
+    await email_service.areload_config()
+    return MfaStatusResponse(
+        enabled=mfa_enabled,
+        email_configured=email_service.is_configured,
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -657,31 +978,31 @@ async def oidc_callback(
             userinfo_endpoint = discovery.get("userinfo_endpoint")
             if not token_endpoint:
                 raise ValueError("OIDC discovery missing token endpoint")
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                token_response = await client.post(
-                    token_endpoint,
-                    data={
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "redirect_uri": _build_oidc_redirect_uri(request),
-                        "client_id": get_settings().oidc_client_id,
-                        "client_secret": get_settings().oidc_client_secret,
-                    },
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+            client = _get_http_client()
+            token_response = await client.post(
+                token_endpoint,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": _build_oidc_redirect_uri(request),
+                    "client_id": get_settings().oidc_client_id,
+                    "client_secret": get_settings().oidc_client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+            claims = await _extract_id_token_claims(token_payload)
+            access_token = token_payload.get("access_token")
+            if userinfo_endpoint and access_token:
+                userinfo_response = await client.get(
+                    userinfo_endpoint,
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
-                token_response.raise_for_status()
-                token_payload = token_response.json()
-                claims = await _extract_id_token_claims(token_payload)
-                access_token = token_payload.get("access_token")
-                if userinfo_endpoint and access_token:
-                    userinfo_response = await client.get(
-                        userinfo_endpoint,
-                        headers={"Authorization": f"Bearer {access_token}"},
-                    )
-                    userinfo_response.raise_for_status()
-                    claims = {**claims, **userinfo_response.json()}
-                if not claims.get("sub"):
-                    raise ValueError("OIDC user claims did not include sub")
+                userinfo_response.raise_for_status()
+                claims = {**claims, **userinfo_response.json()}
+            if not claims.get("sub"):
+                raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
         except Exception as exc:
             return RedirectResponse(

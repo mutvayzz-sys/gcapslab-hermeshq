@@ -192,7 +192,7 @@ async def channels_overview(
         if paired_at_str:
             try:
                 paired_at = datetime.fromisoformat(paired_at_str)
-                days_since_paired = (datetime.utcnow() - paired_at).days
+                days_since_paired = (datetime.now(timezone.utc) - paired_at).days
             except (ValueError, TypeError):
                 pass
         channels.append({

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from hermeshq.database import get_db_session
+import hmac as _hmac
+
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
@@ -90,7 +92,7 @@ async def _load_internal_system_agent(
     if not service_agent_id or not service_agent_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent credentials")
     expected = create_agent_service_token(service_agent_id)
-    if service_agent_token != expected:
+    if not _hmac.compare_digest(service_agent_token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent credentials")
     agent = await db.get(Agent, service_agent_id)
     if not agent or agent.is_archived:
@@ -842,3 +844,34 @@ async def internal_get_m365_agent_token(
     Uses its own hmac-based agent validation (does not require system agent)."""
     from hermeshq.routers.m365 import get_agent_m365_token
     return await get_agent_m365_token(request, user_id, db)
+
+
+# ─── Channel user resolver for gateway hooks ────────────────────────────────
+
+@router.get("/resolve-channel-user", include_in_schema=False)
+async def resolve_channel_user_endpoint(
+    request: Request,
+    platform: str,
+    sender_id: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Called by gateway hooks to resolve a platform sender ID to a HermesHQ user.
+    Uses hmac-based agent validation so any agent can call it."""
+    import hmac as _hmac
+    from hermeshq.services.channel_user_resolver import resolve_channel_user
+
+    agent_id = request.headers.get("X-HermesHQ-Agent-ID", "").strip()
+    agent_token = request.headers.get("X-HermesHQ-Agent-Token", "").strip()
+    if not agent_id or not agent_token:
+        raise HTTPException(status_code=401, detail="Missing agent credentials")
+    expected = create_agent_service_token(agent_id)
+    if not _hmac.compare_digest(agent_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid agent credentials")
+    agent = await db.get(Agent, agent_id)
+    if not agent or agent.is_archived:
+        raise HTTPException(status_code=401, detail="Unknown agent")
+
+    user = await resolve_channel_user(db, platform, sender_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="No HermesHQ user found for this sender ID")
+    return {"hermeshq_user_id": user.id}

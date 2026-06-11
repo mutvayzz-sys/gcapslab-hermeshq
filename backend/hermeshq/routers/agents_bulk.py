@@ -13,6 +13,7 @@ from hermeshq.database import get_db_session
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
 from hermeshq.schemas.agent import (
+    AgentBulkConfigUpdate,
     AgentBulkMessageCreate,
     AgentBulkOperationResult,
     AgentBulkOperationSkipped,
@@ -23,7 +24,11 @@ from hermeshq.routers.agents_shared import (
     _auto_start_agent_if_needed,
     _create_conversation_task,
     _load_bulk_agents,
+    _sync_agent_integration_toolsets,
+    _load_enabled_integration_slugs,
 )
+from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
+from hermeshq.services.audit import record_audit, extract_ip
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
@@ -172,4 +177,92 @@ async def bulk_send_message(
         submitted_agent_ids=submitted_agent_ids,
         skipped_agents=skipped_agents,
         task_ids=task_ids,
+    )
+
+
+@router.post("/bulk/config", response_model=AgentBulkOperationResult, status_code=status.HTTP_200_OK)
+async def bulk_config_update(
+    payload: AgentBulkConfigUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> AgentBulkOperationResult:
+    """Apply configuration changes to multiple agents at once.
+
+    Only non-None fields from the payload are applied. Archived agents are skipped.
+    """
+    from hermeshq.core.security import is_admin, ensure_agent_access
+
+    update_data = payload.model_dump(exclude_unset=True, exclude={"agent_ids"})
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No configuration fields provided")
+
+    agents = await _load_bulk_agents(db, current_user, payload.agent_ids)
+    submitted_agent_ids: list[str] = []
+    skipped_agents: list[AgentBulkOperationSkipped] = []
+    enabled_integration_slugs = await _load_enabled_integration_slugs(db)
+
+    for agent in agents:
+        if agent.is_archived:
+            skipped_agents.append(AgentBulkOperationSkipped(agent_id=agent.id, reason="archived"))
+            continue
+        if not is_admin(current_user):
+            try:
+                await ensure_agent_access(db, current_user, agent.id)
+            except HTTPException:
+                skipped_agents.append(AgentBulkOperationSkipped(agent_id=agent.id, reason="no access"))
+                continue
+
+        runtime_profile_changed = "runtime_profile" in update_data
+
+        if "runtime_profile" in update_data:
+            update_data["runtime_profile"] = normalize_runtime_profile_slug(update_data["runtime_profile"])
+
+        for field, value in update_data.items():
+            setattr(agent, field, value)
+
+        if runtime_profile_changed:
+            from hermeshq.routers.agents_shared import _apply_runtime_profile_defaults
+            _apply_runtime_profile_defaults(
+                agent,
+                agent.runtime_profile,
+                overwrite_toolsets="enabled_toolsets" not in update_data and "disabled_toolsets" not in update_data,
+            )
+        _sync_agent_integration_toolsets(agent, enabled_integration_slugs)
+
+        submitted_agent_ids.append(agent.id)
+
+    if not submitted_agent_ids:
+        raise HTTPException(status_code=400, detail="No valid agents were available for bulk config update")
+
+    await db.commit()
+
+    # Record audit entry for the bulk config change
+    await record_audit(
+        db,
+        action="agent.bulk_config",
+        target_type="agent",
+        actor_id=current_user.id,
+        actor_username=current_user.username,
+        actor_role=current_user.role,
+        ip_address=extract_ip(request),
+        new_value=update_data,
+        details={"agent_count": len(submitted_agent_ids), "agent_ids": submitted_agent_ids},
+    )
+    await db.commit()
+
+    # Sync installations for updated agents
+    installation_manager = request.app.state.installation_manager
+    for agent_id in submitted_agent_ids:
+        agent = next((a for a in agents if a.id == agent_id), None)
+        if agent:
+            await installation_manager.sync_agent_installation(agent)
+
+    return AgentBulkOperationResult(
+        batch_id=None,
+        submitted=len(submitted_agent_ids),
+        skipped=len(skipped_agents),
+        submitted_agent_ids=submitted_agent_ids,
+        skipped_agents=skipped_agents,
+        task_ids=[],
     )

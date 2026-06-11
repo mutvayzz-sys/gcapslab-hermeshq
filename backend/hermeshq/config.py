@@ -68,8 +68,47 @@ class Settings(BaseSettings):
     )
 
     def model_post_init(self, __context) -> None:
-        if self.jwt_secret in ("", "change-me"):
-            logger.warning("⚠️ JWT_SECRET is not set or using default value. This is insecure for production!")
+        if self.jwt_secret == "":
+            import secrets as _secrets
+            self.jwt_secret = _secrets.token_urlsafe(32)
+            # Persist the generated secret so it survives container restarts.
+            # Without this, the SecretVault (which uses jwt_secret as Fernet seed
+            # when FERNET_KEY is unset) would be unable to decrypt stored secrets
+            # after every restart.
+            env_path = self.model_config.get("env_file", ".env")
+            if not Path(env_path).is_absolute():
+                env_path = Path(__file__).resolve().parents[1] / env_path
+            env_path = Path(env_path)
+            try:
+                lines = env_path.read_text().splitlines() if env_path.exists() else []
+                found = False
+                new_lines: list[str] = []
+                for line in lines:
+                    if line.strip().startswith("JWT_SECRET="):
+                        new_lines.append(f"JWT_SECRET={self.jwt_secret}")
+                        found = True
+                    else:
+                        new_lines.append(line)
+                if not found:
+                    new_lines.append(f"JWT_SECRET={self.jwt_secret}")
+                env_path.write_text("\n".join(new_lines) + "\n")
+                logger.warning(
+                    "⚠️ JWT_SECRET was empty — auto-generated and saved to %s. "
+                    "Set JWT_SECRET in your environment for production.",
+                    env_path,
+                )
+            except OSError:
+                logger.warning(
+                    "⚠️ JWT_SECRET was empty — auto-generated but could NOT persist to %s. "
+                    "Secrets will break on next restart!",
+                    env_path,
+                )
+        elif self.jwt_secret == "change-me":
+            logger.warning(
+                "⚠️ JWT_SECRET is using default value 'change-me'. "
+                "This is insecure for production. To rotate, set FERNET_KEY first "
+                "and then use the rotate-secrets CLI command."
+            )
         if self.admin_password in ("", "admin123"):
             logger.warning("⚠️ ADMIN_PASSWORD is not set or using default value. This is insecure for production!")
         self.workspaces_root = self.workspaces_root.resolve()

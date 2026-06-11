@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 
-import { useCreateSecret, useSecrets } from "../../api/secrets";
+import { useCreateSecret, useDeleteSecret, useSecrets } from "../../api/secrets";
 import { useProviders } from "../../api/providers";
 import { useI18n } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/sessionStore";
@@ -12,6 +12,7 @@ export function SecretsTab() {
   const { data: secrets } = useSecrets(isAdmin);
   const { data: providers } = useProviders(Boolean(currentUser));
   const createSecret = useCreateSecret();
+  const deleteSecret = useDeleteSecret();
 
   const [secretName, setSecretName] = useState("");
   const [secretProvider, setSecretProvider] = useState("");
@@ -64,9 +65,23 @@ export function SecretsTab() {
         <p className="panel-label">Stored secrets</p>
         <div className="mt-4 space-y-3">
           {(secrets ?? []).map((secret) => (
-            <div key={String(secret.id)} className="border-b border-[var(--border)] pb-3">
-              <p className="panel-label">{String(secret.provider ?? "generic")}</p>
-              <p className="mt-2 text-sm text-[var(--text-display)]">{String(secret.name)}</p>
+            <div key={String(secret.id)} className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div>
+                <p className="panel-label">{String(secret.provider ?? "generic")}</p>
+                <p className="mt-2 text-sm text-[var(--text-display)]">{String(secret.name)}</p>
+              </div>
+              <button
+                type="button"
+                className="panel-button-secondary border-[var(--accent)] text-[var(--accent)] shrink-0"
+                disabled={deleteSecret.isPending}
+                onClick={() => {
+                  if (window.confirm(`Delete secret "${String(secret.name)}"?`)) {
+                    void deleteSecret.mutateAsync(String(secret.id));
+                  }
+                }}
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>
