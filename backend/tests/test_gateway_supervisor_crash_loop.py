@@ -169,7 +169,7 @@ class TestBootstrapGlobalSafetyNet(unittest.IsolatedAsyncioTestCase):
         with patch("hermeshq.services.gateway_supervisor.logger") as mock_logger:
             await supervisor.bootstrap_gateways()
             mock_logger.exception.assert_called_once()
-            self.assertIn("CRITICAL", mock_logger.exception.call_args[0][0])
+            self.assertIn("Fatal error", mock_logger.exception.call_args[0][0])
 
 
 # ---------------------------------------------------------------------------

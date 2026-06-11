@@ -177,6 +177,10 @@ class GatewaySupervisor:
             return True
         if "timed out" in msg:
             return True
+        if "resource busy" in msg:
+            return True
+        if "already running" in msg:
+            return True
         return False
 
     # ── Shutdown ────────────────────────────────────────────────────────────

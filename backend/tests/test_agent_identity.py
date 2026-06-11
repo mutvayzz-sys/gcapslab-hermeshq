@@ -28,18 +28,28 @@ def _load_module():
     })
     _mock_agent_mod = types.ModuleType("hermeshq.models.agent")
     _mock_agent_mod.Agent = _stub_agent
-    sys.modules.setdefault("hermeshq.models.agent", _mock_agent_mod)
 
-    with open(_SRC_PATH, "r") as f:
-        source = f.read()
+    # Temporarily replace the module so agent_identity.py compiles against the
+    # stub. We restore the original afterwards to avoid polluting sys.modules
+    # and breaking other test files that import the real SQLAlchemy Agent model.
+    _original_agent_mod = sys.modules.get("hermeshq.models.agent")
+    sys.modules["hermeshq.models.agent"] = _mock_agent_mod
+    try:
+        with open(_SRC_PATH, "r") as f:
+            source = f.read()
 
-    # Inject future annotations so ``str | None`` works on Python 3.9.
-    source = "from __future__ import annotations\n" + source
+        # Inject future annotations so ``str | None`` works on Python 3.9.
+        source = "from __future__ import annotations\n" + source
 
-    mod = types.ModuleType("hermeshq.services.agent_identity")
-    mod.__file__ = _SRC_PATH
-    exec(compile(source, _SRC_PATH, "exec"), mod.__dict__)
-    sys.modules["hermeshq.services.agent_identity"] = mod
+        mod = types.ModuleType("hermeshq.services.agent_identity")
+        mod.__file__ = _SRC_PATH
+        exec(compile(source, _SRC_PATH, "exec"), mod.__dict__)
+        sys.modules["hermeshq.services.agent_identity"] = mod
+    finally:
+        if _original_agent_mod is not None:
+            sys.modules["hermeshq.models.agent"] = _original_agent_mod
+        else:
+            sys.modules.pop("hermeshq.models.agent", None)
     return mod
 
 
