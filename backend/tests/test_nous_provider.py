@@ -2,11 +2,13 @@
 import pytest
 from unittest.mock import MagicMock
 
+from hermeshq.models.agent import Agent
 from hermeshq.services.provider_catalog import (
     BUILTIN_PROVIDERS,
     normalize_runtime_provider,
     seed_provider_defaults,
 )
+from hermeshq.services.hermes_version_manager import HermesRuntimeSelection
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -236,3 +238,43 @@ class TestNousProviderEnvFallbacks:
         import inspect
         source = inspect.getsource(HermesInstallationManager._provider_base_url_env_name)
         assert "NOUS_BASE_URL" in source
+
+    async def test_build_process_env_sets_provider_api_key(self, monkeypatch):
+        """build_process_env should use provider env names when an API key is resolved."""
+        from hermeshq.services.hermes_installation import HermesInstallationManager
+
+        manager = HermesInstallationManager(session_factory=None, secret_vault=None, version_manager=None)
+        agent = Agent(
+            id="agent-1",
+            node_id="node-1",
+            name="Nous Agent",
+            slug="nous-agent",
+            runtime_profile="technical",
+            provider="nous",
+            api_key_ref="nous-secret",
+            workspace_path="/tmp/hermeshq-test-agent",
+        )
+
+        async def resolve_runtime(_agent):
+            return HermesRuntimeSelection(
+                requested_version=None,
+                effective_version="test",
+                source="bundled",
+                python_bin="python",
+                hermes_bin="hermes",
+                detected_version=None,
+            )
+
+        async def resolve_api_key(_ref):
+            return "secret-value"
+
+        async def build_managed_env_map(_agent):
+            return {}
+
+        monkeypatch.setattr(manager, "resolve_hermes_runtime", resolve_runtime)
+        monkeypatch.setattr(manager, "_resolve_api_key", resolve_api_key)
+        monkeypatch.setattr(manager, "_build_managed_env_map", build_managed_env_map)
+
+        env = await manager.build_process_env(agent)
+
+        assert env["NOUS_API_KEY"] == "secret-value"

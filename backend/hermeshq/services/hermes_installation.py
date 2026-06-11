@@ -169,7 +169,7 @@ class HermesInstallationManager:
             env["HERMESHQ_HERMES_RELEASE_TAG"] = runtime_selection.release_tag
         api_key = await self._resolve_api_key(agent.api_key_ref)
         if api_key:
-            for env_name in env_names:
+            for env_name in self._provider_env_names(runtime_provider):
                 env[env_name] = api_key
         if effective_base_url:
             provider_base_url_env = self._provider_base_url_env_name(runtime_provider)
