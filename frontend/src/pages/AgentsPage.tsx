@@ -193,8 +193,10 @@ export function AgentsPage() {
     setSlugTouched(false);
   }
 
-  async function onDelete(agentId: string, agentName: string) {
-    const confirmed = window.confirm(t("agents.deleteConfirm", { name: agentName }));
+  async function onDelete(agentId: string, agentName: string, isArchived: boolean) {
+    const confirmKey = isArchived ? "agents.permanentDeleteConfirm" : "agents.deleteConfirm";
+    const failKey = isArchived ? "agents.permanentDeleteFailed" : "agents.deleteFailed";
+    const confirmed = window.confirm(t(confirmKey, { name: agentName }));
     if (!confirmed) {
       return;
     }
@@ -202,7 +204,7 @@ export function AgentsPage() {
       await deleteAgent.mutateAsync(agentId);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : t("agents.deleteFailed");
+        error instanceof Error ? error.message : t(failKey);
       window.alert(message);
     }
   }
@@ -715,11 +717,11 @@ export function AgentsPage() {
                 </button>
                 {isAdmin ? (
                   <button
-                    className="panel-button-secondary w-full border-[var(--accent)] text-[var(--accent)]"
-                    onClick={() => onDelete(agent.id, agent.name)}
+                    className={`panel-button-secondary w-full ${agent.is_archived ? "border-red-500 text-red-500" : "border-[var(--accent)] text-[var(--accent)]"}`}
+                    onClick={() => onDelete(agent.id, agent.name, agent.is_archived)}
                     disabled={deleteAgent.isPending}
                   >
-                    {t("agent.delete")}
+                    {agent.is_archived ? t("agent.permanentDelete") : t("agent.delete")}
                   </button>
                 ) : null}
               </div>

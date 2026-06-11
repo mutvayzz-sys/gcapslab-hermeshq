@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import false, func, select, update
+from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -329,6 +329,9 @@ async def delete_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.is_archived:
+        db.expunge(agent)
+        await db.execute(delete(Agent).where(Agent.id == agent_id))
+        await db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     active_task_ids = list(

@@ -58,7 +58,7 @@ class GatewayLogManager:
                 if gateway_content:
                     sections.append("[gateway]")
                     sections.extend(gateway_content[-lines:])
-            bridge_log_path = self.whatsapp_bridge_log_path(agent.workspace_path)
+            bridge_log_path = self._whatsapp_bridge_log_path(agent.workspace_path)
             if bridge_log_path.exists():
                 bridge_content = bridge_log_path.read_text(encoding="utf-8", errors="replace").splitlines()
                 if bridge_content:

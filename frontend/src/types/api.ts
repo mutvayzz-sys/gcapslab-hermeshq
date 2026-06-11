@@ -31,6 +31,12 @@ export interface AuthProvidersResponse {
 
 export interface ManagedUser extends User {
   assigned_agent_ids: string[];
+  telegram_id?: string | null;
+  whatsapp_user?: string | null;
+  teams_id?: string | null;
+  google_chat_email?: string | null;
+  kapso_id?: string | null;
+  kapso_number?: string | null;
 }
 
 export interface ActivityLogEntry {

@@ -12,6 +12,12 @@ class UserCreate(BaseModel):
     role: str = Field(default="user", pattern="^(admin|user)$")
     is_active: bool = True
     assigned_agent_ids: list[str] = Field(default_factory=list)
+    telegram_id: str | None = None
+    whatsapp_user: str | None = None
+    teams_id: str | None = None
+    google_chat_email: str | None = None
+    kapso_id: str | None = None
+    kapso_number: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -26,6 +32,12 @@ class UserUpdate(BaseModel):
     role: str | None = Field(default=None, pattern="^(admin|user)$")
     is_active: bool | None = None
     assigned_agent_ids: list[str] | None = None
+    telegram_id: str | None = None
+    whatsapp_user: str | None = None
+    teams_id: str | None = None
+    google_chat_email: str | None = None
+    kapso_id: str | None = None
+    kapso_number: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -45,6 +57,12 @@ class UserManagedRead(ORMModel):
     assigned_agent_ids: list[str]
     avatar_url: str | None = None
     has_avatar: bool = False
+    telegram_id: str | None = None
+    whatsapp_user: str | None = None
+    teams_id: str | None = None
+    google_chat_email: str | None = None
+    kapso_id: str | None = None
+    kapso_number: str | None = None
 
 
 def _validate_password_strength(value: str) -> None:

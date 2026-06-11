@@ -13,6 +13,12 @@ const emptyCreateForm = {
   role: "user",
   is_active: true,
   assigned_agent_ids: [] as string[],
+  telegram_id: "",
+  whatsapp_user: "",
+  teams_id: "",
+  google_chat_email: "",
+  kapso_id: "",
+  kapso_number: "",
 };
 
 function validatePassword(value: string) {
@@ -65,6 +71,10 @@ export function UsersPage() {
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [displayNameDrafts, setDisplayNameDrafts] = useState<Record<string, string>>({});
+  const [channelIdDrafts, setChannelIdDrafts] = useState<Record<string, {
+    telegram_id: string; whatsapp_user: string; teams_id: string;
+    google_chat_email: string; kapso_id: string; kapso_number: string;
+  }>>({});
   const [createError, setCreateError] = useState<string | null>(null);
   const [createInfo, setCreateInfo] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, string | null>>({});
@@ -187,6 +197,35 @@ export function UsersPage() {
               ))}
             </select>
           </label>
+          <div className="border-t border-[var(--border)] pt-4">
+            <p className="panel-label mb-3">Messaging Channels</p>
+            <div className="space-y-3">
+              <label className="panel-field">
+                <span className="panel-label">ID Telegram</span>
+                <input value={createForm.telegram_id} onChange={(e) => setCreateForm((c) => ({ ...c, telegram_id: e.target.value }))} placeholder="Optional" />
+              </label>
+              <label className="panel-field">
+                <span className="panel-label">User WhatsApp</span>
+                <input value={createForm.whatsapp_user} onChange={(e) => setCreateForm((c) => ({ ...c, whatsapp_user: e.target.value }))} placeholder="Optional" />
+              </label>
+              <label className="panel-field">
+                <span className="panel-label">ID MS Teams</span>
+                <input value={createForm.teams_id} onChange={(e) => setCreateForm((c) => ({ ...c, teams_id: e.target.value }))} placeholder="Optional" />
+              </label>
+              <label className="panel-field">
+                <span className="panel-label">Email Google Chat</span>
+                <input value={createForm.google_chat_email} onChange={(e) => setCreateForm((c) => ({ ...c, google_chat_email: e.target.value }))} placeholder="Optional" />
+              </label>
+              <label className="panel-field">
+                <span className="panel-label">ID Kapso</span>
+                <input value={createForm.kapso_id} onChange={(e) => setCreateForm((c) => ({ ...c, kapso_id: e.target.value }))} placeholder="Optional" />
+              </label>
+              <label className="panel-field">
+                <span className="panel-label">Number Kapso</span>
+                <input value={createForm.kapso_number} onChange={(e) => setCreateForm((c) => ({ ...c, kapso_number: e.target.value }))} placeholder="Optional" />
+              </label>
+            </div>
+          </div>
           <label className="mt-2 flex items-center gap-3 text-sm text-[var(--text-secondary)]">
             <input
               type="checkbox"
@@ -396,6 +435,50 @@ export function UsersPage() {
                       {rowMessages[user.id]}
                     </p>
                   ) : null}
+                  <div className="border-t border-[var(--border)] pt-3">
+                    <p className="panel-label mb-3">Messaging Channels</p>
+                    <div className="space-y-3">
+                      {(["telegram_id", "whatsapp_user", "teams_id", "google_chat_email", "kapso_id", "kapso_number"] as const).map((field) => {
+                        const labels: Record<string, string> = {
+                          telegram_id: "ID Telegram", whatsapp_user: "User WhatsApp", teams_id: "ID MS Teams",
+                          google_chat_email: "Email Google Chat", kapso_id: "ID Kapso", kapso_number: "Number Kapso",
+                        };
+                        const draft = channelIdDrafts[user.id];
+                        const currentValue = draft ? draft[field] : (user[field] ?? "");
+                        return (
+                          <label key={field} className="panel-field">
+                            <span className="panel-label">{labels[field]}</span>
+                            <input
+                              value={currentValue}
+                              onChange={(e) =>
+                                setChannelIdDrafts((prev) => {
+                                  const base = prev[user.id] ?? { telegram_id: user.telegram_id ?? "", whatsapp_user: user.whatsapp_user ?? "", teams_id: user.teams_id ?? "", google_chat_email: user.google_chat_email ?? "", kapso_id: user.kapso_id ?? "", kapso_number: user.kapso_number ?? "" };
+                                  return { ...prev, [user.id]: { ...base, [field]: e.target.value } };
+                                })
+                              }
+                              placeholder="—"
+                            />
+                          </label>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        className="panel-button-secondary"
+                        onClick={async () => {
+                          const draft = channelIdDrafts[user.id] ?? { telegram_id: user.telegram_id ?? "", whatsapp_user: user.whatsapp_user ?? "", teams_id: user.teams_id ?? "", google_chat_email: user.google_chat_email ?? "", kapso_id: user.kapso_id ?? "", kapso_number: user.kapso_number ?? "" };
+                          try {
+                            await updateUser.mutateAsync({ userId: user.id, payload: { ...draft } });
+                            setChannelIdDrafts((prev) => { const next = { ...prev }; delete next[user.id]; return next; });
+                            setRowMessages((current) => ({ ...current, [user.id]: "Channel IDs updated." }));
+                          } catch (error) {
+                            setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                          }
+                        }}
+                      >
+                        Save channel IDs
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>

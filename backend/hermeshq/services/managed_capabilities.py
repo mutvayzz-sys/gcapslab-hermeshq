@@ -96,6 +96,8 @@ def list_available_integration_packages(enabled_integration_slugs: list[str] | N
             slug = str(manifest.get("slug") or package_root.name).strip()
             if not slug:
                 continue
+            if manifest.get("hidden"):
+                continue
             plugin_source_root = package_root / str(manifest.get("plugin_dir") or "plugin")
             plugin_meta = _read_yaml(plugin_source_root / "plugin.yaml") if plugin_source_root.exists() else {}
             packages.append(

@@ -22,6 +22,13 @@ class User(TimestampMixin, Base):
     locale_preference: Mapped[str] = mapped_column(String(16), default="default")
     avatar_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    telegram_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    whatsapp_user: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    teams_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    google_chat_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    kapso_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    kapso_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     agent_assignments = relationship(
         "AgentAssignment",
         back_populates="user",

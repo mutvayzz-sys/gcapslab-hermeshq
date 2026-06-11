@@ -14,6 +14,19 @@ export function useSecrets(enabled = true) {
   });
 }
 
+export function useDeleteSecret() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (secretId: string) => {
+      await apiClient.delete(`/secrets/${secretId}`);
+      return secretId;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["secrets"] });
+    },
+  });
+}
+
 export function useCreateSecret() {
   const queryClient = useQueryClient();
   return useMutation({

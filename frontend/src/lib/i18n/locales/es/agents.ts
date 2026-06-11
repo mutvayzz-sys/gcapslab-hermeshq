@@ -41,6 +41,8 @@ const ns: Record<string, string> = {
   "agents.bulkMessageFailed": "Falló el envío del mensaje masivo.",
   "agents.deleteConfirm": "¿Archivar el agente \"{name}\"? Los logs y el historial de tareas se conservarán para auditoría.",
   "agents.deleteFailed": "El archivado falló. Recarga la página e inténtalo otra vez.",
+  "agents.permanentDeleteConfirm": "¿Eliminar permanentemente \"{name}\"? Se borrarán todos los datos y esta acción no se puede deshacer.",
+  "agents.permanentDeleteFailed": "La eliminación falló. Recarga la página e inténtalo otra vez.",
 };
 
 export default ns;

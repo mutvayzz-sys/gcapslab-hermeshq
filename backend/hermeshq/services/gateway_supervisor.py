@@ -233,7 +233,14 @@ class GatewaySupervisor:
         }
 
         if platform == "whatsapp" and agent:
-            result.update(self._log_mgr.infer_whatsapp_pairing_status(agent.workspace_path))
+            session_dir = self._log_mgr._whatsapp_session_dir(agent.workspace_path)
+            bridge_log_path = self._log_mgr._whatsapp_bridge_log_path(agent.workspace_path)
+            pairing_status = self._log_mgr.infer_whatsapp_pairing_status(session_dir, bridge_log_path)
+            result["pairing_status"] = pairing_status
+            result["paired"] = pairing_status == "paired"
+            result["session_path"] = session_dir.as_posix()
+            result["bridge_log_path"] = bridge_log_path.as_posix() if bridge_log_path else None
+            result["pairing_qr_text"] = self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
 
         self._maybe_update_connected_at(channel, running)
         return result

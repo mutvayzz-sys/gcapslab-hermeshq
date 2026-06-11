@@ -41,6 +41,8 @@ const ns: Record<string, string> = {
   "agents.bulkMessageFailed": "Bulk message request failed.",
   "agents.deleteConfirm": "Archive agent \"{name}\"? Logs and task history will be preserved for audit.",
   "agents.deleteFailed": "Archive request failed. Reload the page and try again.",
+  "agents.permanentDeleteConfirm": "Permanently delete \"{name}\"? All data will be removed and this cannot be undone.",
+  "agents.permanentDeleteFailed": "Delete failed. Reload the page and try again.",
 };
 
 export default ns;

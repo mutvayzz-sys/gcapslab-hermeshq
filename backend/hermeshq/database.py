@@ -42,7 +42,7 @@ async def init_database() -> None:
 
     def _run_alembic_upgrade() -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
+            [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "heads"],
             capture_output=True,
             text=True,
         )
