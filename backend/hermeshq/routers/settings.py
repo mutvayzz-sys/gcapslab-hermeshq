@@ -16,6 +16,7 @@ from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
+from hermeshq.services.audit import record_audit, extract_ip
 from hermeshq.schemas.settings import (
     AppSettingsRead,
     AppSettingsUpdate,
@@ -165,7 +166,7 @@ async def get_public_settings(
 async def update_settings(
     request: Request,
     payload: AppSettingsUpdate,
-    _: User = Depends(require_admin),
+    admin_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AppSettingsRead:
     if payload.default_hermes_version == "bundled":
@@ -177,8 +178,22 @@ async def update_settings(
                 detail=f"Hermes version '{payload.default_hermes_version}' is not installed",
             )
     item = await _get_or_create_settings(db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    old_snapshot = {k: getattr(item, k, None) for k in changes}
+    for field, value in changes.items():
         setattr(item, field, value)
+    await record_audit(
+        db,
+        action="settings.update",
+        target_type="settings",
+        target_id="default",
+        actor_id=admin_user.id,
+        actor_username=admin_user.username,
+        actor_role=admin_user.role,
+        ip_address=extract_ip(request),
+        old_value=old_snapshot,
+        new_value=changes,
+    )
     await db.commit()
     await db.refresh(item)
     return _settings_to_read(item)

@@ -36,6 +36,7 @@ from hermeshq.routers.agents_shared import (
 from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug, slugify_agent_value
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
 from hermeshq.models.activity import ActivityLog
+from hermeshq.services.audit import record_audit, extract_ip
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ async def list_agents(
 async def create_agent(
     payload: AgentCreate,
     request: Request,
-    _: User = Depends(require_admin),
+    admin_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     from hermeshq.models.node import Node
@@ -160,6 +161,18 @@ async def create_agent(
         agent.name,
         payload.system_prompt,
         payload.soul_md,
+    )
+    await record_audit(
+        db,
+        action="agent.create",
+        target_type="agent",
+        target_id=agent.id,
+        target_name=agent.name,
+        actor_id=admin_user.id,
+        actor_username=admin_user.username,
+        actor_role=admin_user.role,
+        ip_address=extract_ip(request),
+        new_value={"name": agent.name, "slug": agent.slug, "provider": agent.provider, "model": agent.model},
     )
     await db.commit()
     await db.refresh(agent)
@@ -296,6 +309,19 @@ async def update_agent(
             agent.system_prompt,
             agent.soul_md,
         )
+    await record_audit(
+        db,
+        action="agent.update",
+        target_type="agent",
+        target_id=agent_id,
+        target_name=agent.name,
+        actor_id=current_user.id,
+        actor_username=current_user.username,
+        actor_role=current_user.role,
+        ip_address=extract_ip(request),
+        old_value={k: getattr(agent, k, None) for k in update_data} if update_data else None,
+        new_value=update_data if update_data else None,
+    )
     await db.commit()
     await request.app.state.installation_manager.sync_agent_installation(agent)
     if should_reset_session:
@@ -403,6 +429,20 @@ async def delete_agent(
             message=f"{agent.name} archived",
             details={"archived_by": current_user.username},
         )
+    )
+    is_permanent = agent.is_archived
+    action_label = "agent.permanent_delete" if is_permanent else "agent.archive"
+    await record_audit(
+        db,
+        action=action_label,
+        target_type="agent",
+        target_id=agent.id,
+        target_name=agent.name,
+        actor_id=current_user.id,
+        actor_username=current_user.username,
+        actor_role=current_user.role,
+        ip_address=extract_ip(request),
+        details={"archive_reason": agent.archive_reason} if not is_permanent else None,
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

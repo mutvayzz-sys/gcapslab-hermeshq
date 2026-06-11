@@ -184,6 +184,23 @@ export function useBulkAgentMessage() {
   });
 }
 
+export function useBulkAgentConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      agent_ids: string[];
+      [key: string]: unknown;
+    }) => {
+      const { data } = await apiClient.post<BulkAgentOperationResult>("/agents/bulk/config", payload);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useUploadAgentAvatar() {
   const queryClient = useQueryClient();
   return useMutation({

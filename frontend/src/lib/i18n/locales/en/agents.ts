@@ -43,6 +43,15 @@ const ns: Record<string, string> = {
   "agents.deleteFailed": "Archive request failed. Reload the page and try again.",
   "agents.permanentDeleteConfirm": "Permanently delete \"{name}\"? All data will be removed and this cannot be undone.",
   "agents.permanentDeleteFailed": "Delete failed. Reload the page and try again.",
+  "agents.updateConfig": "Update config",
+  "agents.bulkConfigLabel": "Bulk config",
+  "agents.bulkConfigCopy": "Leave fields empty to keep current values. Only filled fields will be applied to selected agents.",
+  "agents.bulkConfigLeaveEmpty": "Leave empty to keep current value",
+  "agents.bulkConfigNoChange": "— no change —",
+  "agents.runMode": "Run mode",
+  "agents.bulkConfigSubmitted": "Configuration updated for {submitted} agents. Skipped: {skipped}.",
+  "agents.bulkConfigFailed": "Bulk config update failed.",
+  "agents.bulkConfigNoFields": "Please fill at least one field to update.",
 };
 
 export default ns;

@@ -1,6 +1,7 @@
 import account from "./account";
 import agent from "./agent";
 import agents from "./agents";
+import audit from "./audit";
 import common from "./common";
 import comms from "./comms";
 import dashboard from "./dashboard";
@@ -20,6 +21,7 @@ const en: Record<string, string> = {
   ...account,
   ...agent,
   ...agents,
+  ...audit,
   ...common,
   ...comms,
   ...dashboard,

@@ -26,6 +26,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ManualPage } from "./pages/ManualPage";
 import { MyAccountPage } from "./pages/MyAccountPage";
 import { NodesPage } from "./pages/NodesPage";
+import { AuditPage } from "./pages/AuditPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ScheduledTasksPage } from "./pages/ScheduledTasksPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="/nodes" element={<NodesPage />} />
             <Route path="/comms" element={<CommsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/audit" element={<AuditPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

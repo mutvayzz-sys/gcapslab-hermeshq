@@ -68,6 +68,7 @@ export function AppShell() {
         { to: "/nodes", label: "Nodes", icon: nodosIcon },
         { to: "/comms", label: "Comms", icon: commsIcon },
         { to: "/settings", label: "Settings", icon: configuracionIcon },
+        { to: "/audit", label: "Audit", icon: configuracionIcon },
       ]
     : [
         { to: "/", label: "Overview", icon: resumenIcon },

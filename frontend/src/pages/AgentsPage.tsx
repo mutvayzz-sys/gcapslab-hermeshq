@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAgentAction, useAgents, useBulkAgentMessage, useBulkAgentTask, useCreateAgent, useDeleteAgent } from "../api/agents";
+import { useAgentAction, useAgents, useBulkAgentConfig, useBulkAgentMessage, useBulkAgentTask, useCreateAgent, useDeleteAgent } from "../api/agents";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { useHermesVersions } from "../api/hermesVersions";
 import { useNodes } from "../api/nodes";
@@ -33,7 +33,7 @@ const emptyForm = {
   system_prompt: "",
 };
 
-type BulkDialogMode = "task" | "message" | null;
+type BulkDialogMode = "task" | "message" | "config" | null;
 
 function slugify(value: string) {
   return value
@@ -90,6 +90,7 @@ export function AgentsPage() {
   const restartAgent = useAgentAction("restart");
   const bulkTask = useBulkAgentTask();
   const bulkMessage = useBulkAgentMessage();
+  const bulkConfig = useBulkAgentConfig();
 
   const [form, setForm] = useState(emptyForm);
   const [nameTouched, setNameTouched] = useState(false);
@@ -103,6 +104,11 @@ export function AgentsPage() {
   const [bulkTaskAutoStart, setBulkTaskAutoStart] = useState(true);
   const [bulkMessageText, setBulkMessageText] = useState("");
   const [bulkMessageAutoStart, setBulkMessageAutoStart] = useState(true);
+  const [bulkConfigModel, setBulkConfigModel] = useState("");
+  const [bulkConfigProvider, setBulkConfigProvider] = useState("");
+  const [bulkConfigSystemPrompt, setBulkConfigSystemPrompt] = useState("");
+  const [bulkConfigRunMode, setBulkConfigRunMode] = useState("");
+  const [bulkConfigRuntimeProfile, setBulkConfigRuntimeProfile] = useState("");
 
   const activeNodeId = useMemo(() => nodes?.[0]?.id ?? "", [nodes]);
   const enabledProviders = useMemo(
@@ -277,6 +283,40 @@ export function AgentsPage() {
       setBulkMessageAutoStart(true);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : t("agents.bulkMessageFailed"));
+    }
+  }
+
+  async function submitBulkConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload: { agent_ids: string[]; [key: string]: unknown } = {
+      agent_ids: selectedAgents.map((agent) => agent.id),
+    };
+    if (bulkConfigModel) payload.model = bulkConfigModel;
+    if (bulkConfigProvider) payload.provider = bulkConfigProvider;
+    if (bulkConfigSystemPrompt) payload.system_prompt = bulkConfigSystemPrompt;
+    if (bulkConfigRunMode) payload.run_mode = bulkConfigRunMode;
+    if (bulkConfigRuntimeProfile) payload.runtime_profile = bulkConfigRuntimeProfile;
+    if (Object.keys(payload).length <= 1) {
+      window.alert(t("agents.bulkConfigNoFields"));
+      return;
+    }
+    try {
+      const result = await bulkConfig.mutateAsync(payload);
+      window.alert(
+        t("agents.bulkConfigSubmitted", {
+          submitted: result.submitted,
+          skipped: result.skipped,
+        }),
+      );
+      setSelectedAgentIds([]);
+      setBulkDialogMode(null);
+      setBulkConfigModel("");
+      setBulkConfigProvider("");
+      setBulkConfigSystemPrompt("");
+      setBulkConfigRunMode("");
+      setBulkConfigRuntimeProfile("");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : t("agents.bulkConfigFailed"));
     }
   }
 
@@ -631,6 +671,13 @@ export function AgentsPage() {
             </button>
             <button
               type="button"
+              className="panel-button-secondary"
+              onClick={() => setBulkDialogMode("config")}
+            >
+              {t("agents.updateConfig")}
+            </button>
+            <button
+              type="button"
               className="panel-button-primary"
               onClick={() => setBulkDialogMode("task")}
             >
@@ -785,7 +832,7 @@ export function AgentsPage() {
                   </button>
                 </div>
               </form>
-            ) : (
+            ) : bulkDialogMode === "message" ? (
               <form className="space-y-5" onSubmit={submitBulkMessage}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -823,7 +870,79 @@ export function AgentsPage() {
                   </button>
                 </div>
               </form>
-            )}
+            ) : bulkDialogMode === "config" ? (
+              <form className="space-y-5" onSubmit={submitBulkConfig}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="panel-label">{t("agents.bulkConfigLabel")}</p>
+                    <h2 className="mt-2 text-2xl text-[var(--text-display)]">{t("agents.updateConfig")}</h2>
+                  </div>
+                  <button type="button" className="panel-button-secondary" onClick={closeBulkDialog}>
+                    {t("common.no")}
+                  </button>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">{t("agents.bulkConfigCopy")}</p>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agents.model")}</span>
+                  <input
+                    value={bulkConfigModel}
+                    onChange={(event) => setBulkConfigModel(event.target.value)}
+                    placeholder={t("agents.bulkConfigLeaveEmpty")}
+                  />
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agents.provider")}</span>
+                  <input
+                    value={bulkConfigProvider}
+                    onChange={(event) => setBulkConfigProvider(event.target.value)}
+                    placeholder={t("agents.bulkConfigLeaveEmpty")}
+                  />
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agents.systemPrompt")}</span>
+                  <textarea
+                    rows={3}
+                    value={bulkConfigSystemPrompt}
+                    onChange={(event) => setBulkConfigSystemPrompt(event.target.value)}
+                    placeholder={t("agents.bulkConfigLeaveEmpty")}
+                  />
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agents.runMode")}</span>
+                  <select value={bulkConfigRunMode} onChange={(event) => setBulkConfigRunMode(event.target.value)}>
+                    <option value="">{t("agents.bulkConfigNoChange")}</option>
+                    <option value="headless">Headless</option>
+                    <option value="interactive">Interactive</option>
+                    <option value="hybrid">Hybrid</option>
+                  </select>
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("agents.runtimeProfile")}</span>
+                  <select value={bulkConfigRuntimeProfile} onChange={(event) => setBulkConfigRuntimeProfile(event.target.value)}>
+                    <option value="">{t("agents.bulkConfigNoChange")}</option>
+                    {(runtimeProfiles ?? []).map((profile) => (
+                      <option key={profile.slug} value={profile.slug}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                  <p className="panel-label">{t("agents.bulkTargets")}</p>
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                    {selectedAgents.map((agent) => agent.friendly_name || agent.name).join(", ")}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button type="button" className="panel-button-secondary" onClick={closeBulkDialog}>
+                    {t("agents.cancelBulk")}
+                  </button>
+                  <button type="submit" className="panel-button-primary" disabled={bulkConfig.isPending}>
+                    {bulkConfig.isPending ? t("common.loading") : t("agents.updateConfig")}
+                  </button>
+                </div>
+              </form>
+            ) : null}
           </div>
         </div>
       ) : null}

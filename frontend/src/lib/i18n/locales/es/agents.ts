@@ -43,6 +43,15 @@ const ns: Record<string, string> = {
   "agents.deleteFailed": "El archivado falló. Recarga la página e inténtalo otra vez.",
   "agents.permanentDeleteConfirm": "¿Eliminar permanentemente \"{name}\"? Se borrarán todos los datos y esta acción no se puede deshacer.",
   "agents.permanentDeleteFailed": "La eliminación falló. Recarga la página e inténtalo otra vez.",
+  "agents.updateConfig": "Actualizar config",
+  "agents.bulkConfigLabel": "Config masiva",
+  "agents.bulkConfigCopy": "Deja los campos vacíos para mantener los valores actuales. Solo los campos rellenos se aplicarán a los agentes seleccionados.",
+  "agents.bulkConfigLeaveEmpty": "Dejar vacío para mantener valor actual",
+  "agents.bulkConfigNoChange": "— sin cambio —",
+  "agents.runMode": "Modo de ejecución",
+  "agents.bulkConfigSubmitted": "Configuración actualizada para {submitted} agentes. Omitidos: {skipped}.",
+  "agents.bulkConfigFailed": "Falló la actualización masiva de configuración.",
+  "agents.bulkConfigNoFields": "Rellena al menos un campo para actualizar.",
 };
 
 export default ns;

@@ -145,6 +145,29 @@ class AgentRead(ORMModel):
     node: NodeRead | None = None
 
 
+class AgentBulkConfigUpdate(BaseModel):
+    agent_ids: list[str] = Field(default_factory=list)
+    model: str | None = None
+    use_provider_default: bool | None = None
+    provider: str | None = None
+    api_key_ref: str | None = None
+    base_url: str | None = None
+    system_prompt: str | None = None
+    run_mode: str | None = None
+    runtime_profile: str | None = None
+    hermes_version: str | None = None
+    approval_mode: str | None = None
+    tool_progress_mode: str | None = None
+    gateway_notifications_mode: str | None = None
+    team_tags: list[str] | None = None
+    enabled_toolsets: list[str] | None = None
+    disabled_toolsets: list[str] | None = None
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_api_key_ref: str | None = None
+    fallback_base_url: str | None = None
+
+
 class AgentBulkTaskCreate(BaseModel):
     agent_ids: list[str] = Field(default_factory=list)
     title: str
