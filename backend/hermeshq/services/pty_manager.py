@@ -21,6 +21,7 @@ MULTISPACE_RE = re.compile(r"\s+")
 BORDER_CHARS = set("─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃")
 BRAILLE_BLOCK_START = 0x2800
 BRAILLE_BLOCK_END = 0x28FF
+MAX_SCROLLBACK_BYTES = 131072  # 128 KB
 
 
 @dataclass
@@ -39,6 +40,7 @@ class PTYSession:
     reader_task: asyncio.Task | None = None
     input_buffer: str = ""
     output_buffer: str = ""
+    scrollback_raw: bytes = field(default_factory=bytes)
 
 
 class PTYManager:
@@ -77,6 +79,11 @@ class PTYManager:
                 env={**os.environ, "TERM": "xterm-256color", **(env or {})},
                 close_fds=True,
             )
+            # Close the parent's copy of slave_fd after forking. Without this,
+            # os.read(master_fd) never returns EOF when the child exits because
+            # the parent still holds an open fd pointing to the slave end.
+            with contextlib.suppress(OSError):
+                os.close(slave_fd)
             session = PTYSession(
                 session_id=str(uuid4()),
                 agent_id=agent_id,
@@ -142,6 +149,9 @@ class PTYManager:
         await websocket.send_json(
             {"type": "connected", "cols": session.cols, "rows": session.rows, "mode": session.mode}
         )
+        if session.scrollback_raw:
+            scrollback_b64 = base64.b64encode(session.scrollback_raw).decode("utf-8")
+            await websocket.send_json({"type": "output", "data": scrollback_b64})
 
     async def detach(self, session: PTYSession, websocket: WebSocket) -> None:
         session.connections.discard(websocket)
@@ -184,6 +194,10 @@ class PTYManager:
                     break
                 if not output:
                     break
+                combined = session.scrollback_raw + output
+                if len(combined) > MAX_SCROLLBACK_BYTES:
+                    combined = combined[-MAX_SCROLLBACK_BYTES:]
+                session.scrollback_raw = combined
                 payload = base64.b64encode(output).decode("utf-8")
                 stale: list[WebSocket] = []
                 for connection in list(session.connections):
@@ -196,6 +210,11 @@ class PTYManager:
                 await self._capture_output(session, output)
         except asyncio.CancelledError:
             return
+        # Process exited — notify all connected clients so the frontend can
+        # update the status indicator instead of staying stuck on [LIVE].
+        for connection in list(session.connections):
+            with contextlib.suppress(Exception):
+                await connection.send_json({"type": "exit"})
 
     async def _capture_input(self, session: PTYSession, data: bytes) -> None:
         text = ANSI_ESCAPE_RE.sub("", data.decode("utf-8", errors="ignore"))
