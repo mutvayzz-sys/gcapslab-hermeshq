@@ -14,6 +14,7 @@ export function ProvidersTab() {
     name: string;
     base_url: string;
     default_model: string;
+    available_models: string;
     enabled: boolean;
   }>>({});
 
@@ -26,6 +27,7 @@ export function ProvidersTab() {
             name: provider.name,
             base_url: provider.base_url ?? "",
             default_model: provider.default_model ?? "",
+            available_models: (provider.available_models ?? []).join("\n"),
             enabled: provider.enabled,
           },
         ]),
@@ -44,6 +46,10 @@ export function ProvidersTab() {
         name: draft.name,
         base_url: draft.base_url || null,
         default_model: draft.default_model || null,
+        available_models: draft.available_models
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
         enabled: draft.enabled,
       },
     });
@@ -126,6 +132,20 @@ export function ProvidersTab() {
                       setProviderDrafts((current) => ({
                         ...current,
                         [provider.slug]: { ...current[provider.slug], default_model: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="panel-field">
+                  <span className="panel-label">{t("providers.availableModels")}</span>
+                  <textarea
+                    className="min-h-[5rem] font-mono text-sm"
+                    value={draft.available_models}
+                    placeholder="model-1&#10;model-2&#10;model-3"
+                    onChange={(event) =>
+                      setProviderDrafts((current) => ({
+                        ...current,
+                        [provider.slug]: { ...current[provider.slug], available_models: event.target.value },
                       }))
                     }
                   />

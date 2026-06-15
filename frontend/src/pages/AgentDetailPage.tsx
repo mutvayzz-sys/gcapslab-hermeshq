@@ -1101,14 +1101,20 @@ export function AgentDetailPage() {
                             {isAdmin ? (
                               (() => {
                                 const agentProvider = providers?.find((p) => p.slug === agent?.provider);
-                                const models = agentProvider?.available_models;
-                                if (models && models.length > 0) {
+                                // Merge available_models with default_model (deduped) so that
+                                // newly-changed default models appear in the dropdown even if
+                                // they aren't in available_models yet.
+                                const providerModels = [
+                                  ...(agentProvider?.default_model ? [agentProvider.default_model] : []),
+                                  ...(agentProvider?.available_models ?? []),
+                                ].filter((v, i, a) => a.indexOf(v) === i);
+                                if (providerModels.length > 0) {
                                   return (
                                     <select
                                       value={customModelDraft}
                                       onChange={(event) => setCustomModelDraft(event.target.value)}
                                     >
-                                      {models.map((m) => (
+                                      {providerModels.map((m) => (
                                         <option key={m} value={m}>{m}</option>
                                       ))}
                                     </select>
