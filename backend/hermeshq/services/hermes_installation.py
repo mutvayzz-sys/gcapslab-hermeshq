@@ -1074,8 +1074,8 @@ class HermesInstallationManager:
                 managed["TEAMS_REQUIRE_MENTION"] = "true" if channel.require_mention else "false"
                 continue
 
+        enabled_integrations = await self._load_enabled_integration_slugs()
         for slug, config in (agent.integration_configs or {}).items():
-            enabled_integrations = await self._load_enabled_integration_slugs()
             integration = get_managed_integration(str(slug), enabled_integrations)
             if not integration:
                 continue

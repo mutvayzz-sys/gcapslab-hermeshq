@@ -78,13 +78,17 @@ def _check_login_rate(ip: str) -> None:
     now = time.time()
     attempts = _login_attempts.get(ip, [])
     # Prune expired attempts
-    _login_attempts[ip] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
-    if len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS:
+    recent = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    if recent:
+        _login_attempts[ip] = recent
+    elif ip in _login_attempts:
+        # Clean up empty entries to prevent unbounded memory growth
+        del _login_attempts[ip]
+    if len(_login_attempts.get(ip, [])) >= _LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please try again later.",
         )
-
 
 def _record_login_attempt(ip: str) -> None:
     """Record a failed login attempt for rate limiting."""
@@ -696,6 +700,13 @@ async def verify_mfa(
             detail="No pending verification code. Please request a new one.",
         )
 
+    # Reject if any pending code has been locked out due to too many failed attempts
+    if any(mc.failed_attempts >= MFA_CODE_MAX_ATTEMPTS for mc in mfa_codes):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed verification attempts. Please request a new code.",
+        )
+
     # Check all pending codes (user might have requested resend)
     matched_code = None
     for mc in mfa_codes:
@@ -717,6 +728,19 @@ async def verify_mfa(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Verification code has expired. Please request a new one.",
                 )
+        # Increment failed attempts on all pending codes to prevent brute-force
+        for mc in mfa_codes:
+            mc.failed_attempts += 1
+        await db.commit()
+        # Lock out if any code has exceeded max attempts
+        if any(mc.failed_attempts >= MFA_CODE_MAX_ATTEMPTS for mc in mfa_codes):
+            for mc in mfa_codes:
+                mc.used_at = now
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed verification attempts. Please request a new code.",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid verification code.",

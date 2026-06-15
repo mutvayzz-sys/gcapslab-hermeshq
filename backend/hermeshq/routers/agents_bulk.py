@@ -212,6 +212,15 @@ async def bulk_config_update(
             except HTTPException:
                 skipped_agents.append(AgentBulkOperationSkipped(agent_id=agent.id, reason="no access"))
                 continue
+            # Enforce field-level authorization — same check as single-agent update
+            from hermeshq.routers.agents_shared import USER_EDITABLE_FIELDS
+            restricted_fields = sorted(set(update_data) - USER_EDITABLE_FIELDS)
+            if restricted_fields:
+                skipped_agents.append(AgentBulkOperationSkipped(
+                    agent_id=agent.id,
+                    reason=f"restricted fields: {', '.join(restricted_fields)}",
+                ))
+                continue
 
         runtime_profile_changed = "runtime_profile" in update_data
 

@@ -434,15 +434,19 @@ class GatewayProcessManager:
         log_path = self.gateway_log_path(agent.workspace_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("a", encoding="utf-8")
-        process = subprocess.Popen(
-            [runtime_selection.hermes_bin, "gateway", "run", "--replace"],
-            cwd=str(workspace_path),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            close_fds=True,
-        )
+        try:
+            process = subprocess.Popen(
+                [runtime_selection.hermes_bin, "gateway", "run", "--replace"],
+                cwd=str(workspace_path),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+            )
+        except Exception:
+            log_handle.close()
+            raise
         handle = GatewayProcessHandle(
             agent_id=agent.id,
             process=process,
