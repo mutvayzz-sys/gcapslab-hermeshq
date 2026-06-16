@@ -101,6 +101,9 @@ class PTYManager:
             # the parent still holds an open fd pointing to the slave end.
             with contextlib.suppress(OSError):
                 os.close(slave_fd)
+            # Mark as -1 so destroy_session does not try to close a stale fd
+            # that the OS may have already reused for another resource.
+            slave_fd = -1
             session = PTYSession(
                 session_id=str(uuid4()),
                 agent_id=agent_id,
@@ -141,8 +144,9 @@ class PTYManager:
             session.process.terminate()
         with contextlib.suppress(OSError):
             os.close(session.master_fd)
-        with contextlib.suppress(OSError):
-            os.close(session.slave_fd)
+        if session.slave_fd >= 0:
+            with contextlib.suppress(OSError):
+                os.close(session.slave_fd)
         if session.reader_task:
             session.reader_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, OSError, RuntimeError):
