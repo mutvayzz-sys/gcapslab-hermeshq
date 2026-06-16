@@ -22,53 +22,42 @@
     <h1>Política de Privacidad de SixAgentic</h1>
     <p class="last-updated">Última actualización: 16 de junio de 2026</p>
 
-    <p>Esta política describe cómo SixAgentic ("nosotros", "nuestro" o "la aplicación") recopila, usa y protege la información que usted proporciona al usar nuestra aplicación móvil.</p>
+    <p>SixAgentic es una aplicación cliente móvil que permite a los usuarios acceder a su propia implementación de HermesHQ. SixAgentic no es un servicio en la nube ni un proveedor de servicios; es exclusivamente una interfaz que se conecta al servidor que el usuario o su organización configuran y controlan.</p>
 
-    <h2>1. Información que recopilamos</h2>
-    <p><strong>Cuenta de usuario:</strong> Cuando crea una cuenta, recopilamos su nombre de usuario, correo electrónico y contraseña (encriptada).</p>
-    <p><strong>Contenido del chat:</strong> Los mensajes de texto, imágenes, audio, video y archivos que usted envía a los agentes de IA a través de la aplicación.</p>
-    <p><strong>Metadatos:</strong> Marcas de tiempo, identificadores de tareas y estado de los mensajes enviados.</p>
-    <p><strong>Información del dispositivo:</strong> Tipo de dispositivo, sistema operativo y versión para fines de compatibilidad y diagnóstico.</p>
+    <h2>1. SixAgentic no recopila ni almacena datos</h2>
+    <p>SixAgentic no opera servidores propios, no recopila, no almacena y no tiene acceso a ningún dato del usuario. Toda la información &mdash; incluyendo credenciales, mensajes, archivos, y cualquier contenido intercambiado con los agentes de IA &mdash; se transmite directamente entre la aplicación y el servidor de HermesHQ que el usuario ha configurado. SixAgentic actúa únicamente como un cliente de conexión.</p>
 
-    <h2>2. Cómo usamos la información</h2>
+    <h2>2. Autenticación y credenciales</h2>
+    <p>Las credenciales de acceso (usuario y contraseña) se envían exclusivamente al servidor HermesHQ configurado por el usuario. SixAgentic almacena el token de autenticación de forma segura en el dispositivo utilizando los mecanismos nativos del sistema operativo (Keychain en iOS, EncryptedSharedPreferences en Android) para mantener la sesión activa. Este token nunca se envía a servidores distintos al que el usuario configuró.</p>
+
+    <h2>3. Configuración del servidor</h3>
+    <p>Al instalar SixAgentic, el usuario especifica la URL del servidor HermesHQ al cual conectarse. SixAgentic no incluye ningún servidor predefinido ni realiza conexiones a servicios de terceros para el procesamiento de datos.</p>
+
+    <h2>4. Comunicaciones</h2>
+    <p>Toda la comunicación entre la aplicación y el servidor HermesHQ del usuario se realiza a través de conexiones cifradas (HTTPS/TLS). SixAgentic no intercepta, almacena ni retransmite los datos a través de servicios intermedios.</p>
+
+    <h2>5. Datos almacenados en el dispositivo</h2>
+    <p>La aplicación almacena localmente en el dispositivo:</p>
     <ul>
-        <li>Proporcionar y mantener el servicio de chat con agentes de IA</li>
-        <li>Autenticar su identidad y gestionar su sesión</li>
-        <li>Procesar las solicitudes que envía a los agentes de IA</li>
-        <li>Mostrar el historial de conversaciones</li>
-        <li>Mejorar el rendimiento y la estabilidad de la aplicación</li>
+        <li>La URL del servidor configurada por el usuario</li>
+        <li>El token de autenticación (de forma segura)</li>
+        <li>El historial de conversaciones en caché para visualización offline</li>
     </ul>
+    <p>Estos datos se eliminan completamente cuando el usuario desinstala la aplicación. Ninguno de estos datos se envía a servidores externos.</p>
 
-    <h2>3. Compartir información</h2>
-    <p>No vendemos ni alquilamos su información. Compartimos datos únicamente con:</p>
-    <ul>
-        <li><strong>Proveedores de infraestructura:</strong> Servidores en la nube que alojan el servicio (por ejemplo, para el procesamiento de tareas de IA).</li>
-        <li><strong>Cumplimiento legal:</strong> Cuando sea requerido por ley o autoridades competentes.</li>
-    </ul>
+    <h2>6. Privacidad de los datos en HermesHQ</h2>
+    <p>Dado que SixAgentic es solo un cliente, la privacidad y el manejo de los datos enviados a través de la aplicación están determinados por las políticas de privacidad de la implementación de HermesHQ que cada usuario ha desplegado. Le recomendamos consultar la política de privacidad de su organización o de su instancia de HermesHQ.</p>
 
-    <h2>4. Seguridad de los datos</h2>
-    <p>Toda la comunicación entre la aplicación y nuestros servidores se realiza a través de conexiones cifradas (HTTPS/TLS). Las contraseñas se almacenan utilizando técnicas de hash criptográfico. El token de autenticación se almacena de forma segura en el dispositivo.</p>
+    <h2>7. Datos analíticos o de telemetría</h2>
+    <p>SixAgentic no recopila datos analíticos, de telemetría ni de seguimiento. No integramos SDKs de análisis de terceros ni herramientas de seguimiento de comportamiento.</p>
 
-    <h2>5. Retención de datos</h2>
-    <p>Conservamos sus datos de conversación mientras su cuenta esté activa. Puede solicitar la eliminación de su cuenta y todos sus datos asociados enviando un correo a privacy@sixmanager.io.</p>
-
-    <h2>6. Privacidad de menores</h2>
+    <h2>8. Privacidad de menores</h2>
     <p>La aplicación no está dirigida a menores de 13 años. No recopilamos deliberadamente información de menores.</p>
 
-    <h2>7. Sus derechos</h2>
-    <p>Usted tiene derecho a:</p>
-    <ul>
-        <li>Acceder a los datos que tenemos sobre usted</li>
-        <li>Solicitar la corrección de datos inexactos</li>
-        <li>Solicitar la eliminación de su cuenta y sus datos</li>
-        <li>Solicitar la exportación de sus datos</li>
-    </ul>
-    <p>Para ejercer estos derechos, contacte a privacy@sixmanager.io.</p>
+    <h2>9. Cambios a esta política</h2>
+    <p>Podemos actualizar esta política de privacidad periódicamente. Los cambios se publicarán en esta página.</p>
 
-    <h2>8. Cambios a esta política</h2>
-    <p>Podemos actualizar esta política de privacidad periódicamente. Le notificaremos sobre cambios significativos a través de la aplicación o por correo electrónico.</p>
-
-    <h2>9. Contacto</h2>
+    <h2>10. Contacto</h2>
     <p>Si tiene preguntas sobre esta política de privacidad, contacte a:</p>
     <p>Email: privacy@sixmanager.io</p>
 
