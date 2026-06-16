@@ -45,11 +45,10 @@ class EventBroker:
 
     async def publish(self, event: dict) -> None:
         # Notify internal subscribers first (gateways, services, etc.)
-        internal_tasks = []
-        for callback in list(self._internal_subscribers):
-            internal_tasks.append(callback(event))
+        snapshot = list(self._internal_subscribers)
+        internal_tasks = [callback(event) for callback in snapshot]
         results = await asyncio.gather(*internal_tasks, return_exceptions=True)
-        for callback, result in zip(self._internal_subscribers, results):
+        for callback, result in zip(snapshot, results):
             if isinstance(result, Exception):
                 logger.exception("Internal subscriber %s failed", getattr(callback, "__qualname__", callback))
 
