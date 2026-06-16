@@ -434,15 +434,19 @@ class GatewayProcessManager:
         log_path = self.gateway_log_path(agent.workspace_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("a", encoding="utf-8")
-        process = subprocess.Popen(
-            [runtime_selection.hermes_bin, "gateway", "run", "--replace"],
-            cwd=str(workspace_path),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            close_fds=True,
-        )
+        try:
+            process = subprocess.Popen(
+                [runtime_selection.hermes_bin, "gateway", "run", "--replace"],
+                cwd=str(workspace_path),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+            )
+        except Exception:
+            log_handle.close()
+            raise
         handle = GatewayProcessHandle(
             agent_id=agent.id,
             process=process,
@@ -511,10 +515,18 @@ class GatewayProcessManager:
         raise ValueError(f"Gateway exited during startup with code {return_code}")
 
     async def _terminate_handle(self, handle: GatewayProcessHandle) -> None:
+        # Cancel and await all background tasks to prevent fire-and-forget
+        # that could lead to double-close of log_handle or use-after-free.
+        tasks_to_await: list[asyncio.Task] = []
         if handle.monitor_task:
             handle.monitor_task.cancel()
+            tasks_to_await.append(handle.monitor_task)
         for task in handle.activity_tasks.values():
             task.cancel()
+            tasks_to_await.append(task)
+        # Wait for all tasks to actually finish (suppressing CancelledError)
+        if tasks_to_await:
+            await asyncio.gather(*tasks_to_await, return_exceptions=True)
         if handle.process.poll() is None:
             handle.process.terminate()
             try:

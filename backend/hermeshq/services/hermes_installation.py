@@ -16,6 +16,7 @@ from hermeshq.core.security import create_agent_service_token
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.messaging_channel import MessagingChannel
+from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.secret import Secret
 from hermeshq.services.agent_hierarchy import delegate_route, route_label
 from hermeshq.services.managed_capabilities import (
@@ -144,7 +145,10 @@ class HermesInstallationManager:
         self._sync_whatsapp_bridge_assets(hermes_home)
         # Pre-resolve auxiliary API keys for config.yaml (sync method can't do async)
         resolved_aux_api_keys = await self._resolve_auxiliary_api_keys(agent)
-        self._write_config(agent, hermes_home, system_prompt, messaging_channels, active_skin, runtime_selection, resolved_aux_api_keys)
+        # Resolve effective model: when use_provider_default=True, use the provider's
+        # current default_model from DB instead of the snapshot taken at creation time.
+        effective_model = await self._resolve_effective_model(agent)
+        self._write_config(agent, hermes_home, system_prompt, messaging_channels, active_skin, runtime_selection, resolved_aux_api_keys, effective_model)
         self._write_soul(agent, hermes_home, app_name)
         await self._sync_auth_store(agent, hermes_home)
         await self._sync_dotenv(agent, hermes_home, messaging_channels)
@@ -407,6 +411,7 @@ class HermesInstallationManager:
         active_skin: str | None,
         runtime_selection: HermesRuntimeSelection,
         resolved_aux_api_keys: dict[str, str] | None = None,
+        effective_model: str | None = None,
     ) -> None:
         profile = get_runtime_profile(agent.runtime_profile)
         telegram_channel = next((item for item in messaging_channels if item.platform == "telegram"), None)
@@ -417,7 +422,7 @@ class HermesInstallationManager:
         effective_base_url = self._effective_provider_base_url(agent)
         config = {
             "model": {
-                "default": agent.model,
+                "default": effective_model or agent.model,
                 "provider": model_provider,
                 "base_url": effective_base_url,
             },
@@ -445,7 +450,7 @@ class HermesInstallationManager:
                     "name": self._CUSTOM_OPENAI_PROVIDER_NAME,
                     "base_url": effective_base_url,
                     "key_env": "OPENAI_API_KEY",
-                    "default_model": agent.model,
+                    "default_model": effective_model or agent.model,
                 }
             }
         if active_skin:
@@ -571,6 +576,24 @@ class HermesInstallationManager:
                 config["plugins"] = {"enabled": plugins_to_enable}
         config_path = hermes_home / "config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        # config.yaml may contain API keys — protect with owner-only permissions
+        _protect_file(config_path)
+
+    async def _resolve_effective_model(self, agent: Agent) -> str | None:
+        """Resolve the effective model for the agent.
+
+        When use_provider_default=True, look up the provider's current
+        default_model from the DB so that changes to provider.default_model
+        propagate to existing agents.  When use_provider_default=False or the
+        provider has no default_model, fall back to agent.model.
+        """
+        if not agent.use_provider_default:
+            return agent.model
+        async with self.session_factory() as session:
+            provider = await session.get(ProviderDefinition, agent.provider)
+            if provider and provider.default_model:
+                return provider.default_model
+        return agent.model
 
     async def _resolve_auxiliary_api_keys(self, agent: Agent) -> dict[str, str]:
         """Pre-resolve auxiliary API keys so _write_config can include them in config.yaml."""
@@ -1074,8 +1097,8 @@ class HermesInstallationManager:
                 managed["TEAMS_REQUIRE_MENTION"] = "true" if channel.require_mention else "false"
                 continue
 
+        enabled_integrations = await self._load_enabled_integration_slugs()
         for slug, config in (agent.integration_configs or {}).items():
-            enabled_integrations = await self._load_enabled_integration_slugs()
             integration = get_managed_integration(str(slug), enabled_integrations)
             if not integration:
                 continue

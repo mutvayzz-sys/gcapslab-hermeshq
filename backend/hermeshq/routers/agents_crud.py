@@ -220,10 +220,12 @@ async def update_agent(
         if restricted_fields:
             raise HTTPException(
                 status_code=403,
-                detail=f"Users cannot modify: {', '.join(restricted_fields)}",
+                detail="You don't have permission to modify some of the selected fields.",
             )
     if "supervisor_agent_id" in update_data:
         await _validate_supervisor(db, agent_id, update_data.get("supervisor_agent_id"))
+    # Capture old values BEFORE any mutation for audit trail
+    old_snapshot = {k: getattr(agent, k, None) for k in update_data} if update_data else None
     runtime_profile_changed = "runtime_profile" in update_data
     hermes_version_changed = "hermes_version" in update_data
     if hermes_version_changed:
@@ -319,7 +321,7 @@ async def update_agent(
         actor_username=current_user.username,
         actor_role=current_user.role,
         ip_address=extract_ip(request),
-        old_value={k: getattr(agent, k, None) for k in update_data} if update_data else None,
+        old_value=old_snapshot,
         new_value=update_data if update_data else None,
     )
     await db.commit()

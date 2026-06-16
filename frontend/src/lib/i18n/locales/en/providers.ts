@@ -9,6 +9,7 @@ const ns: Record<string, string> = {
   "providers.genericSecret": "Generic / untagged",
   "providers.providerName": "Provider name",
   "providers.defaultModel": "Default model",
+  "providers.availableModels": "Available models (one per line)",
   "providers.authType": "Auth type",
   "providers.secretUsage": "Secret ref",
   "providers.secretSupported": "supported",

@@ -14,9 +14,22 @@ from uuid import uuid4
 
 from fastapi import WebSocket
 
+# Sensitive env var prefixes to strip from PTY sessions so terminal users
+# cannot access infrastructure credentials (DATABASE_URL, JWT_SECRET, etc.)
+_PTY_SENSITIVE_PREFIXES = (
+    "AWS_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
+    "KUBECONFIG", "DOCKER_", "GITHUB_TOKEN", "GITLAB_TOKEN",
+    "HEROKU_API_KEY", "STRIPE_", "TWILIO_", "SENDGRID_",
+    "DATABASE_URL", "REDIS_URL", "RABBITMQ_", "KAFKA_",
+    "LDAP_", "VAULT_TOKEN", "VAULT_ADDR",
+    "HERMESHQ_", "JWT_SECRET", "FERNET_KEY",
+    "ADMIN_PASSWORD", "OIDC_CLIENT_SECRET",
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+)
+
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 REDRAW_NOISE_RE = re.compile(r"^\d{1,3}s?$")
-BORDER_STRIP_RE = re.compile(r"^[\\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+|[\\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+$")
+BORDER_STRIP_RE = re.compile(r"^[\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+|[\s─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃]+$")
 MULTISPACE_RE = re.compile(r"\s+")
 BORDER_CHARS = set("─│╭╮╰╯═║╔╗╚╝┌┐└┘━┃")
 BRAILLE_BLOCK_START = 0x2800
@@ -76,7 +89,11 @@ class PTYManager:
                 stdout=slave_fd,
                 stderr=slave_fd,
                 cwd=cwd,
-                env={**os.environ, "TERM": "xterm-256color", **(env or {})},
+                env={
+                    **{k: v for k, v in os.environ.items() if not k.upper().startswith(_PTY_SENSITIVE_PREFIXES)},
+                    "TERM": "xterm-256color",
+                    **(env or {}),
+                },
                 close_fds=True,
             )
             # Close the parent's copy of slave_fd after forking. Without this,
