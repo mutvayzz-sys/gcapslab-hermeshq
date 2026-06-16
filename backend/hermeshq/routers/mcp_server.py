@@ -436,7 +436,7 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
 
 async def _list_resources(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Return static resources available to this token."""
-    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or []) + 1))
     resources: list[dict] = []
     for agent in agents:
         label = _agent_label(agent)
@@ -589,7 +589,7 @@ _BUILTIN_PROMPTS: list[dict] = [
 
 
 async def _list_prompts(db: AsyncSession, access: McpAccessToken) -> list[dict]:
-    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or []) + 1))
     prompts = list(_BUILTIN_PROMPTS)
     for agent in agents:
         label = _agent_label(agent)
