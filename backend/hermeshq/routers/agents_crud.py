@@ -418,6 +418,7 @@ async def delete_agent(
         .values(enabled=False)
     )
 
+    was_already_archived = agent.is_archived
     agent.status = "stopped"
     agent.is_archived = True
     agent.archived_at = datetime.now(timezone.utc)
@@ -432,8 +433,7 @@ async def delete_agent(
             details={"archived_by": current_user.username},
         )
     )
-    is_permanent = agent.is_archived
-    action_label = "agent.permanent_delete" if is_permanent else "agent.archive"
+    action_label = "agent.permanent_delete" if was_already_archived else "agent.archive"
     await record_audit(
         db,
         action=action_label,
@@ -444,7 +444,7 @@ async def delete_agent(
         actor_username=current_user.username,
         actor_role=current_user.role,
         ip_address=extract_ip(request),
-        details={"archive_reason": agent.archive_reason} if not is_permanent else None,
+        details={"archive_reason": agent.archive_reason} if not was_already_archived else None,
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
