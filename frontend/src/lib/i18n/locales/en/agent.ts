@@ -302,6 +302,7 @@ const ns: Record<string, string> = {
   "agent.auxiliaryTask.compression": "Context Compression",
   "agent.auxiliaryTask.web_extract": "Web Extraction",
   "agent.auxiliaryTask.approval": "Auto-Approval",
+  "agent.m365AgentPermissions": "Agent permissions",
 };
 
 export default ns;

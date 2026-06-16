@@ -301,6 +301,7 @@ export function TasksPage() {
                           <button
                             className="panel-button-secondary w-full"
                             onClick={() => cancelTask.mutate(task.id)}
+                            disabled={cancelTask.isPending}
                             type="button"
                           >
                             {t("tasks.cancel")}

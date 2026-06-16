@@ -753,13 +753,13 @@ export function AgentsPage() {
                 </div>
               </div>
               <div className="grid min-w-[18rem] gap-2 md:grid-cols-2">
-                <button className="panel-button-secondary w-full" onClick={() => startAgent.mutate(agent.id)} disabled={agent.is_archived}>
+                <button className="panel-button-secondary w-full" onClick={() => startAgent.mutate(agent.id)} disabled={agent.is_archived || startAgent.isPending || stopAgent.isPending || restartAgent.isPending}>
                   Start
                 </button>
-                <button className="panel-button-secondary w-full" onClick={() => stopAgent.mutate(agent.id)} disabled={agent.is_archived}>
+                <button className="panel-button-secondary w-full" onClick={() => stopAgent.mutate(agent.id)} disabled={agent.is_archived || startAgent.isPending || stopAgent.isPending || restartAgent.isPending}>
                   Stop
                 </button>
-                <button className="panel-button-secondary w-full" onClick={() => restartAgent.mutate(agent.id)} disabled={agent.is_archived}>
+                <button className="panel-button-secondary w-full" onClick={() => restartAgent.mutate(agent.id)} disabled={agent.is_archived || startAgent.isPending || stopAgent.isPending || restartAgent.isPending}>
                   Restart
                 </button>
                 {isAdmin ? (

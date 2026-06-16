@@ -726,10 +726,10 @@ export function AgentDetailPage() {
           ) : null}
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <button className="panel-button-primary" onClick={() => startAgent.mutate(agent.id)} disabled={archived}>
+            <button className="panel-button-primary" onClick={() => startAgent.mutate(agent.id)} disabled={archived || startAgent.isPending || stopAgent.isPending}>
               {t("agent.startRuntime")}
             </button>
-            <button className="panel-button-secondary" onClick={() => stopAgent.mutate(agent.id)} disabled={archived}>
+            <button className="panel-button-secondary" onClick={() => stopAgent.mutate(agent.id)} disabled={archived || startAgent.isPending || stopAgent.isPending}>
               {t("agent.stopRuntime")}
             </button>
             <Link className="panel-button-secondary" to={`/schedules?agentId=${agent.id}`}>
@@ -1679,7 +1679,7 @@ export function AgentDetailPage() {
       {!isAdmin && renderSectionShell(
         "m365-scopes",
         "Microsoft 365",
-        "Permisos de este agente",
+        t("agent.m365AgentPermissions"),
         "",
         <AgentM365ScopesPanel agentId={agent.id} />,
       )}
