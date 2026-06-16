@@ -436,7 +436,7 @@ async def _handle_get_agent_task(db: AsyncSession, access: McpAccessToken, argum
 
 async def _list_resources(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Return static resources available to this token."""
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     resources: list[dict] = []
     for agent in agents:
         label = _agent_label(agent)
@@ -589,7 +589,7 @@ _BUILTIN_PROMPTS: list[dict] = [
 
 
 async def _list_prompts(db: AsyncSession, access: McpAccessToken) -> list[dict]:
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     prompts = list(_BUILTIN_PROMPTS)
     for agent in agents:
         label = _agent_label(agent)
@@ -656,7 +656,7 @@ async def _get_prompt(db: AsyncSession, access: McpAccessToken, name: str, argum
 
 async def _per_agent_tools(db: AsyncSession, access: McpAccessToken) -> list[dict]:
     """Generate MCP tool definitions from each agent's ``mcp_servers`` config."""
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     tools: list[dict] = []
     for agent in agents:
         for srv in (agent.mcp_servers or []):
@@ -683,7 +683,7 @@ async def _handle_per_agent_tool(request: Request, db: AsyncSession, access: Mcp
     tool_name = parts[2]
 
     # Find agent by slug prefix
-    agents, _ = await _list_allowed_agents(db, access)
+    agents, _ = await _list_allowed_agents(db, access, page_size=max(50, len(access.allowed_agent_ids or [])))
     matched: Agent | None = None
     for a in agents:
         if (a.slug or a.id[:8]) == slug_or_prefix:
