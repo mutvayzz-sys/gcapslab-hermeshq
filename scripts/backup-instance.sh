@@ -48,6 +48,7 @@ BACKEND_CONTAINER_ID="$(compose ps -q backend)"
 [ -n "$BACKEND_CONTAINER_ID" ] || fail "Backend container is not running"
 
 printf 'Waiting for PostgreSQL to become healthy\n'
+STATUS="unknown"
 for _ in $(seq 1 60); do
   STATUS="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$POSTGRES_CONTAINER_ID" 2>/dev/null || true)"
   if [ "$STATUS" = "healthy" ]; then
