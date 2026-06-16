@@ -149,7 +149,7 @@ async def node_metrics(
     vm = psutil.virtual_memory()
     return {
         "node_id": node_id,
-        "cpu_percent": psutil.cpu_percent(interval=0.2),
+        "cpu_percent": await asyncio.to_thread(psutil.cpu_percent, 0.2),
         "memory_percent": vm.percent,
         "disk_percent": disk_usage.percent,
         "memory_total": vm.total,
