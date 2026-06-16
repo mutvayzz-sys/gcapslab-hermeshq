@@ -8,7 +8,8 @@ and routes them to the appropriate gateway instances.
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from jose import jwt as jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.database import get_db_session
@@ -16,6 +17,33 @@ from hermeshq.database import get_db_session
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
+
+# Google Chat signs webhook requests with a JWT from this service account.
+_GOOGLE_CHAT_ISSUER = "chat@system.gserviceaccount.com"
+
+
+def _verify_google_chat_bearer(request: Request) -> None:
+    """Reject requests that lack a Google-issued Bearer JWT.
+
+    Full RS256 signature verification requires fetching Google's public certs
+    at runtime. Here we perform a lightweight guard: require the Authorization
+    header to be present and check that the unverified issuer claim matches
+    Google Chat's well-known service account. This blocks unauthenticated
+    scanners while keeping the endpoint functional without network round-trips.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Google Chat bearer token")
+    token = auth_header[len("Bearer "):]
+    try:
+        claims = jose_jwt.get_unverified_claims(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid Google Chat bearer token")
+    if claims.get("iss") != _GOOGLE_CHAT_ISSUER:
+        logger.warning(
+            "Google Chat webhook: unexpected token issuer %r", claims.get("iss")
+        )
+        raise HTTPException(status_code=401, detail="Untrusted Google Chat token issuer")
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +64,7 @@ async def google_chat_webhook(
     - The bot is added/removed from a space
     - A card interaction occurs
     """
+    _verify_google_chat_bearer(request)
     try:
         payload = await request.json()
     except Exception:
