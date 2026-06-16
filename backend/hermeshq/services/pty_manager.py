@@ -177,7 +177,7 @@ class PTYManager:
         session = self.sessions.get(agent_id)
         if not session:
             return
-        os.write(session.master_fd, data)
+        await asyncio.to_thread(os.write, session.master_fd, data)
         await self._capture_input(session, data)
 
     async def resize(self, agent_id: str, cols: int, rows: int) -> None:
