@@ -244,9 +244,8 @@ async def bulk_config_update(
     if not submitted_agent_ids:
         raise HTTPException(status_code=400, detail="No valid agents were available for bulk config update")
 
-    await db.commit()
-
-    # Record audit entry for the bulk config change
+    # Record audit entry in the same transaction as the config changes so that
+    # both land atomically — a failed commit cannot leave data without an audit trail.
     await record_audit(
         db,
         action="agent.bulk_config",
