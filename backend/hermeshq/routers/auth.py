@@ -182,6 +182,16 @@ async def _send_mfa_code(
     code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
 
+    # Send email before committing so that orphan codes are not persisted
+    # if the email delivery fails.
+    email_service = get_email_service()
+    await email_service.areload_config()
+    await email_service.send_mfa_code(
+        to_email=user.email,
+        code=raw_code,
+        display_name=user.display_name,
+    )
+
     mfa_code = MfaCode(
         user_id=user.id,
         code_hash=code_hash,
@@ -190,15 +200,6 @@ async def _send_mfa_code(
     )
     db.add(mfa_code)
     await db.commit()
-
-    # Send email
-    email_service = get_email_service()
-    await email_service.areload_config()
-    await email_service.send_mfa_code(
-        to_email=user.email,
-        code=raw_code,
-        display_name=user.display_name,
-    )
 
     return raw_code
 
