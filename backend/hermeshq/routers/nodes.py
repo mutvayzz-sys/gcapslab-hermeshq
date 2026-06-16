@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import socket
 
 from fastapi import APIRouter, Depends, HTTPException
 import psutil
@@ -96,9 +96,13 @@ async def test_node(
             "hostname": node.hostname,
         }
     try:
-        with socket.create_connection((node.hostname, node.ssh_port), timeout=3):
-            pass
-    except OSError as exc:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(node.hostname, node.ssh_port),
+            timeout=3,
+        )
+        writer.close()
+        await writer.wait_closed()
+    except (asyncio.TimeoutError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"SSH connectivity test failed: {exc}") from exc
     return {
         "status": "ok",
