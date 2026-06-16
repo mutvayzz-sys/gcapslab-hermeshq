@@ -697,7 +697,7 @@ async def verify_mfa(
         select(MfaCode).where(
             MfaCode.user_id == user_id,
             MfaCode.used_at.is_(None),
-        ).order_by(MfaCode.created_at.desc())
+        ).order_by(MfaCode.created_at.desc()).with_for_update()
     )
     mfa_codes = list(result.scalars().all())
 
