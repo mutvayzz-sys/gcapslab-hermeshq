@@ -802,6 +802,7 @@ class AgentSupervisor:
                 task=task,
                 message="AI avatar applied from operator task",
             )
+            await session.commit()
 
         # Publish event so frontend refreshes
 # ---------------------------------------------------------------------------
