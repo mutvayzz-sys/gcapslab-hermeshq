@@ -337,9 +337,15 @@ async def get_channel(
     await ensure_agent_access(db, current_user, agent_id)
     if platform not in SUPPORTED_PLATFORMS:
         raise HTTPException(status_code=404, detail="Unsupported platform")
-    channel = await _get_or_create_channel(db, agent_id, platform)
-    await db.commit()
-    await db.refresh(channel)
+    result = await db.execute(
+        select(MessagingChannel).where(
+            MessagingChannel.agent_id == agent_id,
+            MessagingChannel.platform == platform,
+        )
+    )
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not configured")
     return MessagingChannelRead.model_validate(channel)
 
 
