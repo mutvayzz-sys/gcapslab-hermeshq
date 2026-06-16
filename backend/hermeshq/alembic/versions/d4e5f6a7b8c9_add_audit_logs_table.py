@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -19,6 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # The initial migration uses Base.metadata.create_all() which may have
+    # already created audit_logs if the AuditLog model was registered before
+    # this revision ran.  Skip creation when the table already exists.
+    conn = op.get_bind()
+    if "audit_logs" in inspect(conn).get_table_names():
+        return
+
     op.create_table(
         "audit_logs",
         sa.Column("id", sa.String(36), primary_key=True),
