@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 
 from hermeshq.schemas.common import ORMModel
 
-
 MCP_SCOPE_PATTERN = "^(agents:list|agents:invoke|tasks:read)$"
 
 

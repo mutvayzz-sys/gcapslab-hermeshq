@@ -4,10 +4,10 @@ These enums replace magic strings throughout the codebase and are used
 for Pydantic validation in schemas.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     """Allowed agent status values (matches ck_agents_status constraint)."""
     STOPPED = "stopped"
     RUNNING = "running"
@@ -15,14 +15,14 @@ class AgentStatus(str, Enum):
     STARTING = "starting"
 
 
-class AgentRunMode(str, Enum):
+class AgentRunMode(StrEnum):
     """Allowed agent run_mode values."""
     HEADLESS = "headless"
     INTERACTIVE = "interactive"
     HYBRID = "hybrid"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     """Allowed task status values."""
     QUEUED = "queued"
     RUNNING = "running"
@@ -31,21 +31,21 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class ApprovalMode(str, Enum):
+class ApprovalMode(StrEnum):
     """Approval mode for agent tool execution."""
     AUTO = "auto"
     MANUAL = "manual"
     SUGGEST = "suggest"
 
 
-class ToolProgressMode(str, Enum):
+class ToolProgressMode(StrEnum):
     """Tool progress display mode."""
     FULL = "full"
     MINIMAL = "minimal"
     HIDDEN = "hidden"
 
 
-class GatewayNotificationsMode(str, Enum):
+class GatewayNotificationsMode(StrEnum):
     """Gateway notification mode for agents."""
     ALL = "all"
     ERRORS = "errors"

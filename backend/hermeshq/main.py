@@ -3,9 +3,8 @@ import base64
 import contextlib
 import json
 import logging
-import sys
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,21 +17,52 @@ from hermeshq.core.events import EventBroker, EventSubscription
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
 from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
-from hermeshq.routers import agents, audit, auth, backup, comms, dashboard, hermes_versions, integration_factory, integration_packages, internal_agents, internal_control, logs, managed_integrations, mcp_access, mcp_server, messaging_channels, nodes, oidc_admin, providers, runtime_ledger, runtime_profiles, scheduled_tasks, secrets, settings as settings_router, skills, tasks, templates, terminal_sessions, users, webhooks
-from hermeshq.routers import attachments
-from hermeshq.routers import m365
+from hermeshq.routers import (
+    agents,
+    attachments,
+    audit,
+    auth,
+    backup,
+    comms,
+    dashboard,
+    hermes_versions,
+    integration_factory,
+    integration_packages,
+    internal_agents,
+    internal_control,
+    logs,
+    m365,
+    managed_integrations,
+    mcp_access,
+    mcp_server,
+    messaging_channels,
+    nodes,
+    oidc_admin,
+    providers,
+    runtime_ledger,
+    runtime_profiles,
+    scheduled_tasks,
+    secrets,
+    skills,
+    tasks,
+    templates,
+    terminal_sessions,
+    users,
+    webhooks,
+)
+from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
-from hermeshq.services.agent_identity import derive_agent_identity, slugify_agent_value
+from hermeshq.services.agent_identity import derive_agent_identity
 from hermeshq.services.agent_supervisor import AgentSupervisor
 from hermeshq.services.comms_router import CommsRouter
-from hermeshq.services.hermes_installation import HermesInstallationManager
-from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.enterprise_gateway_manager import EnterpriseGatewayManager
 from hermeshq.services.gateway_supervisor import GatewaySupervisor
+from hermeshq.services.hermes_installation import HermesInstallationManager
+from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.hermes_version_manager import HermesVersionManager
 from hermeshq.services.instance_backup import InstanceBackupService
-from hermeshq.services.pty_manager import PTYManager
 from hermeshq.services.provider_catalog import BUILTIN_PROVIDERS, normalize_runtime_provider, seed_provider_defaults
+from hermeshq.services.pty_manager import PTYManager
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug, terminal_allowed_for_profile
 from hermeshq.services.scheduler import SchedulerService
 from hermeshq.services.secret_vault import SecretVault
@@ -202,7 +232,7 @@ async def lifespan(app: FastAPI):
             agent = await session.get(Agent, agent_id)
             if not agent:
                 return
-            agent.last_activity = datetime.now(timezone.utc)
+            agent.last_activity = datetime.now(UTC)
             session_id = str(details.get("session_id") or "").strip()
             terminal_session = None
             if session_id:
@@ -216,11 +246,11 @@ async def lifespan(app: FastAPI):
                         cwd=str(details.get("cwd") or ""),
                         command_json=list(details.get("command") or []),
                         status="open",
-                        started_at=datetime.now(timezone.utc),
+                        started_at=datetime.now(UTC),
                     )
                     session.add(terminal_session)
                 elif terminal_session:
-                    terminal_session.updated_at = datetime.now(timezone.utc)
+                    terminal_session.updated_at = datetime.now(UTC)
             if terminal_session:
                 if event_type == "terminal.input":
                     terminal_session.input_transcript += f"{message}\n"
@@ -230,7 +260,7 @@ async def lifespan(app: FastAPI):
                     terminal_session.transcript_text += f"< {message}\n"
                 elif event_type == "terminal.session.closed":
                     terminal_session.status = "closed"
-                    terminal_session.ended_at = datetime.now(timezone.utc)
+                    terminal_session.ended_at = datetime.now(UTC)
                     exit_code = details.get("exit_code")
                     terminal_session.exit_code = int(exit_code) if isinstance(exit_code, int) else None
             session.add(
@@ -281,6 +311,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 # Request logging middleware (added first = executes last, so it logs the final response)
 from hermeshq.core.request_logging import RequestLoggingMiddleware
 from hermeshq.core.structured_errors import StructuredErrorMiddleware
+
 app.add_middleware(StructuredErrorMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
@@ -332,11 +363,11 @@ async def health() -> HealthResponse:
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(select(1))
-    except Exception:
+    except OSError:
         db_ok = False
     return HealthResponse(
         status="ok" if db_ok else "degraded",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         version=get_app_version(),
     )
 
@@ -356,7 +387,7 @@ async def stream(websocket: WebSocket) -> None:
             payload = json.loads(raw)
             if payload.get("type") == "auth":
                 token = payload.get("token")
-        except Exception:
+        except (TimeoutError, json.JSONDecodeError, KeyError):
             await websocket.close(code=4401)
             return
 
@@ -368,7 +399,7 @@ async def stream(websocket: WebSocket) -> None:
 
     user_id: str = claims["sub"]
     user_role: str = claims.get("role", "user")
-    user_is_admin: bool = user_role == "admin"
+    # user_is_admin derived but handled via is_admin() elsewhere
 
     # Use agent_ids from token if available (no DB needed), otherwise fall back to DB query
     token_agent_ids: list[str] | None = claims.get("agent_ids")
@@ -404,11 +435,11 @@ async def stream(websocket: WebSocket) -> None:
                 data = json.loads(msg)
                 if data.get("type") == "pong":
                     continue
-            except Exception:
+            except (json.JSONDecodeError, KeyError, TypeError):
                 logger.debug("WebSocket received non-JSON message", exc_info=True)
     except WebSocketDisconnect:
         pass
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # WebSocket lifecycle — any error closes the socket
         logger.warning("WebSocket stream unexpected error: %s", exc)
     finally:
         # Single cleanup point for all exit paths

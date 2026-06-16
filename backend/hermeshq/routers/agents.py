@@ -13,15 +13,16 @@ Shared constants and helper functions live in agents_shared.py.
 """
 
 import logging
-from hermeshq.routers.agents_crud import router as crud_router
-from hermeshq.routers.agents_runtime import router as runtime_router
-from hermeshq.routers.agents_avatar import router as avatar_router
-from hermeshq.routers.agents_workspace import router as workspace_router
-from hermeshq.routers.agents_bulk import router as bulk_router
-from hermeshq.routers.agents_template import router as template_router
-from hermeshq.routers.agents_managed import router as managed_router
 
 from fastapi import APIRouter
+
+from hermeshq.routers.agents_avatar import router as avatar_router
+from hermeshq.routers.agents_bulk import router as bulk_router
+from hermeshq.routers.agents_crud import router as crud_router
+from hermeshq.routers.agents_managed import router as managed_router
+from hermeshq.routers.agents_runtime import router as runtime_router
+from hermeshq.routers.agents_template import router as template_router
+from hermeshq.routers.agents_workspace import router as workspace_router
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agents"])

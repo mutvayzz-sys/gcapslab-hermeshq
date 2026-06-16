@@ -4,16 +4,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import create_agent_service_token
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
-from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.models.task import Task
-from hermeshq.schemas.message import MessageCreate
+from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.schemas.internal_agent import InternalDelegateRead, InternalDirectRead, InternalRosterRead
+from hermeshq.schemas.message import MessageCreate
 from hermeshq.services.agent_hierarchy import delegate_route, route_label, validate_delegate_hierarchy
 
 logger = logging.getLogger(__name__)

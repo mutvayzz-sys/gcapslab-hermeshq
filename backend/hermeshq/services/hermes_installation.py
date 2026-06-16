@@ -18,6 +18,7 @@ from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.services.agent_hierarchy import delegate_route, route_label
+from hermeshq.services.hermes_version_manager import HermesRuntimeSelection, HermesVersionManager
 from hermeshq.services.managed_capabilities import (
     fetch_local_skill_bundle,
     get_managed_integration,
@@ -27,7 +28,6 @@ from hermeshq.services.managed_capabilities import (
     list_managed_plugins,
     plugin_templates_root,
 )
-from hermeshq.services.hermes_version_manager import HermesRuntimeSelection, HermesVersionManager
 from hermeshq.services.provider_catalog import normalize_runtime_provider
 from hermeshq.services.runtime_profiles import get_runtime_profile
 from hermeshq.services.secret_vault import SecretVault
@@ -281,7 +281,7 @@ class HermesInstallationManager:
         if metadata_path.exists():
             try:
                 metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 metadata = None
 
         managed_identifier = metadata.get("identifier") if isinstance(metadata, dict) else None
@@ -321,7 +321,7 @@ class HermesInstallationManager:
         for source in sources:
             try:
                 found = source.search(query, limit=limit)
-            except Exception:
+            except Exception:  # noqa: BLE001  # skill search best-effort
                 continue
             for meta in found:
                 if meta.identifier in seen:
@@ -412,7 +412,7 @@ class HermesInstallationManager:
         telegram_channel = next((item for item in messaging_channels if item.platform == "telegram"), None)
         whatsapp_channel = next((item for item in messaging_channels if item.platform == "whatsapp"), None)
         teams_channel = next((item for item in messaging_channels if item.platform == "microsoft_teams"), None)
-        runtime_provider = normalize_runtime_provider(agent.provider)
+        _runtime_provider = normalize_runtime_provider(agent.provider)  # noqa: F841
         model_provider = self._model_provider_for_agent(agent)
         effective_base_url = self._effective_provider_base_url(agent)
         config = {
@@ -731,7 +731,7 @@ class HermesInstallationManager:
         for skill_md in sorted(skills_root.rglob("SKILL.md")):
             try:
                 content = skill_md.read_text(encoding="utf-8")
-            except Exception:
+            except OSError:
                 continue
             installed.append(
                 {
@@ -752,7 +752,7 @@ class HermesInstallationManager:
             if meta_path.exists():
                 try:
                     metadata = json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception:
+                except (json.JSONDecodeError, OSError):
                     metadata = None
                 if isinstance(metadata, dict) and metadata.get("identifier") == identifier:
                     return {
@@ -773,10 +773,7 @@ class HermesInstallationManager:
         return None
 
     def _extract_description(self, skill_md: str | bytes) -> str:
-        if isinstance(skill_md, bytes):
-            text = skill_md.decode("utf-8", errors="replace")
-        else:
-            text = skill_md
+        text = skill_md.decode("utf-8", errors="replace") if isinstance(skill_md, bytes) else skill_md
         match = self._DESC_RE.search(text)
         if match:
             return match.group(1).strip().strip("\"'")
@@ -1232,7 +1229,7 @@ class HermesInstallationManager:
                 loaded = json.loads(auth_path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
                     auth_store.update(loaded)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 logger.warning("Failed to load auth store from %s", auth_path, exc_info=True)
 
         credential_pool = auth_store.get("credential_pool")
@@ -1312,7 +1309,7 @@ class HermesInstallationManager:
             envs = getattr(pconfig, "api_key_env_vars", None) if pconfig else None
             if envs:
                 return list(envs)
-        except Exception:
+        except (KeyError, AttributeError):
             logger.debug("Provider registry env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": [],
@@ -1341,7 +1338,7 @@ class HermesInstallationManager:
             base_url_env = getattr(pconfig, "base_url_env_var", None) if pconfig else None
             if isinstance(base_url_env, str) and base_url_env.strip():
                 return base_url_env.strip()
-        except Exception:
+        except (KeyError, AttributeError):
             logger.debug("Provider base_url_env lookup failed for '%s'; using fallback", provider, exc_info=True)
         fallback = {
             "bedrock": "BEDROCK_BASE_URL",

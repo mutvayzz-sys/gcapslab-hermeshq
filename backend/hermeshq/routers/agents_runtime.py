@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,8 @@ from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentModeUpdate, AgentRead
-
 from hermeshq.routers.agents_shared import _serialize_agent
+from hermeshq.schemas.agent import AgentModeUpdate, AgentRead
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])

@@ -306,7 +306,7 @@ def _read_yaml(path: Path) -> dict:
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         return loaded if isinstance(loaded, dict) else {}
-    except Exception:
+    except (yaml.YAMLError, OSError):
         return {}
 
 

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import require_admin
 from hermeshq.database import get_db_session
+from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.secret import Secret
 from hermeshq.models.user import User
+from hermeshq.routers.agents_shared import _load_enabled_integration_slugs
 from hermeshq.schemas.managed_integration import (
     ManagedIntegrationActionRequest,
     ManagedIntegrationActionResult,
@@ -20,9 +23,6 @@ from hermeshq.schemas.managed_integration import (
 )
 from hermeshq.services.managed_integration_actions import ManagedIntegrationActionError, run_managed_integration_action
 from hermeshq.services.managed_integration_health import ManagedIntegrationTestError, test_managed_integration
-
-from hermeshq.routers.agents_shared import _load_enabled_integration_slugs
-from hermeshq.models.activity import ActivityLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])

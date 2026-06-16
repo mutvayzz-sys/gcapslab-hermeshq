@@ -125,7 +125,7 @@ def main() -> int:
             }
         )
         return 0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # CLI top-level catch-all for error reporting
         _emit(
             {
                 "event": "error",

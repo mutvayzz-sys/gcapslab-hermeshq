@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import UTC
 from typing import Any
 
 from sqlalchemy import func, select
@@ -135,9 +136,9 @@ class McpAnalytics:
         hours: int = 24,
     ) -> dict[str, Any]:
         """Query ActivityLog for MCP events in the last N hours."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        since = datetime.now(UTC) - timedelta(hours=hours)
 
         # Total MCP events
         total_q = await db.execute(

@@ -1,6 +1,6 @@
-import contextlib
 import asyncio
 import base64
+import contextlib
 import fcntl
 import os
 import pty
@@ -180,7 +180,7 @@ class PTYManager:
         for connection in list(session.connections):
             try:
                 await connection.send_json({"type": "output", "data": payload})
-            except Exception:
+            except Exception:  # noqa: BLE001  # WebSocket send — stale connection
                 stale.append(connection)
         for connection in stale:
             session.connections.discard(connection)
@@ -203,7 +203,7 @@ class PTYManager:
                 for connection in list(session.connections):
                     try:
                         await connection.send_json({"type": "output", "data": payload})
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # WebSocket send — stale connection
                         stale.append(connection)
                 for connection in stale:
                     session.connections.discard(connection)
@@ -295,9 +295,7 @@ class PTYManager:
             return True
         if len(compact) <= 2 and not any(char.isalpha() for char in compact):
             return True
-        if all(self._is_braille_or_space(char) for char in compact):
-            return True
-        return False
+        return bool(all(self._is_braille_or_space(char) for char in compact))
 
     def _normalize_output_line(self, text: str) -> str:
         without_braille = "".join("" if self._is_braille_or_space(char) and not char.isspace() else char for char in text)

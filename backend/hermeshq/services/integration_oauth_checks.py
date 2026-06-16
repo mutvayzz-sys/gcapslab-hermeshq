@@ -5,7 +5,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Iterable
+from collections.abc import Iterable
 
 
 async def resolve_secret_value(resolve_secret, secret_ref: str) -> str | None:
@@ -155,7 +155,7 @@ def _decode_http_error(exc: urllib.error.HTTPError) -> dict:
     body = exc.read().decode("utf-8", errors="replace").strip()
     try:
         parsed = json.loads(body) if body else {}
-    except Exception:
+    except json.JSONDecodeError:
         parsed = {"raw": body} if body else {}
     return {
         "status_code": exc.code,

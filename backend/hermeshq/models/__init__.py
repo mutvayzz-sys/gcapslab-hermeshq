@@ -1,8 +1,8 @@
-from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.activity import ActivityLog
-from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.agent_assignment import AgentAssignment
+from hermeshq.models.app_settings import AppSettings
+from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.base import Base
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.hermes_version import HermesVersion
@@ -40,6 +40,7 @@ __all__ = [
     "MessagingChannel",
     "Node",
     "OidcProvider",
+    "PasswordResetToken",
     "ProviderDefinition",
     "ScheduledTask",
     "Secret",

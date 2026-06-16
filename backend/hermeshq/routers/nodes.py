@@ -1,8 +1,8 @@
 import logging
 import socket
 
-from fastapi import APIRouter, Depends, HTTPException
 import psutil
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

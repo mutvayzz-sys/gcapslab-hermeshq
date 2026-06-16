@@ -17,7 +17,6 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -151,7 +150,7 @@ async def kapso_mark_read(
         resp = await client.post(url, json=body, headers=headers, timeout=15)
         resp.raise_for_status()
         return resp.json()
-    except Exception:
+    except (httpx.HTTPError, ValueError):
         logger.debug("Failed to mark message %s as read", message_id, exc_info=True)
         return None
 
@@ -349,7 +348,7 @@ class KapsoWhatsAppGateway:
 
     async def _validate_connectivity(self) -> None:
         """Validate that the API key works by checking phone numbers."""
-        url = f"https://api.kapso.ai/platform/v1/whatsapp/phone_numbers"
+        url = "https://api.kapso.ai/platform/v1/whatsapp/phone_numbers"
         headers = {"X-API-Key": self._api_key}
         try:
             client = _get_http_client()
@@ -448,10 +447,7 @@ class KapsoWhatsAppGateway:
             # For media messages, include caption or type info
             media_data = message.get(msg_type, {})
             caption = media_data.get("caption", "")
-            if caption:
-                text_content = f"[{msg_type}] {caption}"
-            else:
-                text_content = f"[{msg_type}]"
+            text_content = f"[{msg_type}] {caption}" if caption else f"[{msg_type}]"
 
         if not text_content.strip():
             return
@@ -477,7 +473,7 @@ class KapsoWhatsAppGateway:
             matched = False
             for allowed_id in allowed:
                 normalized = allowed_id.lstrip("+").strip()
-                if normalized == sender_phone or normalized == sender_wa_id:
+                if normalized in (sender_phone, sender_wa_id):
                     matched = True
                     break
                 # Also check username
@@ -497,7 +493,7 @@ class KapsoWhatsAppGateway:
                             sender_wa_id,
                             "👋 Hi! You are not authorized to use this bot.",
                         )
-                    except Exception:
+                    except (httpx.HTTPError, RuntimeError):
                         logger.exception("Failed to send unauthorized reply")
                 return
 
@@ -626,7 +622,7 @@ class KapsoWhatsAppGateway:
                     text=response_text,
                 )
                 logger.info("Kapso WhatsApp reply sent for task %s", task_id)
-            except Exception:
+            except (httpx.HTTPError, RuntimeError):
                 logger.exception(
                     "Failed to send Kapso WhatsApp reply for task %s", task_id
                 )
@@ -672,7 +668,7 @@ async def handle_kapso_webhook(
         if gateway._phone_number_id == phone_number_id:
             try:
                 await gateway.handle_webhook_event(event_type, payload)
-            except Exception:
+            except Exception:  # noqa: BLE001  # gateway webhook handler — catch all
                 logger.exception(
                     "Kapso gateway error for agent %s", agent_id
                 )

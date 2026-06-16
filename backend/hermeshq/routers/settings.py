@@ -16,7 +16,6 @@ from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.user import User
-from hermeshq.services.audit import record_audit, extract_ip
 from hermeshq.schemas.settings import (
     AppSettingsRead,
     AppSettingsUpdate,
@@ -27,6 +26,7 @@ from hermeshq.schemas.settings import (
     SemaphoreUpdateRequest,
     SemaphoreUpdateResponse,
 )
+from hermeshq.services.audit import extract_ip, record_audit
 from hermeshq.services.resource_monitor import resource_monitor
 from hermeshq.versioning import get_app_version
 
@@ -257,7 +257,7 @@ async def upload_tui_skin(
         raise HTTPException(status_code=400, detail="TUI skin exceeds 256 KB limit")
     try:
         parsed = yaml.safe_load(content.decode("utf-8"))
-    except Exception as exc:
+    except yaml.YAMLError as exc:
         raise HTTPException(status_code=400, detail="Invalid YAML skin file") from exc
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=400, detail="Skin YAML must define a mapping object")
@@ -371,20 +371,20 @@ async def get_resource_status(
     limits = resource_monitor.get_container_limits()
     usage = resource_monitor.get_container_usage()
     system = resource_monitor.get_system_resources()
-    
+
     # Get active task count from app state
-    import asyncio
     active_count = 0
     try:
+        from sqlalchemy import func, select
+
         from hermeshq.database import AsyncSessionLocal
         from hermeshq.models.task import Task
-        from sqlalchemy import select, func
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(func.count()).where(Task.status == "running")
             )
             active_count = result.scalar() or 0
-    except Exception:
+    except Exception:  # noqa: BLE001  # DB query best-effort for status
         logger.warning("Failed to count running tasks for resource status", exc_info=True)
 
     semaphore_info = resource_monitor.get_semaphore_info(active_count)
@@ -422,7 +422,7 @@ async def update_semaphore(
     lines: list[str] = []
     found = False
     if env_path.exists():
-        async with aiofiles.open(env_path, "r") as f:
+        async with aiofiles.open(env_path) as f:
             text = await f.read()
         for line in text.splitlines():
             if line.strip().startswith("CONCURRENCY_SEMAPHORE="):
@@ -446,7 +446,7 @@ async def update_semaphore(
         from hermeshq.services.agent_supervisor import get_supervisor
         supervisor = get_supervisor()
         supervisor.update_semaphore(payload.semaphore)
-    except Exception:
+    except Exception:  # noqa: BLE001  # supervisor update best-effort
         pass
 
     logging.getLogger(__name__).info(

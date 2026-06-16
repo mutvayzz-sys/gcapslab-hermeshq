@@ -1,7 +1,8 @@
+import asyncio
+import contextlib
+import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-import asyncio
-import logging
 
 from fastapi import WebSocket
 
@@ -38,10 +39,8 @@ class EventBroker:
 
     def unsubscribe(self, callback: Callable) -> None:
         """Remove a previously registered internal callback."""
-        try:
+        with contextlib.suppress(ValueError):
             self._internal_subscribers.remove(callback)
-        except ValueError:
-            pass
 
     async def publish(self, event: dict) -> None:
         # Notify internal subscribers first (gateways, services, etc.)
@@ -49,7 +48,7 @@ class EventBroker:
         for callback in list(self._internal_subscribers):
             internal_tasks.append(callback(event))
         results = await asyncio.gather(*internal_tasks, return_exceptions=True)
-        for callback, result in zip(self._internal_subscribers, results):
+        for callback, result in zip(self._internal_subscribers, results, strict=False):
             if isinstance(result, Exception):
                 logger.exception("Internal subscriber %s failed", getattr(callback, "__qualname__", callback))
 
@@ -65,7 +64,7 @@ class EventBroker:
         for connection, task in send_tasks:
             try:
                 await task
-            except Exception:
+            except Exception:  # noqa: BLE001  # WebSocket send — connection is stale
                 stale_connections.append(connection)
         for connection in stale_connections:
             self.disconnect(connection)

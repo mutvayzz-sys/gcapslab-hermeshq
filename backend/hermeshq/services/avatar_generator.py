@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import struct
-from pathlib import Path
 
 # Try to import Pillow; fall back to SVG if unavailable
 try:
@@ -58,38 +57,38 @@ def _lerp_color(c1: tuple[int,int,int], c2: tuple[int,int,int], t: float) -> tup
 
 def generate_avatar_png(name: str, size: int = 256) -> bytes:
     """Generate a deterministic avatar PNG for the given name.
-    
+
     Returns PNG bytes with a diagonal gradient background and white initials.
     """
     palette = _PALETTES[_palette_index(name)]
     ini = _initials(name)
-    
+
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
+
     # Draw diagonal gradient
     for y in range(size):
         t = y / size
         color = _lerp_color(palette[0], palette[1], t)
         draw.line([(0, y), (size, y)], fill=(*color, 255))
-    
+
     # Draw initials text centered
     font_size = int(size * 0.42)
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-    except (OSError, IOError):
+    except OSError:
         try:
             font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
-        except (OSError, IOError):
+        except OSError:
             font = ImageFont.load_default()
-    
+
     bbox = draw.textbbox((0, 0), ini, font=font)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
     x = (size - text_w) / 2
     y = (size - text_h) / 2 - bbox[1]
     draw.text((x, y), ini, fill=(255, 255, 255, 255), font=font)
-    
+
     from io import BytesIO
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -102,9 +101,9 @@ def generate_avatar_svg(name: str, size: int = 256) -> str:
     ini = _initials(name)
     c1 = palette[0]
     c2 = palette[1]
-    
+
     font_size = int(size * 0.42)
-    
+
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
@@ -113,15 +112,15 @@ def generate_avatar_svg(name: str, size: int = 256) -> str:
     </linearGradient>
   </defs>
   <rect width="{size}" height="{size}" rx="{size//2}" fill="url(#bg)"/>
-  <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle" 
-        font-family="system-ui, -apple-system, sans-serif" 
+  <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
         font-weight="700" font-size="{font_size}" fill="white" letter-spacing="0.04em">{ini}</text>
 </svg>'''
 
 
 def generate_avatar(name: str, size: int = 256) -> tuple[bytes, str]:
     """Generate avatar and return (content_bytes, filename).
-    
+
     Returns PNG if Pillow is available, SVG otherwise.
     """
     if HAS_PIL:

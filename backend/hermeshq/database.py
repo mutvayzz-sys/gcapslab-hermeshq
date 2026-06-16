@@ -1,7 +1,6 @@
 import logging
-import subprocess
-import sys
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -32,26 +31,21 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_database() -> None:
     """Run Alembic migrations to bring the database schema up to date.
 
-    Legacy inline schema updates (_run_schema_updates) were removed in
-    v2026.5.22.1.  All schema changes are now managed exclusively through
-    Alembic migrations in ``hermeshq/alembic/versions/``.
+    Uses subprocess to run Alembic, which avoids event-loop conflicts
+    between Alembic's async env.py and the running FastAPI event loop.
+    Fixed: uses 'head' (singular) instead of 'heads' to avoid issues
+    with multiple migration heads.
     """
-    import asyncio
+    import subprocess
+    import sys
 
-    loop = asyncio.get_running_loop()
-
-    def _run_alembic_upgrade() -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "heads"],
-            capture_output=True,
-            text=True,
-        )
-        if result.stdout:
-            for line in result.stdout.strip().splitlines():
-                logger.info("[alembic] %s", line)
-        if result.returncode != 0:
-            logger.error("[alembic] %s", result.stderr)
-            raise RuntimeError(f"Alembic upgrade failed: {result.stderr}")
-
-    await loop.run_in_executor(None, _run_alembic_upgrade)
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    if result.returncode != 0:
+        logger.error("Alembic migration failed:\n%s", result.stderr)
+        raise RuntimeError(f"Alembic migration failed: {result.stderr}")
     logger.info("Alembic migrations applied successfully")

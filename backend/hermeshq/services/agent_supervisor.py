@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import traceback
-from typing import Any
 
-from telegram import Bot
+import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from telegram import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,8 @@ class _StreamBuffer:
         """Cancel the periodic flush and drain remaining deltas."""
         if self._flush_task is not None:
             self._flush_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
             self._flush_task = None
         # Final drain of any remaining buffered deltas.
         await self.flush()
@@ -121,7 +120,7 @@ class _StreamBuffer:
                 await asyncio.sleep(self._flush_interval)
                 try:
                     await self.flush()
-                except Exception:
+                except Exception:  # noqa: BLE001  # periodic flush — any error logged
                     logger.exception("StreamBuffer periodic flush error")
         except asyncio.CancelledError:
             return
@@ -130,12 +129,12 @@ from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
+from hermeshq.models.base import utcnow
 from hermeshq.models.message import AgentMessage
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.node import Node
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
-from hermeshq.models.base import utcnow
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.secret_vault import SecretVault
 from hermeshq.services.task_board import sync_board_with_runtime
@@ -477,7 +476,7 @@ class AgentSupervisor:
                     )
                 await session.commit()
             await self.event_broker.publish({"type": "task.cancelled", "task_id": task_id})
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # task cancellation catch-all
             async with self.session_factory() as session:
                 task = await session.get(Task, task_id)
                 agent = await session.get(Agent, task.agent_id) if task else None
@@ -701,7 +700,7 @@ class AgentSupervisor:
                 bot = Bot(token=token)
                 await bot.send_message(chat_id=chat_id, text=message_text, message_thread_id=thread_value)
                 await bot.shutdown()
-            except Exception:
+            except (httpx.HTTPError, RuntimeError):
                 logger.warning("Failed to send Telegram notification to chat %s", chat_id, exc_info=True)
 
         self._pending_callbacks.append(_after_commit)
@@ -739,7 +738,7 @@ class AgentSupervisor:
                     target_agent_id = metadata.get("target_agent_id")
                     if target_agent_id:
                         await self._apply_avatar_generation(session, task, target_agent_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # post-task hook best-effort
             import logging
             logging.getLogger(__name__).warning("Post-task hook failed for %s: %s", task_id, exc)
 
@@ -755,8 +754,9 @@ class AgentSupervisor:
         writing directly to the database or filesystem.
         """
         from pathlib import Path
+
         from hermeshq.config import get_settings
-        from hermeshq.services.avatar import save_avatar_bytes, AVATAR_MEDIA_TYPES
+        from hermeshq.services.avatar import AVATAR_MEDIA_TYPES, save_avatar_bytes
 
         settings = get_settings()
 
@@ -808,7 +808,7 @@ class AgentSupervisor:
 # Module-level helper to get the running supervisor from the FastAPI app.
 # ---------------------------------------------------------------------------
 
-def get_supervisor() -> "AgentSupervisor":
+def get_supervisor() -> AgentSupervisor:
     """Return the AgentSupervisor attached to the running FastAPI app state."""
     # Lazy import to avoid circular dependency at module level.
     from hermeshq.main import app  # noqa: WPS433

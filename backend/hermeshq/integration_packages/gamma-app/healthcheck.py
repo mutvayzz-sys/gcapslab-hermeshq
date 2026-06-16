@@ -38,5 +38,5 @@ async def test_connection(config: dict, resolve_secret):
         payload = response.json() if response.text else {}
         themes = payload.get("data") or payload.get("themes") or []
         return True, "Gamma API connection succeeded.", {"theme_count_sample": len(themes), "base_url": _base_url(config)}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # healthcheck catch-all
         return False, f"Gamma API connection failed: {exc}", {"base_url": _base_url(config)}

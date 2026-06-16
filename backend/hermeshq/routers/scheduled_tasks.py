@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
 from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/scheduled-tasks", tags=["scheduled-tasks"])
 
 
 def _compute_next_run(expression: str) -> datetime:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if len(expression.split()) == 6:
         return croniter(expression, now, second_at_beginning=True).get_next(datetime)
     return croniter(expression, now).get_next(datetime)

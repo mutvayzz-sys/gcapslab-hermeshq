@@ -84,7 +84,7 @@ class ResourceMonitor:
         process = psutil.Process()
         try:
             cpu_pct = process.cpu_percent(interval=0.1)
-        except Exception:
+        except (psutil.Error, OSError):
             cpu_pct = 0.0
 
         return {

@@ -1,9 +1,9 @@
 """OIDC service — handles multi-provider OIDC flows with discovery caching."""
 
 import logging
-import time
 import secrets
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -86,11 +86,12 @@ async def get_provider_by_slug(db: AsyncSession, slug: str) -> OidcProvider | No
 # ---------------------------------------------------------------------------
 def create_oidc_state(provider_slug: str, jwt_secret: str) -> str:
     """Create a signed state token that includes the provider slug."""
-    import json, base64
+    import base64
+    import json
     payload = {
         "provider": provider_slug,
         "nonce": secrets.token_urlsafe(16),
-        "exp": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+        "exp": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
     }
     raw = json.dumps(payload).encode()
     sig = jwt.encode({"data": base64.b64encode(raw).decode()}, jwt_secret, algorithm="HS256")
@@ -101,10 +102,11 @@ def verify_oidc_state(state: str, jwt_secret: str) -> dict | None:
     """Verify state token and return the payload dict (with 'provider')."""
     try:
         decoded = jwt.decode(state, jwt_secret, algorithms=["HS256"])
-        import base64, json
+        import base64
+        import json
         raw = base64.b64decode(decoded["data"])
         return json.loads(raw)
-    except Exception:
+    except (jwt.JWTError, KeyError, ValueError, TypeError):
         logger.warning("Invalid OIDC state token", exc_info=True)
         return None
 
@@ -188,7 +190,7 @@ async def exchange_code_and_get_claims(
                 userinfo = ui_resp.json()
                 logger.debug("OIDC userinfo keys: %s", list(userinfo.keys()))
                 claims = {**claims, **userinfo}
-            except Exception as exc:
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
                 logger.warning("Failed to fetch OIDC userinfo from %s: %s", provider.slug, exc, exc_info=True)
         else:
             logger.debug("OIDC skipping userinfo: endpoint=%s, token=%s", bool(userinfo_endpoint), bool(access_token))
@@ -208,7 +210,7 @@ async def _validate_id_token(id_token: str, provider: OidcProvider, discovery: d
         logger.warning("No jwks_uri in discovery for %s; skipping validation", provider.slug)
         try:
             return jwt.decode(id_token, options={"verify_signature": False})
-        except Exception:
+        except jwt.JWTError:
             return {}
 
     keys = await _fetch_jwks(jwks_uri)
@@ -228,7 +230,7 @@ async def _validate_id_token(id_token: str, provider: OidcProvider, discovery: d
             )
         except jwt.ExpiredSignatureError:
             raise
-        except Exception:
+        except (jwt.JWTError, jwt.InvalidTokenError):
             continue
     logger.warning("Could not validate id_token for provider %s", provider.slug)
     return {}

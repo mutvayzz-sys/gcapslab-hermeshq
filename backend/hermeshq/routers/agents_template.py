@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,16 +11,14 @@ from sqlalchemy.orm import selectinload
 
 from hermeshq.core.security import require_admin
 from hermeshq.database import get_db_session
+from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.node import Node
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.template import AgentTemplate
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentCreate, AgentRead
-
 from hermeshq.routers.agents_shared import (
-    _apply_agent_runtime_behavior_settings,
     _apply_runtime_profile_defaults,
     _load_enabled_integration_slugs,
     _normalize_integration_configs,
@@ -29,9 +28,9 @@ from hermeshq.routers.agents_shared import (
     _validate_hermes_version,
     _validate_supervisor,
 )
+from hermeshq.schemas.agent import AgentCreate, AgentRead
 from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
-from hermeshq.models.activity import ActivityLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])

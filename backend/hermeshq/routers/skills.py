@@ -1,13 +1,13 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
-from hermeshq.models.agent import Agent
 from hermeshq.models.user import User
-from hermeshq.services.hermes_installation import HermesInstallationError
 from hermeshq.schemas.skill import AgentSkillsRead, SkillCatalogRead
+from hermeshq.services.hermes_installation import HermesInstallationError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/skills", tags=["skills"])

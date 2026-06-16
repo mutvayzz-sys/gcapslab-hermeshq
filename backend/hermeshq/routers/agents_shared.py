@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import HTTPException, Request
 from sqlalchemy import false, select
@@ -16,14 +14,11 @@ from hermeshq.core.security import get_accessible_agent_ids, is_admin
 from hermeshq.models.agent import Agent
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.conversation_thread import ConversationThread
-from hermeshq.models.node import Node
-from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.task import Task
 from hermeshq.schemas.agent import AgentCreate, AgentRead
-from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug, slugify_agent_value
 from hermeshq.services.avatar import build_avatar_path as _build_avatar_path_shared
 from hermeshq.services.managed_capabilities import get_managed_integration, list_available_integration_packages
-from hermeshq.services.runtime_profiles import get_runtime_profile, normalize_runtime_profile_slug
+from hermeshq.services.runtime_profiles import get_runtime_profile
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 from hermeshq.services.workspace_manager import WorkspaceManager
 
@@ -141,7 +136,6 @@ async def _load_bulk_agents(
     current_user,
     agent_ids: list[str],
 ) -> list[Agent]:
-    from hermeshq.models.user import User  # avoid circular-ish import at module level is fine
     ordered_ids = list(dict.fromkeys(str(agent_id).strip() for agent_id in agent_ids if str(agent_id).strip()))
     if not ordered_ids:
         raise HTTPException(status_code=400, detail="Select at least one agent")

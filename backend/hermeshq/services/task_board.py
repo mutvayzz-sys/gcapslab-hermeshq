@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import update
 
@@ -18,7 +18,7 @@ KANBAN_COLUMNS = (
 
 
 def next_board_order() -> int:
-    return int(datetime.now(timezone.utc).timestamp() * 1000)
+    return int(datetime.now(UTC).timestamp() * 1000)
 
 
 def is_valid_board_column(value: str | None) -> bool:

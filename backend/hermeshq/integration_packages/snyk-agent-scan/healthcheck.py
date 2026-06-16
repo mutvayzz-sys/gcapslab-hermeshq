@@ -21,7 +21,7 @@ async def test_connection(config: dict, resolve_secret):
 
     try:
         executable, version = _ensure_runner(Path(config.get("__workspaces_root") or "/tmp"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # healthcheck catch-all
         return False, f"Could not bootstrap Snyk Agent Scan: {exc}", None
 
     return True, f"Snyk Agent Scan is ready ({version}).", {"executable": str(executable), "version": version}

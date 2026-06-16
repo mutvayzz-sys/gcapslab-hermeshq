@@ -1,16 +1,23 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.core.security import can_access_agent, ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin
+from hermeshq.core.security import (
+    can_access_agent,
+    ensure_agent_access,
+    get_accessible_agent_ids,
+    get_current_user,
+    is_admin,
+)
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.message import AgentMessage
 from hermeshq.models.user import User
+from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.schemas.message import BroadcastCreate, MessageCreate, MessageRead
 from hermeshq.schemas.topology import CommsTopologyRead
-from hermeshq.routers.agents_shared import _load_agent_map
 from hermeshq.services.agent_hierarchy import validate_delegate_hierarchy
 
 logger = logging.getLogger(__name__)

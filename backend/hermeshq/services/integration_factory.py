@@ -5,7 +5,7 @@ import re
 import shutil
 import tarfile
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -233,7 +233,7 @@ def _validation_result(valid: bool, checks: list[IntegrationDraftCheckRead]) -> 
     return IntegrationDraftValidationRead(
         valid=valid,
         checks=checks,
-        validated_at=datetime.now(timezone.utc).isoformat(),
+        validated_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -242,7 +242,7 @@ def _validation_from_record(value: dict | None) -> IntegrationDraftValidationRea
         return None
     try:
         return IntegrationDraftValidationRead.model_validate(value)
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -283,7 +283,7 @@ def _read_yaml(path: Path) -> dict:
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         return loaded if isinstance(loaded, dict) else {}
-    except Exception:
+    except (yaml.YAMLError, OSError):
         return {}
 
 
@@ -415,7 +415,7 @@ def {tool_slug}_tool(args, **_kwargs):
             "path": path,
             "body": body,
         }})
-    except Exception as exc:
+    except requests.RequestException as exc:
         return json.dumps({{"success": False, "error": str(exc), "path": path}})
 
 
@@ -475,7 +475,7 @@ async def test_connection(config: dict, resolve_secret):
         if response.status_code >= 400:
             return False, f"API returned {{response.status_code}}.", {{"body": response.text[:4000], "base_url": _base_url(config)}}
         return True, "API connection succeeded.", {{"status_code": response.status_code, "base_url": _base_url(config)}}
-    except Exception as exc:
+    except requests.RequestException as exc:
         return False, f"API connection failed: {{exc}}", {{"base_url": _base_url(config)}}
 """
     actions = """from __future__ import annotations

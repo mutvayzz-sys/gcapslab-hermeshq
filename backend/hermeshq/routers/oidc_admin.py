@@ -1,6 +1,7 @@
 """OIDC Provider admin router — CRUD for enterprise OIDC providers."""
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

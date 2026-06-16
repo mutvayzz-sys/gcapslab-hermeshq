@@ -38,7 +38,7 @@ async def google_chat_webhook(
     """
     try:
         payload = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return {"error": "invalid payload"}
 
     gateways = getattr(request.app.state, "google_chat_gateways", {})
@@ -81,7 +81,7 @@ async def kapso_whatsapp_webhook(
 
     try:
         payload = json.loads(body)
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         logger.warning("Kapso webhook: invalid JSON payload")
         return {"error": "invalid payload"}
 

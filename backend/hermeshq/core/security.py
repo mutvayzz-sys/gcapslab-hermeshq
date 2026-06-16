@@ -1,6 +1,6 @@
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Cookie, Depends, HTTPException, Query, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
@@ -37,7 +37,7 @@ def create_access_token(
     role: str = "user",
     agent_ids: list[str] | None = None,
 ) -> tuple[str, datetime]:
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_minutes)
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.access_token_minutes)
     payload: dict = {"sub": subject, "sub_kind": subject_kind, "role": role, "exp": expires_at}
     if agent_ids is not None:
         payload["agent_ids"] = agent_ids
@@ -69,7 +69,7 @@ def decode_access_token_claims(token: str) -> dict | None:
 def create_agent_service_token(agent_id: str) -> str:
     digest = hmac.new(
         settings.jwt_secret.encode("utf-8"),
-        f"agent:{agent_id}".encode("utf-8"),
+        f"agent:{agent_id}".encode(),
         hashlib.sha256,
     )
     return digest.hexdigest()

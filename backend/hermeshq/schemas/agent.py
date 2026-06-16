@@ -1,10 +1,10 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hermeshq.models.enums import AgentStatus, AgentRunMode
+from hermeshq.models.enums import AgentRunMode, AgentStatus
 from hermeshq.schemas.common import ORMModel
-from typing import Any
 from hermeshq.schemas.node import NodeRead
 
 

@@ -33,7 +33,7 @@ def _api_request(method: str, path: str, payload: dict | None = None) -> str:
         body = exc.read().decode("utf-8", errors="replace").strip()
         try:
             parsed = json.loads(body) if body else {}
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             parsed = {}
         return json.dumps(
             {
@@ -42,7 +42,7 @@ def _api_request(method: str, path: str, payload: dict | None = None) -> str:
                 "error": parsed.get("detail") or parsed.get("error") or body or str(exc),
             }
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
         return json.dumps({"success": False, "error": str(exc)})
 
 

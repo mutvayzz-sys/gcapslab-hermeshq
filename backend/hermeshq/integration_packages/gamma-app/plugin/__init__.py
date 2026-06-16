@@ -52,7 +52,7 @@ def _request(method: str, path: str, payload: dict | None = None, query: dict | 
         raw = response.text or ""
         try:
             parsed = response.json() if raw else {}
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             parsed = {"raw": raw}
         if response.status_code >= 400:
             return json.dumps(
@@ -64,7 +64,7 @@ def _request(method: str, path: str, payload: dict | None = None, query: dict | 
                 }
             )
         return json.dumps({"success": True, "status_code": response.status_code, "data": parsed})
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
         return json.dumps({"success": False, "error": str(exc)})
 
 

@@ -1,12 +1,17 @@
-from datetime import datetime, timedelta, timezone
 import logging
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import desc, false, func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_accessible_agent_ids, get_current_user, is_admin
 from hermeshq.database import get_db_session
+from hermeshq.models.activity import ActivityLog
+from hermeshq.models.agent import Agent
+from hermeshq.models.messaging_channel import MessagingChannel
+from hermeshq.models.task import Task
+from hermeshq.models.user import User
 from hermeshq.schemas.dashboard import (
     DashboardActivityItemRead,
     DashboardAgentSummaryRead,
@@ -17,11 +22,6 @@ from hermeshq.schemas.dashboard import (
     DashboardTaskStatsRead,
     DashboardTokenStatsRead,
 )
-from hermeshq.models.activity import ActivityLog
-from hermeshq.models.agent import Agent
-from hermeshq.models.messaging_channel import MessagingChannel
-from hermeshq.models.task import Task
-from hermeshq.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -177,10 +177,7 @@ async def channels_overview(
     )
     if not is_admin(current_user):
         accessible_ids = await get_accessible_agent_ids(db, current_user)
-        if accessible_ids:
-            statement = statement.where(Agent.id.in_(accessible_ids))
-        else:
-            statement = statement.where(false())
+        statement = statement.where(Agent.id.in_(accessible_ids)) if accessible_ids else statement.where(false())
 
     rows = (await db.execute(statement)).all()
     channels: list[dict] = []
@@ -192,7 +189,7 @@ async def channels_overview(
         if paired_at_str:
             try:
                 paired_at = datetime.fromisoformat(paired_at_str)
-                days_since_paired = (datetime.now(timezone.utc) - paired_at).days
+                days_since_paired = (datetime.now(UTC) - paired_at).days
             except (ValueError, TypeError):
                 pass
         channels.append({
@@ -235,7 +232,7 @@ async def fleet_health(
     task_summary = dict(task_outcomes.all())
 
     # Recent errors (last 24h)
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    since = datetime.now(UTC) - timedelta(hours=24)
     error_rows = (await db.execute(
         select(
             ActivityLog.agent_id,
@@ -271,7 +268,7 @@ async def fleet_health(
             }
             for r in error_rows
         ],
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
     }
 
 
@@ -287,7 +284,7 @@ async def task_analytics(
 
     days = max(1, min(days, 90))  # clamp 1-90
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
 
     # --- Daily task counts by status ---
     daily_rows = (await db.execute(
@@ -373,7 +370,7 @@ async def task_analytics(
     success_rate = ((total_in_period - failed_in_period) / total_in_period * 100) if total_in_period > 0 else 100.0
 
     # --- Top failing agents (last 7 days) ---
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
     top_fail_rows = (await db.execute(
         select(
             Task.agent_id,

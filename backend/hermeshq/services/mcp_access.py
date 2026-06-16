@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -64,7 +64,7 @@ async def authenticate_mcp_token(db: AsyncSession, authorization: str | None) ->
     token_hash = hash_mcp_token(token.strip())
     result = await db.execute(select(McpAccessToken).where(McpAccessToken.token_hash == token_hash))
     access = result.scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not access or not access.is_active or (access.expires_at and access.expires_at <= now):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

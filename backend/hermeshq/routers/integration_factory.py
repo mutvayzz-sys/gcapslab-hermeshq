@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
@@ -77,7 +77,7 @@ async def create_integration_draft(
     await db.flush()
     try:
         create_draft_files(draft, payload.model_copy(update={"slug": slug}))
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()
@@ -105,7 +105,7 @@ async def update_integration_draft(
     draft = await _get_draft_or_404(db, draft_id)
     try:
         update_draft_metadata(draft, payload)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     draft.status = "draft"
     draft.last_validation = None
@@ -139,7 +139,7 @@ async def get_integration_draft_file(
         return read_draft_file(draft, path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"Draft file '{path}' was not found") from exc
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -154,7 +154,7 @@ async def put_integration_draft_file(
     draft = await _get_draft_or_404(db, draft_id)
     try:
         write_draft_file(draft, path, payload.content)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     draft.status = "draft"
     draft.last_validation = None
@@ -173,7 +173,7 @@ async def delete_integration_draft_file(
     draft = await _get_draft_or_404(db, draft_id)
     try:
         remove_draft_file(draft, path)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     draft.status = "draft"
     draft.last_validation = None
@@ -206,7 +206,7 @@ async def publish_integration_draft(
     draft = await _get_draft_or_404(db, draft_id)
     try:
         package = publish_draft_package(draft)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     settings = await db.get(AppSettings, "default")
@@ -226,7 +226,7 @@ async def publish_integration_draft(
     draft.status = "published"
     draft.published_package_slug = package["slug"]
     draft.published_package_version = str(package.get("version") or "")
-    draft.published_at = datetime.now(timezone.utc)
+    draft.published_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(draft)
     return IntegrationDraftPublishRead(

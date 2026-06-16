@@ -3,40 +3,45 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin, require_admin
+from hermeshq.core.security import (
+    ensure_agent_access,
+    get_accessible_agent_ids,
+    get_current_user,
+    is_admin,
+    require_admin,
+)
 from hermeshq.database import get_db_session
+from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.scheduled_task import ScheduledTask
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate, auxiliary_models_to_db
-
 from hermeshq.routers.agents_shared import (
     USER_EDITABLE_FIELDS,
     _active_agent_clause,
     _apply_agent_runtime_behavior_settings,
     _apply_runtime_profile_defaults,
+    _load_enabled_integration_slugs,
     _normalize_integration_configs,
     _resolve_runtime_defaults,
     _serialize_agent,
     _sync_agent_integration_toolsets,
     _validate_hermes_version,
     _validate_supervisor,
-    _load_enabled_integration_slugs,
 )
+from hermeshq.schemas.agent import AgentCreate, AgentRead, AgentUpdate, auxiliary_models_to_db
 from hermeshq.services.agent_identity import derive_agent_identity, ensure_unique_agent_slug, slugify_agent_value
+from hermeshq.services.audit import extract_ip, record_audit
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
-from hermeshq.models.activity import ActivityLog
-from hermeshq.services.audit import record_audit, extract_ip
 
 logger = logging.getLogger(__name__)
 
@@ -240,9 +245,8 @@ async def update_agent(
     if "friendly_name" in update_data and "name" not in update_data:
         if not current_name or current_name == current_friendly:
             requested_name = requested_friendly
-    if "slug" not in update_data:
-        if not current_slug or current_slug == current_derived_slug:
-            requested_slug = requested_friendly or requested_name
+    if "slug" not in update_data and (not current_slug or current_slug == current_derived_slug):
+        requested_slug = requested_friendly or requested_name
 
     resolved_friendly, resolved_name, resolved_slug = derive_agent_identity(
         friendly_name=requested_friendly,
@@ -373,10 +377,8 @@ async def delete_agent(
 
     supervisor = request.app.state.supervisor
     if agent.status == "running":
-        try:
+        with contextlib.suppress(ValueError):
             await supervisor.stop_agent(agent_id)
-        except ValueError:
-            pass
     for task_id in active_task_ids:
         await supervisor.cancel_task(task_id)
     channel_platforms = list(
@@ -418,7 +420,7 @@ async def delete_agent(
 
     agent.status = "stopped"
     agent.is_archived = True
-    agent.archived_at = datetime.now(timezone.utc)
+    agent.archived_at = datetime.now(UTC)
     agent.archive_reason = f"Archived by {current_user.username}"
     agent.last_activity = agent.archived_at
     db.add(

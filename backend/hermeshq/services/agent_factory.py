@@ -7,9 +7,7 @@ Centralises the agent-creation logic that was previously duplicated between
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from hermeshq.models.agent import Agent
 from hermeshq.models.node import Node
@@ -23,7 +21,6 @@ from hermeshq.services.managed_capabilities import (
     list_available_integration_packages,
 )
 from hermeshq.services.runtime_profiles import get_runtime_profile, normalize_runtime_profile_slug
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers (moved from agents.py)

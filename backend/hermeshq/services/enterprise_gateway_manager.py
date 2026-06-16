@@ -10,13 +10,11 @@ directly to the respective platform APIs.
 Note: Microsoft Teams is now handled natively by hermes-agent.
 """
 
-import asyncio
 import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.services.secret_vault import SecretVault
 
@@ -73,7 +71,7 @@ class EnterpriseGatewayManager:
             for platform in platforms:
                 try:
                     await self.start_gateway(agent_id, platform)
-                except Exception:
+                except Exception:  # noqa: BLE001  # gateway bootstrap per-agent
                     logger.exception(
                         "Failed to bootstrap %s gateway for agent %s",
                         platform, agent_id,
