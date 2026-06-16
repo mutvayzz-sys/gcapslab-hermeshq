@@ -357,8 +357,21 @@ async def delete_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.is_archived:
+        agent_name = agent.name
         db.expunge(agent)
         await db.execute(delete(Agent).where(Agent.id == agent_id))
+        await record_audit(
+            db,
+            action="agent.permanent_delete",
+            target_type="agent",
+            target_id=agent_id,
+            target_name=agent_name,
+            actor_id=current_user.id,
+            actor_username=current_user.username,
+            actor_role=current_user.role,
+            ip_address=extract_ip(request),
+            details={"deleted_by": current_user.username},
+        )
         await db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
