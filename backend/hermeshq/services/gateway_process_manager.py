@@ -277,6 +277,7 @@ class GatewayProcessManager:
                 return
 
             self._set_runtime_disabled(channel, True)
+            await session.commit()
             try:
                 await self.installation_manager.sync_agent_installation(agent_row)
             except HermesInstallationError:
