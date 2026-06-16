@@ -31,6 +31,7 @@ from hermeshq.core.security import (
     create_access_token,
     get_current_user,
     hash_password,
+    require_admin,
     verify_password,
 )
 from hermeshq.config import get_settings
@@ -1207,7 +1208,7 @@ async def reset_password(
 
 @router.get("/email-config", response_model=EmailConfigStatus)
 async def get_email_config(
-    _admin: User = Depends(get_current_user),
+    _admin: User = Depends(require_admin),
 ) -> EmailConfigStatus:
     """Get current email configuration status (admin only)."""
     email_service = get_email_service()
