@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hermeshq}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hermeshq}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hermeshq -d hermeshq"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hermeshq} -d ${POSTGRES_DB:-hermeshq}"]
       interval: 5s
       timeout: 5s
       retries: 12
