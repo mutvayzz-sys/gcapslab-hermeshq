@@ -20,6 +20,8 @@ export function M365ConnectPanel() {
   const [copied, setCopied] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollErrorCountRef = useRef(0);
+  const MAX_POLL_ERRORS = 10;
 
   function stopPolling() {
     if (pollIntervalRef.current) {
@@ -45,16 +47,22 @@ export function M365ConnectPanel() {
 
   function startPolling() {
     stopPolling();
+    pollErrorCountRef.current = 0;
     pollIntervalRef.current = setInterval(async () => {
       try {
         const result = await pollStatus.mutateAsync();
+        pollErrorCountRef.current = 0;
         if (result.status === "connected") {
           stopPolling();
           setFlow(null);
           await queryClient.invalidateQueries({ queryKey: ["m365-me"] });
         }
       } catch {
-        // pending — seguir intentando
+        pollErrorCountRef.current += 1;
+        if (pollErrorCountRef.current >= MAX_POLL_ERRORS) {
+          stopPolling();
+          setPollError("No se pudo verificar el estado de la conexión. Intenta de nuevo.");
+        }
       }
     }, 3000);
   }
