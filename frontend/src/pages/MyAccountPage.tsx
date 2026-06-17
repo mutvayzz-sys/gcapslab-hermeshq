@@ -65,6 +65,7 @@ export function MyAccountPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
@@ -79,14 +80,17 @@ export function MyAccountPage() {
     event.preventDefault();
     const normalized = displayName.trim();
     if (!normalized) {
+      setProfileSuccess(false);
       setProfileMessage(`${t("users.displayName")} cannot be empty.`);
       return;
     }
     try {
       const updated = await updateProfile.mutateAsync({ display_name: normalized });
       setUser(updated);
+      setProfileSuccess(true);
       setProfileMessage(t("account.profileUpdated"));
     } catch (error) {
+      setProfileSuccess(false);
       setProfileMessage(extractErrorMessage(error));
     }
   }
@@ -129,8 +133,10 @@ export function MyAccountPage() {
     try {
       const updated = await uploadAvatar.mutateAsync(file);
       setUser(updated);
+      setProfileSuccess(true);
       setProfileMessage(t("account.iconUpdated"));
     } catch (error) {
+      setProfileSuccess(false);
       setProfileMessage(extractErrorMessage(error));
     }
   }
@@ -172,9 +178,11 @@ export function MyAccountPage() {
                   })
                   .then((updated) => {
                     setUser(updated);
+                    setProfileSuccess(true);
                     setProfileMessage(`${t("account.myTheme")} updated.`);
                   })
                   .catch((error: unknown) => {
+                    setProfileSuccess(false);
                     setProfileMessage(extractErrorMessage(error));
                   });
               }}
@@ -200,9 +208,11 @@ export function MyAccountPage() {
                   })
                   .then((updated) => {
                     setUser(updated);
+                    setProfileSuccess(true);
                     setProfileMessage(`${t("account.myLanguage")} updated.`);
                   })
                   .catch((error: unknown) => {
+                    setProfileSuccess(false);
                     setProfileMessage(extractErrorMessage(error));
                   });
               }}
@@ -233,9 +243,11 @@ export function MyAccountPage() {
                     .mutateAsync()
                     .then((updated) => {
                       setUser(updated);
+                      setProfileSuccess(true);
                       setProfileMessage(t("account.iconRemoved"));
                     })
                     .catch((error: unknown) => {
+                      setProfileSuccess(false);
                       setProfileMessage(extractErrorMessage(error));
                     })
                 }
@@ -251,7 +263,7 @@ export function MyAccountPage() {
           </button>
 
           {profileMessage ? (
-            <p className={`text-sm ${profileMessage.includes("updated") || profileMessage.includes("removed") || profileMessage.includes("actualiz") || profileMessage.includes("elim") ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
+            <p className={`text-sm ${profileSuccess ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
               {profileMessage}
             </p>
           ) : null}
