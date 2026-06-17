@@ -119,7 +119,7 @@ async def complete_device_flow(
         token_cache=cache,
     )
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None, lambda: app.acquire_token_by_device_flow(flow)
     )
@@ -214,13 +214,18 @@ async def get_valid_token(
         return None, None, None
 
     if cache.has_state_changed:
-        token_record.token_cache_enc = vault.encrypt(cache.serialize())
-        if result_token.get("expires_in"):
-            from datetime import timedelta
-            token_record.expires_at = datetime.now(timezone.utc) + timedelta(
-                seconds=int(result_token["expires_in"])
-            )
-        await db.commit()
+        try:
+            token_record.token_cache_enc = vault.encrypt(cache.serialize())
+            if result_token.get("expires_in"):
+                from datetime import timedelta
+                token_record.expires_at = datetime.now(timezone.utc) + timedelta(
+                    seconds=int(result_token["expires_in"])
+                )
+            await db.commit()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("Failed to persist refreshed M365 token cache", exc_info=True)
+            await db.rollback()
 
     granted_scopes = token_record.scopes.split() if token_record.scopes else []
     return result_token["access_token"], token_record.account_email, granted_scopes
