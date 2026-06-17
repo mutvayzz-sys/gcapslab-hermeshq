@@ -248,7 +248,12 @@ class GatewayLogManager:
                     payloads.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-            if not payloads or payloads[0].get("platform") != platform:
+            # On the initial read (last_offset == 0) the first line is the
+            # session header and carries the "platform" field — validate it.
+            # On incremental reads the first new payload is a message record
+            # without "platform", so we skip this guard to avoid silently
+            # discarding all newly appended messages.
+            if last_offset == 0 and (not payloads or payloads[0].get("platform") != platform):
                 return [], new_offset
             messages = [item for item in payloads if item.get("role") in {"user", "assistant"}]
             entries = self._extract_entries_from_messages(
