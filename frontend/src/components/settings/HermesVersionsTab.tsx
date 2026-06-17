@@ -273,7 +273,11 @@ export default function HermesVersionsTab({ hermesVersions }: HermesVersionsTabP
                     type="button"
                     className="panel-button-secondary"
                     disabled={uninstallHermesVersion.isPending || version.is_default || version.in_use_by_agents > 0}
-                    onClick={() => void uninstallHermesVersion.mutateAsync(version.version)}
+                    onClick={() => {
+                      if (window.confirm(`Uninstall Hermes runtime ${version.version}?`)) {
+                        void uninstallHermesVersion.mutateAsync(version.version);
+                      }
+                    }}
                   >
                     {uninstallHermesVersion.isPending ? "Removing..." : "Uninstall"}
                   </button>

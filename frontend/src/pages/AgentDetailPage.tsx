@@ -465,19 +465,23 @@ export function AgentDetailPage() {
     if (archived) {
       return;
     }
-    if (currentAgent.status !== "running") {
-      await startAgent.mutateAsync(currentAgent.id);
+    try {
+      if (currentAgent.status !== "running") {
+        await startAgent.mutateAsync(currentAgent.id);
+      }
+      await createTask.mutateAsync({
+        agent_id: currentAgent.id,
+        title: "Chat message",
+        prompt,
+        priority: 5,
+        metadata: {
+          conversation: true,
+          source: "agent_conversation",
+        },
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to send instruction");
     }
-    await createTask.mutateAsync({
-      agent_id: currentAgent.id,
-      title: "Chat message",
-      prompt,
-      priority: 5,
-      metadata: {
-        conversation: true,
-        source: "agent_conversation",
-      },
-    });
   }
 
   async function onSaveIdentity() {
