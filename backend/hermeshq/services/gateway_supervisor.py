@@ -212,12 +212,12 @@ class GatewaySupervisor:
     async def stop_channel(self, agent_id: str, platform: str) -> None:
         lock = self._get_agent_lock(agent_id)
         async with lock:
-            await self._process_mgr.stop_channel_locked(agent_id, platform)
+            await self._process_mgr.stop_channel_locked(agent_id, platform, self._log_mgr)
 
     async def restart_channel(self, agent_id: str, platform: str) -> None:
         lock = self._get_agent_lock(agent_id)
         async with lock:
-            await self._process_mgr.stop_channel_locked(agent_id, platform)
+            await self._process_mgr.stop_channel_locked(agent_id, platform, self._log_mgr)
             await self._process_mgr.start_channel_locked(agent_id, platform, self._log_mgr)
 
     # ── Status & logs ───────────────────────────────────────────────────────
