@@ -12,6 +12,15 @@ from hermeshq.models.audit_log import AuditLog
 logger = logging.getLogger(__name__)
 
 
+def _trunc(value: str | None, max_len: int) -> str | None:
+    if value is None:
+        return None
+    if len(value) > max_len:
+        logger.debug("audit field truncated to %d chars", max_len)
+        return value[:max_len]
+    return value
+
+
 async def record_audit(
     db: AsyncSession,
     *,
@@ -30,13 +39,13 @@ async def record_audit(
     """Create an audit log entry. Call before or after db.commit()."""
     entry = AuditLog(
         actor_id=actor_id,
-        actor_username=actor_username,
-        actor_role=actor_role,
-        action=action,
-        target_type=target_type,
+        actor_username=_trunc(actor_username, 128),
+        actor_role=_trunc(actor_role, 20),
+        action=_trunc(action, 64),
+        target_type=_trunc(target_type, 64),
         target_id=target_id,
-        target_name=target_name,
-        ip_address=ip_address,
+        target_name=_trunc(target_name, 255),
+        ip_address=_trunc(ip_address, 64),
         old_value=old_value,
         new_value=new_value,
         details=details or {},
