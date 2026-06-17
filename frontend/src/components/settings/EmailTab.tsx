@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -12,11 +12,23 @@ export function EmailTab() {
   const { data: settings } = useSettings();
   const { data: emailConfig } = useEmailConfig();
 
-  const [resendApiKey, setResendApiKey] = useState(settings?.resend_api_key || "");
-  const [fromEmail, setFromEmail] = useState(settings?.from_email || "");
-  const [fromName, setFromName] = useState(settings?.from_name || "");
-  const [publicBaseUrl, setPublicBaseUrl] = useState(settings?.public_base_url || "");
-  const [mfaEnabled, setMfaEnabled] = useState(settings?.mfa_email_enabled ?? false);
+  const [resendApiKey, setResendApiKey] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [publicBaseUrl, setPublicBaseUrl] = useState("");
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (settings && !initializedRef.current) {
+      initializedRef.current = true;
+      setResendApiKey(settings.resend_api_key || "");
+      setFromEmail(settings.from_email || "");
+      setFromName(settings.from_name || "");
+      setPublicBaseUrl(settings.public_base_url || "");
+      setMfaEnabled(settings.mfa_email_enabled ?? false);
+    }
+  }, [settings]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
