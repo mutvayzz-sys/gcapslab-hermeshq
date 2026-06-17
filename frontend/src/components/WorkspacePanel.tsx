@@ -14,10 +14,10 @@ export function WorkspacePanel({ agentId }: { agentId: string }) {
   const writeFile = useWriteWorkspaceFile(agentId, path);
 
   useEffect(() => {
-    if (file?.content !== undefined) {
-      setDraft(file.content);
+    if (selectedFile !== null) {
+      setDraft(file?.content ?? "");
     }
-  }, [file]);
+  }, [file, selectedFile]);
 
   const directories = useMemo(
     () => (listing?.entries ?? []).filter((entry) => entry.is_dir),

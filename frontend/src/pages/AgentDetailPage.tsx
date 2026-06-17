@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -230,6 +230,7 @@ export function AgentDetailPage() {
   const [sectionState, setSectionState] = useState(DEFAULT_SECTION_STATE);
   const [nameTouched, setNameTouched] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
+  const initializedAgentIdRef = useRef<string | null>(null);
   const [ledgerQuery, setLedgerQuery] = useState("");
   const agentTasks = useMemo(
     () => (tasks ?? []).filter((task) => task.agent_id === agentId),
@@ -321,9 +322,10 @@ export function AgentDetailPage() {
   }, [agent, isLoading, navigate]);
 
   useEffect(() => {
-    if (!agent) {
+    if (!agent || agent.id === initializedAgentIdRef.current) {
       return;
     }
+    initializedAgentIdRef.current = agent.id;
     setIdentityForm({
       friendly_name: agent.friendly_name || agent.name,
       name: agent.name,
