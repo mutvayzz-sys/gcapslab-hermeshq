@@ -144,7 +144,7 @@ function RuntimeSummary({
 // Platform configuration descriptors
 // ---------------------------------------------------------------------------
 
-type PlatformSlug = "telegram" | "whatsapp" | "microsoft_teams" | "google_chat" | "kapso_whatsapp";
+type PlatformSlug = "telegram" | "whatsapp" | "microsoft_teams" | "google_chat" | "kapso_whatsapp" | "sixagentic";
 
 const COPY_KEYS: Record<PlatformSlug, string> = {
   telegram: "agent.telegramCopy",
@@ -152,6 +152,7 @@ const COPY_KEYS: Record<PlatformSlug, string> = {
   microsoft_teams: "agent.teamsCopy",
   google_chat: "agent.googleChatCopy",
   kapso_whatsapp: "agent.kapsoWhatsAppCopy",
+  sixagentic: "agent.sixagenticCopy",
 };
 
 const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
@@ -245,13 +246,31 @@ const PLATFORM_CONFIGS: Record<PlatformSlug, PlatformConfig> = {
     saveLabelKey: "agent.saveKapsoWhatsApp",
     stoppedLabelKey: "agent.gatewayStopped",
   },
+  sixagentic: {
+    platform: "sixagentic",
+    label: "SixAgentic App",
+    copy: "",
+    showSecretRef: false,
+    showWhatsappMode: false,
+    showQrSection: false,
+    showAllowedUsers: false,
+    showHomeChat: false,
+    showBehavior: false,
+    showTeamsMetadata: false,
+    showGoogleChatMetadata: false,
+    showKapsoMetadata: false,
+    homeChatIdPlaceholder: "",
+    enableLabelKey: "agent.enableSixagentic",
+    saveLabelKey: "agent.saveSixagentic",
+    stoppedLabelKey: "agent.gatewayStopped",
+  },
 };
 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
-const ALL_PLATFORMS: PlatformSlug[] = ["telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"];
+const ALL_PLATFORMS: PlatformSlug[] = ["telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp", "sixagentic"];
 
 const PLATFORM_LABELS: Record<PlatformSlug, string> = {
   telegram: "Telegram",
@@ -259,6 +278,7 @@ const PLATFORM_LABELS: Record<PlatformSlug, string> = {
   microsoft_teams: "MS Teams",
   google_chat: "Google Chat",
   kapso_whatsapp: "Kapso WA",
+  sixagentic: "SixAgentic",
 };
 
 export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isAdmin: boolean }) {
@@ -280,6 +300,11 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   const { data: kapsoRuntime } = useMessagingChannelRuntime(agentId, "kapso_whatsapp");
   const { data: kapsoLogs } = useMessagingChannelLogs(agentId, "kapso_whatsapp");
 
+  // SixAgentic App channel
+  const { data: sixagentic } = useMessagingChannel(agentId, "sixagentic");
+  const { data: sixagenticRuntime } = useMessagingChannelRuntime(agentId, "sixagentic");
+  const { data: sixagenticLogs } = useMessagingChannelLogs(agentId, "sixagentic");
+
   const { data: secrets } = useSecrets(isAdmin);
   const updateChannel = useUpdateMessagingChannel();
   const startChannel = useMessagingChannelAction("start");
@@ -287,13 +312,14 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
   const [submitErrors, setSubmitErrors] = useState<Record<string, string | null>>({});
 
   // Per-platform dirty refs and forms
-  const dirtyRefs = useRef<Record<PlatformSlug, boolean>>({ telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false, kapso_whatsapp: false });
+  const dirtyRefs = useRef<Record<PlatformSlug, boolean>>({ telegram: false, whatsapp: false, microsoft_teams: false, google_chat: false, kapso_whatsapp: false, sixagentic: false });
   const [forms, setForms] = useState<Record<PlatformSlug, ChannelFormState>>({
     telegram: defaultFormState,
     whatsapp: defaultFormState,
     microsoft_teams: defaultFormState,
     google_chat: defaultFormState,
     kapso_whatsapp: defaultFormState,
+    sixagentic: defaultFormState,
   });
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformSlug>("telegram");
   const whatsappQrSvg = useMemo(
@@ -305,13 +331,13 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
 
   // Channel data map for generic access
   const channelData: Record<PlatformSlug, MessagingChannel | undefined> = {
-    telegram, whatsapp, microsoft_teams: teams, google_chat: gchat, kapso_whatsapp: kapso,
+    telegram, whatsapp, microsoft_teams: teams, google_chat: gchat, kapso_whatsapp: kapso, sixagentic,
   };
   const runtimeData: Record<PlatformSlug, MessagingChannelRuntime | undefined> = {
-    telegram: telegramRuntime, whatsapp: whatsappRuntime, microsoft_teams: teamsRuntime, google_chat: gchatRuntime, kapso_whatsapp: kapsoRuntime,
+    telegram: telegramRuntime, whatsapp: whatsappRuntime, microsoft_teams: teamsRuntime, google_chat: gchatRuntime, kapso_whatsapp: kapsoRuntime, sixagentic: sixagenticRuntime,
   };
   const logsData: Record<PlatformSlug, string | undefined> = {
-    telegram: telegramLogs, whatsapp: whatsappLogs, microsoft_teams: teamsLogs, google_chat: gchatLogs, kapso_whatsapp: kapsoLogs,
+    telegram: telegramLogs, whatsapp: whatsappLogs, microsoft_teams: teamsLogs, google_chat: gchatLogs, kapso_whatsapp: kapsoLogs, sixagentic: sixagenticLogs,
   };
 
   // Generic sync effect for all platforms

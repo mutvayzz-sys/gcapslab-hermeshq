@@ -417,6 +417,7 @@ class HermesInstallationManager:
         telegram_channel = next((item for item in messaging_channels if item.platform == "telegram"), None)
         whatsapp_channel = next((item for item in messaging_channels if item.platform == "whatsapp"), None)
         teams_channel = next((item for item in messaging_channels if item.platform == "microsoft_teams"), None)
+        sixagentic_channel = next((item for item in messaging_channels if item.platform == "sixagentic"), None)
         runtime_provider = normalize_runtime_provider(agent.provider)
         model_provider = self._model_provider_for_agent(agent)
         effective_base_url = self._effective_provider_base_url(agent)
@@ -504,6 +505,11 @@ class HermesInstallationManager:
                     "name": teams_channel.home_chat_name or "Home",
                 }
             platforms["teams"] = teams_platform
+        if sixagentic_channel and self._channel_runtime_enabled(sixagentic_channel):
+            platforms = config.setdefault("platforms", {})
+            platforms["sixagentic"] = {
+                "enabled": bool(sixagentic_channel.enabled),
+            }
         voice_overrides = self._voice_runtime_overrides(agent)
         if voice_overrides:
             config.update(voice_overrides)

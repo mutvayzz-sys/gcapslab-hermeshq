@@ -20,7 +20,7 @@ from hermeshq.models.activity import ActivityLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])
-SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp"}
+SUPPORTED_PLATFORMS = {"telegram", "whatsapp", "microsoft_teams", "google_chat", "kapso_whatsapp", "sixagentic"}
 
 
 async def _get_or_create_channel(
