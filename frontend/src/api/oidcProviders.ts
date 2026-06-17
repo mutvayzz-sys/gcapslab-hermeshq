@@ -1,6 +1,4 @@
-import { resolveApiBase } from "../lib/apiBase";
-
-const BASE = `${resolveApiBase()}/oidc-providers`;
+import { apiClient } from "./client";
 
 export interface OidcProviderRead {
   id: string;
@@ -40,44 +38,24 @@ export interface OidcProviderUpdate {
   icon_slug?: string | null;
 }
 
-const authHeaders = () => {
-  const token = localStorage.getItem("hermeshq.token");
-  return { Authorization: `Bearer ${token}` };
-};
-
 export async function listOidcProviders(): Promise<OidcProviderRead[]> {
-  const res = await fetch(BASE, { headers: authHeaders() });
-  if (!res.ok) throw new Error("Failed to list OIDC providers");
-  return res.json();
+  const { data } = await apiClient.get<OidcProviderRead[]>("/oidc-providers");
+  return data;
 }
 
-export async function createOidcProvider(data: OidcProviderCreate): Promise<OidcProviderRead> {
-  const res = await fetch(BASE, {
-    method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to create OIDC provider");
-  return res.json();
+export async function createOidcProvider(payload: OidcProviderCreate): Promise<OidcProviderRead> {
+  const { data } = await apiClient.post<OidcProviderRead>("/oidc-providers", payload);
+  return data;
 }
 
 export async function updateOidcProvider(
   id: string,
-  data: OidcProviderUpdate,
+  payload: OidcProviderUpdate,
 ): Promise<OidcProviderRead> {
-  const res = await fetch(`${BASE}/${id}`, {
-    method: "PATCH",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to update OIDC provider");
-  return res.json();
+  const { data } = await apiClient.patch<OidcProviderRead>(`/oidc-providers/${id}`, payload);
+  return data;
 }
 
 export async function deleteOidcProvider(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error("Failed to delete OIDC provider");
+  await apiClient.delete(`/oidc-providers/${id}`);
 }
