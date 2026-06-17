@@ -152,8 +152,13 @@ async def upload_agent_avatar(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     agent = await ensure_agent_access(db, current_user, agent_id)
-    agent.avatar_filename = await validate_and_save_avatar(_agent_avatar_base(), agent_id, file)
-    await db.commit()
+    new_filename = await validate_and_save_avatar(_agent_avatar_base(), agent_id, file)
+    agent.avatar_filename = new_filename
+    try:
+        await db.commit()
+    except Exception:
+        _delete_avatar_files_shared(_agent_avatar_base(), agent_id)
+        raise
     await db.refresh(agent)
     result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())

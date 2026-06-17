@@ -121,9 +121,9 @@ async def delete_integration_draft(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     draft = await _get_draft_or_404(db, draft_id)
-    delete_draft_files(draft)
     await db.delete(draft)
     await db.commit()
+    delete_draft_files(draft)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -227,7 +227,14 @@ async def publish_integration_draft(
     draft.published_package_slug = package["slug"]
     draft.published_package_version = str(package.get("version") or "")
     draft.published_at = datetime.now(timezone.utc)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        logger.error(
+            "Package %s installed on filesystem but DB commit failed — manual reconciliation required",
+            package.get("slug"),
+        )
+        raise
     await db.refresh(draft)
     return IntegrationDraftPublishRead(
         draft=build_draft_read(draft),
