@@ -126,6 +126,20 @@ class HermesRuntime:
         runtime_provider = self.installation_manager._model_provider_for_agent(agent)
         effective_base_url = self.installation_manager._effective_provider_base_url(agent)
         effective_model = await self._resolve_effective_model(agent, runtime_provider)
+        # ── Channel routing: suppress external channels for mobile_app tasks ──
+        _task_meta = task.metadata_json or {}
+        _reply_to = str(_task_meta.get("reply_to") or _task_meta.get("source") or "").strip().lower()
+        if _reply_to == "mobile_app":
+            runtime_system_prompt = (
+                runtime_system_prompt
+                + "\n\n"
+                + "IMPORTANT: You are responding through the SixAgentic mobile app. "
+                "Always provide your response directly in the task response text. "
+                "Do NOT send responses through Telegram, WhatsApp, email, or any other "
+                "external channel. If you generate files, they will be automatically "
+                "attached as response_attachments."
+            )
+
         payload = {
             "task_id": str(task.id),
             "prompt": task.prompt,

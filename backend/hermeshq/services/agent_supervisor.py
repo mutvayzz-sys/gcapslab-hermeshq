@@ -677,6 +677,12 @@ class AgentSupervisor:
         summary: str,
     ) -> None:
         metadata = task.metadata_json or {}
+
+        # ── Channel routing: skip external delivery for mobile_app tasks ──
+        reply_to = str(metadata.get("reply_to") or metadata.get("source") or "").strip().lower()
+        if reply_to == "mobile_app":
+            return
+
         callback_delivery = metadata.get("callback_delivery")
         if not isinstance(callback_delivery, dict):
             return
