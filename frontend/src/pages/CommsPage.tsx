@@ -91,6 +91,7 @@ export function CommsPage() {
   const [messageType, setMessageType] = useState("direct");
   const [teamTag, setTeamTag] = useState("");
   const [content, setContent] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const agentMap = useMemo(() => buildAgentMap(agents ?? []), [agents]);
   const sourceAgent = fromAgentId ? agentMap.get(fromAgentId) : undefined;
@@ -160,21 +161,36 @@ export function CommsPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (messageType === "broadcast") {
-      await broadcast.mutateAsync({
-        from_agent_id: fromAgentId,
-        team_tag: teamTag,
-        content,
-      });
-    } else {
-      await sendMessage.mutateAsync({
-        from_agent_id: fromAgentId,
-        to_agent_id: toAgentId,
-        message_type: messageType,
-        content,
-      });
+    setSubmitError(null);
+    try {
+      if (messageType === "broadcast") {
+        await broadcast.mutateAsync({
+          from_agent_id: fromAgentId,
+          team_tag: teamTag,
+          content,
+        });
+      } else {
+        await sendMessage.mutateAsync({
+          from_agent_id: fromAgentId,
+          to_agent_id: toAgentId,
+          message_type: messageType,
+          content,
+        });
+      }
+      setContent("");
+    } catch (error) {
+      const msg = (() => {
+        if (typeof error === "object" && error && "response" in error) {
+          const data = (error as { response?: { data?: unknown } }).response?.data;
+          if (typeof data === "object" && data && "detail" in data) {
+            const detail = (data as { detail?: unknown }).detail;
+            if (typeof detail === "string") return detail;
+          }
+        }
+        return error instanceof Error ? error.message : "Request failed";
+      })();
+      setSubmitError(msg);
     }
-    setContent("");
   }
 
   return (
@@ -252,10 +268,11 @@ export function CommsPage() {
           <button
             type="submit"
             className="panel-button-primary w-full"
-            disabled={messageType !== "broadcast" && (!fromAgentId || !toAgentId || (messageType === "delegate" && Boolean(selectedDelegateState?.disabled)))}
+            disabled={!fromAgentId || (messageType !== "broadcast" && (!toAgentId || (messageType === "delegate" && Boolean(selectedDelegateState?.disabled))))}
           >
             {t("comms.dispatch")}
           </button>
+          {submitError ? <p className="text-sm text-[var(--accent)]">{submitError}</p> : null}
         </div>
       </form>
 
