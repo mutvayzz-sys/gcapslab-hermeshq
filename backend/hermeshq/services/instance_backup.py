@@ -211,7 +211,6 @@ class InstanceBackupService:
                 if mode == "replace":
                     await self._clear_existing_state(session, payload.summary.options)
                 restored_counts = await self._restore_database(session, payload, mode)
-                await session.commit()
                 await self._normalize_runtime_state(session)
                 await session.commit()
             self._restore_file_roots(payload, mode)
@@ -281,7 +280,6 @@ class InstanceBackupService:
                         if mode == "replace":
                             await self._clear_existing_state(session, payload.summary.options)
                         job.restored_counts = await self._restore_database(session, payload, mode)
-                        await session.commit()
                         job.current_step = "Normalizing runtime state"
                         await self._normalize_runtime_state(session)
                         await session.commit()
