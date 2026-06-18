@@ -1,5 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { useAgents } from "../api/agents";
 import { useCancelTask, useCreateTask, useTasks, useUpdateTaskBoard } from "../api/tasks";
 import { useI18n } from "../lib/i18n";
@@ -33,6 +35,7 @@ function excerpt(value: string, max = 180) {
 }
 
 export function TasksPage() {
+  const queryClient = useQueryClient();
   const { data: agents } = useAgents();
   const { data: tasks } = useTasks();
   const { t, formatDateTime } = useI18n();
@@ -111,13 +114,17 @@ export function TasksPage() {
   }
 
   async function moveTask(taskId: string, boardColumn: string) {
-    await updateTaskBoard.mutateAsync({
-      taskId,
-      payload: {
-        board_column: boardColumn,
-        board_order: Date.now(),
-      },
-    });
+    try {
+      await updateTaskBoard.mutateAsync({
+        taskId,
+        payload: {
+          board_column: boardColumn,
+          board_order: Date.now(),
+        },
+      });
+    } catch {
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    }
   }
 
   return (
