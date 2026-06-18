@@ -829,8 +829,13 @@ class AgentSupervisor:
                 message="AI avatar applied from operator task",
             )
             await session.commit()
+            await self.event_broker.publish(
+                {
+                    "type": "agent.avatar_updated",
+                    "agent_id": target_agent_id,
+                }
+            )
 
-        # Publish event so frontend refreshes
 # ---------------------------------------------------------------------------
 # Module-level helper to get the running supervisor from the FastAPI app.
 # ---------------------------------------------------------------------------
