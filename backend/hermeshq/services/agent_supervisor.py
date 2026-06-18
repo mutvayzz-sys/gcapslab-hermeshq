@@ -137,7 +137,7 @@ from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
 from hermeshq.services.hermes_runtime import HermesRuntime
 from hermeshq.services.secret_vault import SecretVault
-from hermeshq.services.task_board import sync_board_with_runtime
+from hermeshq.services.task_board import runtime_status_to_board_column, sync_board_with_runtime
 
 
 class AgentSupervisor:
@@ -338,6 +338,8 @@ class AgentSupervisor:
             async with self.session_factory() as session:
                 task = await session.get(Task, task_id)
                 if not task:
+                    return
+                if task.status != "queued":
                     return
                 agent = await session.get(Agent, task.agent_id)
                 if not agent:
