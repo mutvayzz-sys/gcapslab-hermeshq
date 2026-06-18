@@ -259,6 +259,7 @@ class GatewayProcessManager:
         self,
         agent_id: str,
         platform: str,
+        log_mgr=None,  # GatewayLogManager — avoid circular import
     ) -> None:
         """Stop a gateway channel (must be called with agent lock held)."""
         if platform in ("google_chat", "kapso_whatsapp"):
@@ -289,7 +290,7 @@ class GatewayProcessManager:
         restarted_handle: GatewayProcessHandle | None = None
         if remaining_channels:
             agent_row = await self._reload_agent(agent_id)
-            restarted_handle = await self._launch_gateway_process(agent_row, remaining_channels, None)
+            restarted_handle = await self._launch_gateway_process(agent_row, remaining_channels, log_mgr)
             self.processes[agent_id] = restarted_handle
 
         async with self.session_factory() as session:
