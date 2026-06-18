@@ -260,7 +260,12 @@ class GatewaySupervisor:
             result["paired"] = pairing_status == "paired"
             result["session_path"] = session_dir.as_posix()
             result["bridge_log_path"] = bridge_log_path.as_posix() if bridge_log_path else None
-            result["pairing_qr_text"] = self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
+            # Do not serve the QR text once the session is already paired — the
+            # stored QR in bridge.log is stale and expired at that point.
+            result["pairing_qr_text"] = (
+                None if pairing_status == "paired"
+                else self._log_mgr._extract_whatsapp_qr_text(bridge_log_path)
+            )
 
         await self._maybe_update_connected_at(channel, running)
         return result
