@@ -77,7 +77,11 @@ export function M365ConnectPanel() {
   async function handleDisconnect() {
     stopPolling();
     setFlow(null);
-    await disconnect.mutateAsync();
+    try {
+      await disconnect.mutateAsync();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Disconnect failed");
+    }
   }
 
   if (isLoading) {
