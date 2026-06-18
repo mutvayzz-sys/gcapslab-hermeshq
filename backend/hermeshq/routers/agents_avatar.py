@@ -23,9 +23,8 @@ from hermeshq.routers.agents_shared import (
 )
 from hermeshq.schemas.agent import AgentRead, AvatarGenerationRead
 from hermeshq.services.avatar import (
+    build_avatar_dir,
     delete_avatar_files as _delete_avatar_files_shared,
-)
-from hermeshq.services.avatar import (
     resolve_media_type,
     validate_and_save_avatar,
 )
@@ -157,13 +156,15 @@ async def upload_agent_avatar(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     agent = await ensure_agent_access(db, current_user, agent_id)
-    new_filename = await validate_and_save_avatar(_agent_avatar_base(), agent_id, file)
-    agent.avatar_filename = new_filename
+    avatar_filename = await validate_and_save_avatar(_agent_avatar_base(), agent_id, file)
+    agent.avatar_filename = avatar_filename
     try:
         await db.commit()
     except Exception:
-        _delete_avatar_files_shared(_agent_avatar_base(), agent_id)
-        raise
+        await db.rollback()
+        avatar_file = build_avatar_dir(_agent_avatar_base(), agent_id) / avatar_filename
+        avatar_file.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="Failed to save avatar")
     await db.refresh(agent)
     result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())

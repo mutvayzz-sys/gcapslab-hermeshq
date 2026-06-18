@@ -248,6 +248,8 @@ class AgentSupervisor:
                     "and could not be resumed."
                 )
                 task.completed_at = now
+                if not task.board_manual:
+                    task.board_column = "failed"
 
             await session.commit()
 
@@ -817,6 +819,7 @@ class AgentSupervisor:
             except Exception:
                 delete_avatar_files(avatar_base, target_agent_id)
                 raise
+
 
             await self._log(
                 session,

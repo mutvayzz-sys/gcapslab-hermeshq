@@ -118,6 +118,8 @@ async def cancel_task(
         raise HTTPException(status_code=403, detail="Access denied")
     await request.app.state.supervisor.cancel_task(task_id)
     await db.refresh(task)
+    if task.status in ("pending", "running"):
+        task.status = "cancelled"
     return TaskRead.model_validate(task)
 
 
