@@ -372,7 +372,7 @@ export function AgentMessagingPanel({ agentId, isAdmin }: { agentId: string; isA
       (secrets ?? [])
         .filter((item) => {
           const provider = String(item.provider ?? "").trim().toLowerCase();
-          return !provider || provider === "telegram" || provider === "microsoft_teams" || provider === "google_chat";
+          return !provider || provider === "telegram" || provider === "microsoft_teams" || provider === "google_chat" || provider === "kapso_whatsapp";
         })
         .map((item) => String(item.name ?? ""))
         .filter(Boolean)
