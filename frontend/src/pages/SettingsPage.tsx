@@ -158,14 +158,14 @@ export function SettingsPage() {
     { id: "providers", label: t("settings.tabProviders"), copy: t("settings.tabProvidersCopy") },
     { id: "integrations", label: t("settings.tabIntegrations"), copy: t("settings.tabIntegrationsCopy") },
     { id: "factory", label: t("settings.tabFactory"), copy: t("settings.tabFactoryCopy") },
-    { id: "externalAccess", label: "External access", copy: "Expose selected HermesHQ agents to enterprise MCP clients such as Claude Code, Codex and Claude Desktop." },
+    { id: "externalAccess", label: t("settings.tabExternalAccess"), copy: t("settings.tabExternalAccessCopy") },
     { id: "hermesVersions", label: t("settings.tabHermesVersions"), copy: t("settings.tabHermesVersionsCopy") },
     { id: "secrets", label: t("settings.tabSecrets"), copy: t("settings.tabSecretsCopy") },
     { id: "templates", label: t("settings.tabTemplates"), copy: t("settings.tabTemplatesCopy") },
-    { id: "authentication", label: "Authentication", copy: "Configure enterprise OIDC providers (Google, Microsoft 365) for single sign-on." },
-    { id: "email", label: "Email", copy: "Configure Resend for transactional emails (password reset, notifications)." },
+    { id: "authentication", label: t("settings.tabAuthentication"), copy: t("settings.tabAuthenticationCopy") },
+    { id: "email", label: t("settings.tabEmail"), copy: t("settings.tabEmailCopy") },
     { id: "resources", label: t("settings.tabResources"), copy: t("settings.tabResourcesCopy") },
-    { id: "m365", label: "Microsoft 365", copy: "Configura la app Azure AD para autenticación delegada. Cada usuario conecta su propia cuenta M365." },
+    { id: "m365", label: t("settings.tabM365"), copy: t("settings.tabM365Copy") },
   ];
 
   const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab) ?? settingsTabs[0];
