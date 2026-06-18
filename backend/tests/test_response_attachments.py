@@ -15,16 +15,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
+# Skip entire module — functions moved to hermes_runtime MEDIA: parser
+pytestmark = pytest.mark.skip(reason="Attachment collection moved to hermes_runtime MEDIA: parser (test_media_parser.py)")
+
 # Ensure the scripts directory is importable
 _scripts_dir = str(Path(__file__).resolve().parents[1] / "hermeshq" / "scripts")
 sys.path.insert(0, _scripts_dir)
 
 import hermes_task_runner as runner
-
-# Functions removed in revert — skip all tests in this module
-_snapshot_directory = getattr(runner, "_snapshot_directory", None)
-if _snapshot_directory is None:
-    raise unittest.SkipTest("Attachment collection moved to hermes_runtime MEDIA: parser")
 
 
 def _make_args(tmp: Path) -> tuple:
