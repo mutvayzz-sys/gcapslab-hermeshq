@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import subprocess
 from pathlib import Path
 
@@ -16,9 +15,8 @@ from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.base import utcnow
 from hermeshq.models.messaging_channel import MessagingChannel
-from hermeshq.services.hermes_installation import HermesInstallationError, HermesInstallationManager
-
 from hermeshq.services.gateway_types import GatewayProcessHandle
+from hermeshq.services.hermes_installation import HermesInstallationError, HermesInstallationManager
 
 logger = logging.getLogger(__name__)
 
@@ -385,7 +383,7 @@ class GatewayProcessManager:
             await self._enterprise_gateways.start_gateway(agent_id, platform)
         except ValueError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             raise ValueError(str(exc)) from exc
 
         async with self.session_factory() as session:
@@ -488,7 +486,7 @@ class GatewayProcessManager:
         )
         try:
             await self._wait_for_gateway_startup(handle)
-        except Exception:
+        except Exception:  # noqa: BLE001
             await self._terminate_handle(handle)
             raise
         return handle
@@ -532,7 +530,7 @@ class GatewayProcessManager:
             handle.process.terminate()
             try:
                 await asyncio.wait_for(asyncio.to_thread(handle.process.wait), timeout=5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 handle.process.kill()
                 await asyncio.to_thread(handle.process.wait)
         with contextlib.suppress(Exception):
@@ -602,5 +600,5 @@ class GatewayProcessManager:
         try:
             content = path.read_text(encoding="utf-8", errors="replace").splitlines()
             return "\n".join(content[-lines:])
-        except Exception:
+        except OSError:
             return ""

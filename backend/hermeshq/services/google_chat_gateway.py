@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -33,7 +32,6 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 from hermeshq.models.agent import Agent
-from hermeshq.models.base import utcnow
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
@@ -56,10 +54,8 @@ async def _get_service_account_token(service_account_json: str) -> str:
 
     Uses the JWT grant flow (RFC 7523) for server-to-server auth.
     """
-    import hashlib
     import base64
     import time
-    import struct
 
     sa = json.loads(service_account_json)
     client_email = sa["client_email"]
@@ -80,9 +76,9 @@ async def _get_service_account_token(service_account_json: str) -> str:
     def _b64(data: bytes) -> str:
         return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
-    from cryptography.hazmat.primitives import serialization, hashes
-    from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
 
     header_b64 = _b64(json.dumps(header, separators=(",", ":")).encode())
     payload_b64 = _b64(json.dumps(payload, separators=(",", ":")).encode())
@@ -246,7 +242,7 @@ class GoogleChatGateway:
                 self._token = await _get_service_account_token(self._service_account_json)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.exception(
                     "Failed to refresh Google Chat token for agent %s", self.agent_id
                 )
@@ -297,7 +293,7 @@ class GoogleChatGateway:
         if event_type == "CARD_CLICKED":
             # Handle card interactions if needed
             action = event.get("action", {})
-            action_name = action.get("actionMethodName", "")
+            _action_name = action.get("actionMethodName", "")  # noqa: F841
             return None
 
         if event_type != "MESSAGE":
@@ -448,7 +444,7 @@ class GoogleChatGateway:
                 thread_name=delivery.get("thread_name"),
             )
             logger.info("Google Chat reply sent for task %s", task_id)
-        except Exception:
+        except httpx.HTTPError:
             logger.exception("Failed to send Google Chat reply for task %s", task_id)
 
 
@@ -478,6 +474,6 @@ async def handle_google_chat_webhook(
             result = await gateway.handle_event(payload)
             if result is not None:
                 return result
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.exception("Google Chat gateway error for agent %s", agent_id)
     return None

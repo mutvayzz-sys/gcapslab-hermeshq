@@ -1,11 +1,11 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import ensure_agent_access, get_accessible_agent_ids, get_current_user, is_admin
 from hermeshq.database import get_db_session
-from hermeshq.models.agent import Agent
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.task import Task
 from hermeshq.models.user import User

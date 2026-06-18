@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from croniter import croniter
 from sqlalchemy import select
@@ -43,7 +43,7 @@ class SchedulerService:
         while self._running:
             try:
                 await self.tick()
-            except Exception:
+            except Exception:  # noqa: BLE001  # scheduler tick — must not crash loop
                 logger.exception("Scheduler tick failed")
             await asyncio.sleep(5)
 
@@ -54,7 +54,7 @@ class SchedulerService:
             await self._tick_once()
 
     async def _tick_once(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with self.session_factory() as session:
             statement = select(ScheduledTask).where(ScheduledTask.enabled == True)  # noqa: E712
             # session.bind is always None in SQLAlchemy 2.x AsyncSession.
@@ -105,5 +105,5 @@ class SchedulerService:
         if value is None:
             return None
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)

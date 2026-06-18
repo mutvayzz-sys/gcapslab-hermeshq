@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -138,7 +137,7 @@ async def complete_device_flow(
     expires_at = None
     if result.get("expires_in"):
         from datetime import timedelta
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(result["expires_in"]))
+        expires_at = datetime.now(UTC) + timedelta(seconds=int(result["expires_in"]))
 
     cache_json = cache.serialize()
     token_cache_enc = vault.encrypt(cache_json)
@@ -194,7 +193,7 @@ async def get_valid_token(
     cache = msal.SerializableTokenCache()
     try:
         cache.deserialize(vault.decrypt(token_record.token_cache_enc))
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None, None, None
 
     app = msal.PublicClientApplication(
@@ -217,7 +216,7 @@ async def get_valid_token(
         token_record.token_cache_enc = vault.encrypt(cache.serialize())
         if result_token.get("expires_in"):
             from datetime import timedelta
-            token_record.expires_at = datetime.now(timezone.utc) + timedelta(
+            token_record.expires_at = datetime.now(UTC) + timedelta(
                 seconds=int(result_token["expires_in"])
             )
         await db.commit()
@@ -233,6 +232,6 @@ async def revoke_user_token(user_id: str, db: AsyncSession) -> bool:
     token_record = result.scalar_one_or_none()
     if not token_record:
         return False
-    token_record.revoked_at = datetime.now(timezone.utc)
+    token_record.revoked_at = datetime.now(UTC)
     await db.commit()
     return True

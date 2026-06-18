@@ -13,10 +13,6 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# --- Project imports --------------------------------------------------------
-from hermeshq.config import get_settings  # noqa: E402
-from hermeshq.models.base import Base  # noqa: E402  — declarative base
-
 # Import every model module so their tables are registered on Base.metadata.
 # This is required for autogenerate to "see" them.
 import hermeshq.models.activity  # noqa: F401, E402
@@ -29,7 +25,10 @@ import hermeshq.models.integration_draft  # noqa: F401, E402
 import hermeshq.models.mcp_access  # noqa: F401, E402
 import hermeshq.models.message  # noqa: F401, E402
 import hermeshq.models.messaging_channel  # noqa: F401, E402
+import hermeshq.models.mfa_code  # noqa: F401, E402
 import hermeshq.models.node  # noqa: F401, E402
+import hermeshq.models.oidc_provider  # noqa: F401, E402
+import hermeshq.models.password_reset  # noqa: F401, E402
 import hermeshq.models.provider  # noqa: F401, E402
 import hermeshq.models.scheduled_task  # noqa: F401, E402
 import hermeshq.models.secret  # noqa: F401, E402
@@ -37,10 +36,11 @@ import hermeshq.models.task  # noqa: F401, E402
 import hermeshq.models.template  # noqa: F401, E402
 import hermeshq.models.terminal_session  # noqa: F401, E402
 import hermeshq.models.user  # noqa: F401, E402
-import hermeshq.models.oidc_provider  # noqa: F401, E402
-import hermeshq.models.password_reset  # noqa: F401, E402
 import hermeshq.models.user_m365_token  # noqa: F401, E402
-import hermeshq.models.mfa_code  # noqa: F401, E402
+
+# --- Project imports --------------------------------------------------------
+from hermeshq.config import get_settings  # noqa: E402
+from hermeshq.models.base import Base  # noqa: E402  — declarative base
 
 # --- Alembic config ---------------------------------------------------------
 

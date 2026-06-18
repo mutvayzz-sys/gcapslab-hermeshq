@@ -9,7 +9,6 @@ into a single predictable format for frontend consumers.
 from __future__ import annotations
 
 import logging
-import traceback
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -35,7 +34,7 @@ class StructuredErrorMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             response = await call_next(request)
-        except Exception as exc:
+        except Exception:  # noqa: BLE001  # Global error handler — must catch everything
             logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
             return JSONResponse(
                 content=_error_body(

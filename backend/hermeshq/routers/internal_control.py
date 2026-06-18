@@ -1,6 +1,7 @@
 from __future__ import annotations
-import logging
 
+import hmac as _hmac
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
@@ -9,10 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from hermeshq.database import get_db_session
-import hmac as _hmac
-
 from hermeshq.core.security import create_agent_service_token
+from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.provider import ProviderDefinition
@@ -858,6 +857,7 @@ async def resolve_channel_user_endpoint(
     """Called by gateway hooks to resolve a platform sender ID to a HermesHQ user.
     Uses hmac-based agent validation so any agent can call it."""
     import hmac as _hmac
+
     from hermeshq.services.channel_user_resolver import resolve_channel_user
 
     agent_id = request.headers.get("X-HermesHQ-Agent-ID", "").strip()

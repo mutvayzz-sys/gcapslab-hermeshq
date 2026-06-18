@@ -4,7 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 TOOLSET = "hermeshq_ms365_calendar"
@@ -19,7 +19,7 @@ def _task_user_id() -> str | None:
             uid = str(meta.get("thread_user_id") or meta.get("created_by_user_id") or "").strip()
             if uid:
                 return uid
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
     return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
 
@@ -48,10 +48,10 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
         body = exc.read().decode("utf-8", errors="replace")
         try:
             detail = json.loads(body).get("detail", body)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             detail = body
         return None, str(detail)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
         return None, str(exc)
 
 
@@ -75,7 +75,7 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
         body = exc.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(body)}
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return {"error": body, "status": exc.code}
 
 
@@ -97,7 +97,7 @@ def _list_events_tool(args: dict, **_kwargs) -> str:
         return _auth_error(err)
     count = min(int(args.get("count") or 10), 50)
     # Default: next 7 days
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = args.get("start") or now.isoformat()
     end = args.get("end") or (now + timedelta(days=7)).isoformat()
     fields = "id,subject,start,end,location,organizer,isAllDay,bodyPreview,webLink"

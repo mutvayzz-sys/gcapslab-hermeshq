@@ -6,7 +6,7 @@ import sys
 import time
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -244,7 +244,7 @@ class HermesVersionManager:
             return {}
         try:
             return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             return {}
 
     def _write_metadata(self, version: str, payload: dict) -> None:
@@ -432,10 +432,10 @@ class HermesVersionManager:
                     "version": version,
                     "release_tag": catalog.release_tag,
                     "detected_version": detected_version,
-                    "installed_at": datetime.now(timezone.utc).isoformat(),
+                    "installed_at": datetime.now(UTC).isoformat(),
                 },
             )
-        except Exception:
+        except OSError:
             if target_root.exists():
                 shutil.rmtree(target_root)
             raise
@@ -565,7 +565,7 @@ class HermesVersionManager:
 
         try:
             text = await asyncio.to_thread(_read_pyproject)
-        except Exception:
+        except OSError:
             return None
         match = self._PYPROJECT_VERSION_RE.search(text)
         if not match:

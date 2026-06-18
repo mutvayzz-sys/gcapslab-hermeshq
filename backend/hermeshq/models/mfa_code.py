@@ -1,6 +1,6 @@
 """MFA verification code model for email-based multi-factor authentication."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, String, func

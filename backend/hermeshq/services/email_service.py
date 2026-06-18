@@ -54,9 +54,10 @@ class EmailService:
     async def areload_config(self) -> None:
         """Reload config from settings (env vars) + database (AppSettings)."""
         self._load_config()
-        from hermeshq.models.app_settings import AppSettings
-        from hermeshq.database import AsyncSessionLocal
         from sqlalchemy import select
+
+        from hermeshq.database import AsyncSessionLocal
+        from hermeshq.models.app_settings import AppSettings
 
         try:
             async with AsyncSessionLocal() as session:
@@ -73,7 +74,7 @@ class EmailService:
                     self._public_base_url = db_settings.public_base_url
                 if db_settings.app_name:
                     self._app_name = db_settings.app_name
-        except Exception:
+        except Exception:  # noqa: BLE001  # DB settings load best-effort
             logger.debug("Failed to load email settings from DB; using env vars", exc_info=True)
 
     async def send_password_reset(

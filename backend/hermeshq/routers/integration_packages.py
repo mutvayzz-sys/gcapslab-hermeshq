@@ -1,6 +1,6 @@
 from __future__ import annotations
-import logging
 
+import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -98,10 +98,8 @@ async def upload_integration_package(
         tmp_path = Path(tmp.name)
     try:
         package = install_uploaded_integration_package(tmp_path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # package install can fail in many ways
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
     settings = await db.get(AppSettings, "default")
     if not settings:

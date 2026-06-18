@@ -125,9 +125,9 @@ class HermesRuntime:
                         "api_key": fallback_api_key,
                     },
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001  # fallback failed — re-raise
                 raise  # Fallback also failed — raise its error
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # runtime execution catch-all → RuntimeExecutionError
             raise RuntimeExecutionError(str(exc)) from exc
 
     async def _run_real(
@@ -350,7 +350,7 @@ class HermesRuntime:
             return self.secret_vault.decrypt(secret.value_enc)
         except RuntimeExecutionError:
             raise
-        except Exception as exc:
+        except (KeyError, ValueError, RuntimeError) as exc:
             raise RuntimeExecutionError(f"Could not resolve secret '{api_key_ref}'") from exc
 
     def _has_fallback(self, agent: Agent) -> bool:
@@ -402,7 +402,7 @@ class HermesRuntime:
             pconfig = PROVIDER_REGISTRY.get(provider)
             auth_type = getattr(pconfig, "auth_type", None) if pconfig else None
             return str(auth_type or "").strip().lower() == "aws_sdk"
-        except Exception:
+        except (ImportError, AttributeError, KeyError):
             logger.debug("Bedrock provider detection failed; falling back to string comparison", exc_info=True)
         return provider == "bedrock"
 
@@ -431,8 +431,9 @@ class HermesRuntime:
             return agent.model or "anthropic/claude-sonnet-4"
 
         async with self.session_factory() as db:
-            from hermeshq.models.provider import ProviderDefinition
             from sqlalchemy import select
+
+            from hermeshq.models.provider import ProviderDefinition
 
             # Find the provider definition matching the agent's runtime provider
             result = await db.execute(

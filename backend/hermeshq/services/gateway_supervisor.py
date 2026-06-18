@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from hermeshq.core.events import EventBroker
 from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
-from hermeshq.services.hermes_installation import HermesInstallationError, HermesInstallationManager
-from hermeshq.services.gateway_types import GatewayProcessHandle
-from hermeshq.services.gateway_process_manager import GatewayProcessManager
 from hermeshq.services.gateway_log_manager import GatewayLogManager
+from hermeshq.services.gateway_process_manager import GatewayProcessManager
+from hermeshq.services.gateway_types import GatewayProcessHandle
+from hermeshq.services.hermes_installation import HermesInstallationManager
 
 logger = logging.getLogger(__name__)
 BOOTSTRAP_CONCURRENCY = 3
@@ -82,7 +82,7 @@ class GatewaySupervisor:
         """Bootstrap all gateway channels for active agents."""
         try:
             await self._do_bootstrap_gateways()
-        except Exception:
+        except Exception:  # noqa: BLE001  # bootstrap — any fatal error logged
             logger.exception("Fatal error during gateway bootstrap")
 
     async def _do_bootstrap_gateways(self) -> None:
@@ -135,16 +135,16 @@ class GatewaySupervisor:
                             self._process_mgr.start_channel_locked(agent.id, platform, self._log_mgr),
                             timeout=BOOTSTRAP_CHANNEL_TIMEOUT_SECONDS,
                         )
-                        self._mark_bootstrap_state(channel, status="success", attempted_at=datetime.now(timezone.utc))
+                        self._mark_bootstrap_state(channel, status="success", attempted_at=datetime.now(UTC))
                         last_exc = None
                         break
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001  # bootstrap per-channel — retry logic needs broad catch
                         last_exc = exc
                         is_transient = self._is_transient_bootstrap_error(exc)
                         self._mark_bootstrap_state(
                             channel,
                             status="transient" if is_transient else "permanent",
-                            attempted_at=datetime.now(timezone.utc),
+                            attempted_at=datetime.now(UTC),
                             error=str(exc)[:500],
                             attempts=attempt,
                         )
@@ -191,14 +191,12 @@ class GatewaySupervisor:
             return True
         if "resource busy" in msg:
             return True
-        if "already running" in msg:
-            return True
-        return False
+        return "already running" in msg
 
     # ── Shutdown ────────────────────────────────────────────────────────────
 
     async def shutdown(self) -> None:
-        for agent_id, handle in list(self.processes.items()):
+        for _agent_id, handle in list(self.processes.items()):
             await self._process_mgr._terminate_handle(handle)
         self.processes.clear()
 
@@ -267,7 +265,7 @@ class GatewaySupervisor:
         metadata = dict(channel.metadata_json or {})
         if metadata.get("connected_at"):
             return
-        metadata["connected_at"] = datetime.now(timezone.utc).isoformat()
+        metadata["connected_at"] = datetime.now(UTC).isoformat()
         channel.metadata_json = metadata
         await self._persist_channel_metadata(channel.id, metadata)
 

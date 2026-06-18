@@ -89,7 +89,7 @@ async def rotate(dry_run: bool = False) -> None:
                     secret.value_enc = new_vault.encrypt(plaintext)
                     print(f"  ✅ {secret.name}: re-encrypted")
                 rotated += 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001  # decrypt can fail in many ways
                 print(f"  ❌ {secret.name}: FAILED to decrypt — {exc}")
                 failed += 1
 

@@ -1,6 +1,5 @@
 from hermeshq.models.provider import ProviderDefinition
 
-
 PROVIDER_RUNTIME_ALIASES: dict[str, str] = {
     "openai": "openai-codex",
 }

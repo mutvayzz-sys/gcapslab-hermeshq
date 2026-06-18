@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict, deque
-from typing import Deque
 
 from fastapi import HTTPException, status
 
@@ -44,7 +43,7 @@ class McpRateLimiter:
         self._max_requests = max_requests
         self._window_seconds = window_seconds
         # token_id -> deque of monotonic timestamps
-        self._windows: defaultdict[str, Deque[float]] = defaultdict(deque)
+        self._windows: defaultdict[str, deque[float]] = defaultdict(deque)
         self._lock = asyncio.Lock()
 
     # ------------------------------------------------------------------

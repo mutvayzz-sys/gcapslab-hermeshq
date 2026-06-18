@@ -15,9 +15,13 @@ from hermeshq.models.user import User
 from hermeshq.schemas.user_management import UserCreate, UserManagedRead, UserUpdate
 from hermeshq.services.avatar import (
     build_avatar_path as _build_avatar_path_shared,
+)
+from hermeshq.services.avatar import (
     delete_avatar_files as _delete_avatar_files_shared,
-    validate_and_save_avatar,
+)
+from hermeshq.services.avatar import (
     resolve_media_type,
+    validate_and_save_avatar,
 )
 
 logger = logging.getLogger(__name__)

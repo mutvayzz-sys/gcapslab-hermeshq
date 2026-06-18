@@ -1,7 +1,7 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,7 +147,7 @@ async def revoke_mcp_access_token(
     if not access:
         raise HTTPException(status_code=404, detail="MCP access token not found")
     access.is_active = False
-    access.expires_at = datetime.now(timezone.utc)
+    access.expires_at = datetime.now(UTC)
     await _log_mcp_admin_event(
         db,
         "mcp.access_token.revoked",
@@ -183,12 +183,12 @@ async def rotate_mcp_access_token(
     # Extend expiration if applicable
     if access.expires_at:
         from datetime import timedelta
-        remaining = access.expires_at - datetime.now(timezone.utc)
+        remaining = access.expires_at - datetime.now(UTC)
         if remaining.total_seconds() > 0:
-            access.expires_at = datetime.now(timezone.utc) + remaining
+            access.expires_at = datetime.now(UTC) + remaining
         else:
             # Already expired — give 30 days
-            access.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+            access.expires_at = datetime.now(UTC) + timedelta(days=30)
 
     await _log_mcp_admin_event(
         db,

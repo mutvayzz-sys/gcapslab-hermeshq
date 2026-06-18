@@ -1,6 +1,6 @@
 from __future__ import annotations
-import logging
 
+import logging
 import tempfile
 from pathlib import Path
 
@@ -13,7 +13,6 @@ from hermeshq.models.user import User
 from hermeshq.schemas.backup import (
     InstanceBackupCreateRequest,
     InstanceBackupRestoreJobRead,
-    InstanceBackupRestoreRead,
     InstanceBackupValidationRead,
 )
 from hermeshq.services.instance_backup import InstanceBackupError

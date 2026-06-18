@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
-
 
 # ── Overview ──────────────────────────────────────────────────────────────────
 
@@ -19,7 +17,7 @@ class DashboardStatsRead(BaseModel):
 class DashboardActivityItemRead(BaseModel):
     id: str
     event_type: str
-    message: Optional[str] = None
+    message: str | None = None
     severity: str
     created_at: datetime
 
@@ -40,7 +38,7 @@ class DashboardAgentSummaryRead(BaseModel):
     model: str
     tokens: int
     tasks: int
-    last_activity: Optional[datetime] = None
+    last_activity: datetime | None = None
 
 
 # ── Token stats ───────────────────────────────────────────────────────────────
@@ -75,18 +73,18 @@ class DashboardChannelRead(BaseModel):
     platform: str
     enabled: bool
     status: str
-    paired_at: Optional[str] = None
-    days_since_paired: Optional[int] = None
+    paired_at: str | None = None
+    days_since_paired: int | None = None
 
 
 # ── Fleet health ──────────────────────────────────────────────────────────────
 
 
 class DashboardRecentErrorRead(BaseModel):
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     agent_name: str
-    message: Optional[str] = None
-    timestamp: Optional[str] = None
+    message: str | None = None
+    timestamp: str | None = None
 
 
 class DashboardFleetHealthRead(BaseModel):

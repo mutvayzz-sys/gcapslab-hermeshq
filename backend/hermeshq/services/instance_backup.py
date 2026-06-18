@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import base64
 import asyncio
+import base64
 import contextlib
 import json
 import os
@@ -10,7 +10,7 @@ import socket
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -18,8 +18,8 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import delete, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.config import get_settings
@@ -75,7 +75,7 @@ class RestoreJobState:
     id: str
     mode: str
     status: str = "queued"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
     completed_at: datetime | None = None
     current_step: str | None = None
@@ -155,7 +155,7 @@ class InstanceBackupService:
                     self.settings.workspaces_root / "_integration_factory",
                     "files/integration_factory",
                 )
-                for agent_id, item in workspace_map.items():
+                for _agent_id, item in workspace_map.items():
                     source = Path(item["source_path"])
                     target = f"files/workspaces/{item['archive_dir']}"
                     exclude = [] if payload.include_messaging_sessions else [
@@ -163,12 +163,12 @@ class InstanceBackupService:
                         ".hermes/whatsapp/session",
                     ]
                     self._zip_directory(archive, source, target, exclude_prefixes=exclude)
-        except Exception:
+        except OSError:
             if tmp_path.exists():
                 tmp_path.unlink()
             raise
 
-        filename = f"hermeshq-backup-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.zip"
+        filename = f"hermeshq-backup-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.zip"
         return tmp_path, filename, summary
 
     async def validate_backup_archive(self, archive_path: Path, passphrase: str | None = None) -> InstanceBackupValidationRead:
@@ -189,13 +189,13 @@ class InstanceBackupService:
                     decrypted_sections=decrypted_sections,
                     errors=errors,
                 )
-        except InvalidToken as exc:
+        except InvalidToken:
             return InstanceBackupValidationRead(
                 valid=False,
                 filename=archive_path.name,
                 errors=["Backup passphrase could not decrypt the encrypted sections."],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # backup validation — surface any decrypt error
             return InstanceBackupValidationRead(
                 valid=False,
                 filename=archive_path.name,
@@ -271,7 +271,7 @@ class InstanceBackupService:
         try:
             async with self._restore_lock:
                 job.status = "running"
-                job.started_at = datetime.now(timezone.utc)
+                job.started_at = datetime.now(UTC)
                 job.current_step = "Loading backup archive"
                 payload = await self._load_restore_payload(archive_path, passphrase)
                 job.summary = payload.summary
@@ -296,12 +296,12 @@ class InstanceBackupService:
                     job.current_step = "Restore completed"
                 finally:
                     shutil.rmtree(payload.extracted_root, ignore_errors=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # restore — any failure marks job as failed
             job.status = "failed"
             job.error = str(exc)
             job.current_step = "Restore failed"
         finally:
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
             with contextlib.suppress(Exception):
                 archive_path.unlink(missing_ok=True)
 
@@ -394,7 +394,7 @@ class InstanceBackupService:
         return InstanceBackupSummary(
             schema_version=BACKUP_SCHEMA_VERSION,
             app_version=get_app_version(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             source_hostname=socket.gethostname(),
             source_instance_root=str(self.settings.workspaces_root.parent),
             included_sections=included_sections,
@@ -508,7 +508,7 @@ class InstanceBackupService:
                 extracted_root=extracted_root,
                 workspace_map=workspace_map,
             )
-        except Exception:
+        except OSError:
             shutil.rmtree(extracted_root, ignore_errors=True)
             raise
 
@@ -655,7 +655,7 @@ class InstanceBackupService:
                     if progress_callback:
                         progress_callback(f"Installing Hermes runtime {version.version}")
                     await hermes_version_manager.install_version(version.version)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001  # version install best-effort during restore
                     warnings.append(f"Failed to install Hermes runtime '{version.version}': {exc}")
 
         installation_manager = getattr(app_state, "installation_manager", None)
@@ -667,7 +667,7 @@ class InstanceBackupService:
                     if progress_callback:
                         progress_callback(f"Syncing restored agent {agent.slug}")
                     await installation_manager.sync_agent_installation(agent)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001  # agent sync best-effort during restore
                     warnings.append(f"Failed to sync restored agent '{agent.slug}': {exc}")
         return warnings
 

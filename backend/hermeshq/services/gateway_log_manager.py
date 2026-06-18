@@ -3,14 +3,18 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.core.events import EventBroker
 from hermeshq.models.activity import ActivityLog
-from hermeshq.services.hermes_installation import HermesInstallationManager
 from hermeshq.services.gateway_types import GatewayProcessHandle
+from hermeshq.services.hermes_installation import HermesInstallationManager
+
+if TYPE_CHECKING:
+    from hermeshq.models.messaging_channel import MessagingChannel
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +45,6 @@ class GatewayLogManager:
 
         async with self.session_factory() as session:
             from hermeshq.models.agent import Agent
-            from hermeshq.models.messaging_channel import MessagingChannel
 
             agent = await session.get(Agent, agent_id)
             channel = await self._get_channel(session, agent_id, platform)
@@ -142,7 +145,7 @@ class GatewayLogManager:
                     )
             except asyncio.CancelledError:
                 return
-            except Exception:
+            except Exception:  # noqa: BLE001  # asyncio task — WebSocket stale
                 continue
 
     # ------------------------------------------------------------------
@@ -234,7 +237,7 @@ class GatewayLogManager:
                 return [], last_offset
 
             # Read only the new bytes appended since last_offset
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 f.seek(last_offset)
                 new_text = f.read()
             new_offset = file_size
@@ -258,7 +261,7 @@ class GatewayLogManager:
                 session_format="jsonl",
             )
             return entries, new_offset
-        except Exception:
+        except OSError:
             return [], last_offset
 
     def _extract_entries_from_messages(
@@ -304,7 +307,7 @@ class GatewayLogManager:
             return None
         try:
             lines = bridge_log_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except Exception:
+        except OSError:
             return None
 
         candidates: list[list[str]] = []
@@ -337,7 +340,7 @@ class GatewayLogManager:
         if bridge_log_path and bridge_log_path.exists():
             try:
                 tail = "\n".join(bridge_log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-80:]).lower()
-            except Exception:
+            except OSError:
                 tail = ""
             if "waiting for scan" in tail or "scan this qr code" in tail:
                 return "waiting_scan"
@@ -384,7 +387,7 @@ class GatewayLogManager:
             payload = json.loads(pid_path.read_text(encoding="utf-8"))
             pid = int(payload["pid"])
             recorded_start = payload.get("start_time")
-        except Exception:
+        except (json.JSONDecodeError, OSError, ValueError, KeyError):
             pid_path.unlink(missing_ok=True)
             return
 
@@ -399,7 +402,7 @@ class GatewayLogManager:
         stat_path = proc_dir / "stat"
         try:
             current_start = int(stat_path.read_text(encoding="utf-8").split()[21])
-        except Exception:
+        except (OSError, IndexError, ValueError):
             return
         if current_start != recorded_start:
             pid_path.unlink(missing_ok=True)
@@ -408,7 +411,7 @@ class GatewayLogManager:
         cmdline_path = proc_dir / "cmdline"
         try:
             cmdline = cmdline_path.read_bytes().replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip().lower()
-        except Exception:
+        except OSError:
             return
         if "hermes" not in cmdline or "gateway" not in cmdline:
             pid_path.unlink(missing_ok=True)
@@ -418,7 +421,7 @@ class GatewayLogManager:
             return ""
         try:
             return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
-        except Exception:
+        except OSError:
             return ""
 
     def gateway_log_path(self, workspace_path: str) -> Path:

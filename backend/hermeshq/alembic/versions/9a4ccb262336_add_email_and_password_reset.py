@@ -5,18 +5,17 @@ Revises: 8cc23c178ece
 Create Date: 2026-05-25 20:56:04.587450
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy import inspect
-
 
 # revision identifiers, used by Alembic.
 revision: str = '9a4ccb262336'
-down_revision: Union[str, None] = '8cc23c178ece'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '8cc23c178ece'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _column_exists(table_name: str, column_name: str) -> bool:

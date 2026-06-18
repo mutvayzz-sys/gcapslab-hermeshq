@@ -31,10 +31,7 @@ async def resolve_channel_user(db: AsyncSession, platform: str, sender_id: str) 
     # For Kapso WhatsApp, the webhook may omit the '+' prefix while the stored
     # kapso_number includes it (or vice-versa).  Try the alternate form.
     if platform == "kapso_whatsapp":
-        if sender_id.startswith("+"):
-            alt_id = sender_id[1:]
-        else:
-            alt_id = "+" + sender_id
+        alt_id = sender_id[1:] if sender_id.startswith("+") else "+" + sender_id
         result2 = await db.execute(select(User).where(column == alt_id).limit(1))
         return result2.scalar_one_or_none()
 

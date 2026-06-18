@@ -1,6 +1,6 @@
 from sqlalchemy import Boolean, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from hermeshq.models.base import Base, TimestampMixin
 

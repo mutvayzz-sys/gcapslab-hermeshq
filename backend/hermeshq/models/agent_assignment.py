@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, TimestampMixin

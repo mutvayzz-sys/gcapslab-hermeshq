@@ -19,7 +19,7 @@ def _task_user_id() -> str | None:
             uid = str(meta.get("thread_user_id") or meta.get("created_by_user_id") or "").strip()
             if uid:
                 return uid
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
     return os.environ.get("HERMESHQ_RESOLVED_USER_ID") or None
 
@@ -43,10 +43,10 @@ def _get_m365_token(user_id: str) -> tuple[str | None, str]:
         body = exc.read().decode("utf-8", errors="replace")
         try:
             detail = json.loads(body).get("detail", body)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             detail = body
         return None, str(detail)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # HTTP request catch-all
         return None, str(exc)
 
 
@@ -65,7 +65,7 @@ def _graph(method: str, path: str, access_token: str, payload: dict | None = Non
         body = exc.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(body)}
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return {"error": body, "status": exc.code}
 
 
@@ -107,10 +107,7 @@ def _list_files_tool(args: dict, **_kwargs) -> str:
         # Default: user's OneDrive root
         base_path = "/me/drive/root"
 
-    if folder_path:
-        path = f"{base_path}:/{folder_path}:/children"
-    else:
-        path = f"{base_path}/children"
+    path = f"{base_path}:/{folder_path}:/children" if folder_path else f"{base_path}/children"
 
     result = _graph("GET", path, token)
     if "error" in result:

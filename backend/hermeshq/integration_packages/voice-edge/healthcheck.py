@@ -7,7 +7,7 @@ def _check_import(module_name: str) -> str | None:
     try:
         importlib.import_module(module_name)
         return None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # healthcheck catch-all
         return str(exc)
 
 

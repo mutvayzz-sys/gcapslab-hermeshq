@@ -34,7 +34,7 @@ async def run_action(action_slug: str, *, agent, config: dict, resolve_secret, w
 
     try:
         executable, version = _ensure_runner(workspaces_root)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # action catch-all
         return False, f"Could not bootstrap Snyk Agent Scan: {exc}", None
 
     storage_file = workspaces_root / "_managed_tools" / "snyk-agent-scan" / "scanner-state.json"
@@ -111,7 +111,7 @@ def _parse_json_output(stdout: str) -> dict | None:
     try:
         loaded = json.loads(stdout)
         return loaded if isinstance(loaded, dict) else {"result": loaded}
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         return None
 
 

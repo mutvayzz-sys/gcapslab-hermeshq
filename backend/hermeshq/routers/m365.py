@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime
 
@@ -261,7 +260,7 @@ async def poll_connect_status(
             return M365ConnectStatusRead(status="pending")
         _pending_flows.pop(current_user.id, None)
         raise HTTPException(status_code=400, detail=error_msg) from exc
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # M365 auth — surface unexpected errors as 500
         logger.exception("M365 unexpected error for user %s", current_user.id)
         _pending_flows.pop(current_user.id, None)
         raise HTTPException(status_code=500, detail="Unexpected error during authentication.") from exc
@@ -286,6 +285,7 @@ async def get_agent_m365_scopes(
     if not assignment:
         # Auto-create assignment so users can configure M365 scopes for any agent
         from uuid import uuid4
+
         from hermeshq.models.agent_assignment import AgentAssignment as _AgentAssignment
         assignment = _AgentAssignment(
             id=str(uuid4()),
@@ -428,6 +428,7 @@ async def get_agent_m365_token(
     Validates agent credentials, verifies the agent is assigned to the user,
     checks allowed scopes, and returns a fresh access token."""
     import hmac as _hmac
+
     from hermeshq.core.security import create_agent_service_token
     from hermeshq.models.agent import Agent
     from hermeshq.models.agent_assignment import AgentAssignment

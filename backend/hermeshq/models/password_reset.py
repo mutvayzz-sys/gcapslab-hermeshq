@@ -1,6 +1,6 @@
 """Password reset token model."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, String, func

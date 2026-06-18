@@ -3,33 +3,34 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select as sql_select
 from sqlalchemy import select
+from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from hermeshq.models.task import Task
-from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
+from hermeshq.models.task import Task
 from hermeshq.models.user import User
-from hermeshq.schemas.agent import AgentRead, AvatarGenerationRead
-from hermeshq.services.avatar import (
-    delete_avatar_files as _delete_avatar_files_shared,
-    resolve_media_type,
-    validate_and_save_avatar,
-)
-from hermeshq.services.avatar_generator import generate_avatar
-
 from hermeshq.routers.agents_shared import (
     _agent_avatar_base,
     _build_avatar_path,
     _serialize_agent,
 )
+from hermeshq.schemas.agent import AgentRead, AvatarGenerationRead
+from hermeshq.services.avatar import (
+    delete_avatar_files as _delete_avatar_files_shared,
+)
+from hermeshq.services.avatar import (
+    resolve_media_type,
+    validate_and_save_avatar,
+)
+from hermeshq.services.avatar_generator import generate_avatar
+from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ async def generate_ai_avatar(
     if operator.status == "running":
         try:
             await request.app.state.supervisor.submit_task(task.id)
-        except Exception:
+        except Exception:  # noqa: BLE001  # supervisor task submit best-effort
             logger.debug("Failed to submit avatar-update task; will be picked up on next start", exc_info=True)
 
     return {
@@ -125,16 +126,16 @@ async def generate_agent_avatar(
     agent = await ensure_agent_access(db, current_user, agent_id)
     avatar_base = _agent_avatar_base()
     content, filename = generate_avatar(agent.friendly_name or agent.name or "Agent")
-    
+
     from hermeshq.services.avatar import build_avatar_dir
     avatar_dir = build_avatar_dir(avatar_base, agent_id)
     avatar_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Remove existing avatar files
     for existing in avatar_dir.iterdir():
         if existing.is_file() or existing.is_symlink():
             existing.unlink()
-    
+
     (avatar_dir / filename).write_bytes(content)
     agent.avatar_filename = filename
     await db.commit()

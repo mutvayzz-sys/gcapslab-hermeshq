@@ -80,7 +80,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("Cancelled.", file=sys.stderr)
         return 130
-    except Exception as exc:  # pragma: no cover - CLI guard
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - CLI guard
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     return 0

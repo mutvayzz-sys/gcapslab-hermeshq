@@ -1,10 +1,12 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import ensure_agent_access, get_current_user, is_admin
 from hermeshq.database import get_db_session
+from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
 from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.secret import Secret
@@ -16,7 +18,6 @@ from hermeshq.schemas.messaging_channel import (
     MessagingChannelUpdate,
 )
 from hermeshq.services.hermes_installation import HermesInstallationError
-from hermeshq.models.activity import ActivityLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents/{agent_id}/channels", tags=["messaging-channels"])

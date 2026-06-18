@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from hermeshq.models.base import Base, TimestampMixin, utcnow
+from hermeshq.models.base import Base, TimestampMixin
 
 
 class AuditLog(TimestampMixin, Base):

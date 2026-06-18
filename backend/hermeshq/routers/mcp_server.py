@@ -24,8 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hermeshq.database import get_db_session
 from hermeshq.models.activity import ActivityLog
 from hermeshq.models.agent import Agent
-from hermeshq.models.mcp_access import McpAccessToken
 from hermeshq.models.enums import TaskStatus
+from hermeshq.models.mcp_access import McpAccessToken
 from hermeshq.models.task import Task
 from hermeshq.services.mcp_access import (
     authenticate_mcp_token,
@@ -632,7 +632,7 @@ async def _get_prompt(db: AsyncSession, access: McpAccessToken, name: str, argum
         agent_id = str(arguments.get("agent_id") or "")
         prompt = str(arguments.get("prompt") or "")
         ensure_mcp_agent_allowed(access, agent_id)
-        return {"description": f"Invoke with context", "messages": [
+        return {"description": "Invoke with context", "messages": [
             {"role": "user", "content": {"type": "text", "text": (
                 f"Gather context about HermesHQ agent {agent_id} using the available resources and tools, "
                 f"then invoke the agent with the following instruction:\n\n{prompt}"
@@ -642,7 +642,7 @@ async def _get_prompt(db: AsyncSession, access: McpAccessToken, name: str, argum
     # Dynamic per-agent chat prompt
     if name.startswith("chat_"):
         message = str(arguments.get("message") or "")
-        return {"description": f"Chat prompt", "messages": [
+        return {"description": "Chat prompt", "messages": [
             {"role": "user", "content": {"type": "text", "text": message}},
         ]}
 
@@ -830,7 +830,7 @@ async def mcp_http_endpoint(
 
         # ── logging/setLevel ──────────────────────────────────────────
         if method == "logging/setLevel":
-            level = str(params.get("level", "info")).upper()
+            _level = str(params.get("level", "info")).upper()  # noqa: F841 — acknowledged
             # Level acknowledged (per-session filtering not yet implemented)
             result: Any = {}
             resp = JSONResponse(_jsonrpc_result(request_id, result))
@@ -843,7 +843,7 @@ async def mcp_http_endpoint(
         await db.commit()
         return JSONResponse(_jsonrpc_error(request_id, -32601, f"Method not found: {method}"))
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # JSON-RPC catch-all for protocol-level errors
         await db.rollback()
         _analytics.record(token_id=access.id, method=method, latency_ms=(time.monotonic() - t0) * 1000, error=True)
         return JSONResponse(_jsonrpc_error(request_id, -32000, str(exc)), status_code=200)
@@ -869,14 +869,14 @@ async def mcp_sse_endpoint(
 
     async def _sse_generator():
         # Per the MCP spec the first event advertises the POST endpoint.
-        yield f"event: endpoint\ndata: /mcp\n\n"
+        yield "event: endpoint\ndata: /mcp\n\n"
         # Keep the connection alive with periodic heartbeats.
         try:
             while True:
                 if await request.is_disconnected():
                     break
                 await asyncio.sleep(15)
-                yield f": heartbeat\n\n"
+                yield ": heartbeat\n\n"
         except asyncio.CancelledError:
             pass
 
@@ -940,7 +940,7 @@ async def mcp_analytics_endpoint(
         else:
             # MCP token
             await authenticate_mcp_token(db, authorization)
-    except Exception:
+    except Exception:  # noqa: BLE001  # Auth check — any failure means 401
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     result: dict[str, Any] = {

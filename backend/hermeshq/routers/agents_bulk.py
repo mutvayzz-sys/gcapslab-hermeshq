@@ -1,8 +1,8 @@
 """Agent bulk operation endpoints – bulk task dispatch, bulk message send."""
 
 from __future__ import annotations
-import logging
 
+import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -12,6 +12,13 @@ from hermeshq.core.security import get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.task import Task
 from hermeshq.models.user import User
+from hermeshq.routers.agents_shared import (
+    _auto_start_agent_if_needed,
+    _create_conversation_task,
+    _load_bulk_agents,
+    _load_enabled_integration_slugs,
+    _sync_agent_integration_toolsets,
+)
 from hermeshq.schemas.agent import (
     AgentBulkConfigUpdate,
     AgentBulkMessageCreate,
@@ -19,16 +26,8 @@ from hermeshq.schemas.agent import (
     AgentBulkOperationSkipped,
     AgentBulkTaskCreate,
 )
-
-from hermeshq.routers.agents_shared import (
-    _auto_start_agent_if_needed,
-    _create_conversation_task,
-    _load_bulk_agents,
-    _sync_agent_integration_toolsets,
-    _load_enabled_integration_slugs,
-)
+from hermeshq.services.audit import extract_ip, record_audit
 from hermeshq.services.runtime_profiles import normalize_runtime_profile_slug
-from hermeshq.services.audit import record_audit, extract_ip
 from hermeshq.services.task_board import next_board_order, runtime_status_to_board_column
 
 logger = logging.getLogger(__name__)
@@ -191,7 +190,7 @@ async def bulk_config_update(
 
     Only non-None fields from the payload are applied. Archived agents are skipped.
     """
-    from hermeshq.core.security import is_admin, ensure_agent_access
+    from hermeshq.core.security import ensure_agent_access, is_admin
 
     update_data = payload.model_dump(exclude_unset=True, exclude={"agent_ids"})
     if not update_data:

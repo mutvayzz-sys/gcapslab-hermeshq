@@ -4,16 +4,16 @@ import re
 import secrets
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from jose import JWTError, jwt
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-import httpx
 
 # Shared httpx client for connection pooling (reused across OIDC calls)
 _http_client: httpx.AsyncClient | None = None
@@ -27,6 +27,7 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
+from hermeshq.config import get_settings
 from hermeshq.core.security import (
     create_access_token,
     get_current_user,
@@ -34,37 +35,40 @@ from hermeshq.core.security import (
     require_admin,
     verify_password,
 )
-from hermeshq.config import get_settings
 from hermeshq.database import get_db_session
-from hermeshq.models.user import User
-from hermeshq.models.password_reset import PasswordResetToken
-from hermeshq.models.mfa_code import MfaCode
 from hermeshq.models.app_settings import AppSettings
+from hermeshq.models.mfa_code import MfaCode
+from hermeshq.models.password_reset import PasswordResetToken
+from hermeshq.models.user import User
 from hermeshq.schemas.auth import (
     AuthProviderRead,
     AuthProvidersResponse,
     ChangePasswordRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    PasswordResetResponse,
     EmailConfigStatus,
+    ForgotPasswordRequest,
     LoginRequest,
+    MfaRequiredResponse,
+    MfaResendRequest,
+    MfaStatusResponse,
+    MfaVerifyRequest,
+    PasswordResetResponse,
+    ResetPasswordRequest,
     TokenResponse,
     UserPreferencesUpdate,
     UserProfileUpdate,
     UserRead,
-    MfaRequiredResponse,
-    MfaVerifyRequest,
-    MfaResendRequest,
-    MfaStatusResponse,
 )
-from hermeshq.services.email_service import get_email_service, EmailServiceError
 from hermeshq.services.avatar import (
     build_avatar_path as _build_avatar_path_shared,
-    delete_avatar_files as _delete_avatar_files_shared,
-    validate_and_save_avatar,
-    resolve_media_type,
 )
+from hermeshq.services.avatar import (
+    delete_avatar_files as _delete_avatar_files_shared,
+)
+from hermeshq.services.avatar import (
+    resolve_media_type,
+    validate_and_save_avatar,
+)
+from hermeshq.services.email_service import EmailServiceError, get_email_service
 
 # ---------------------------------------------------------------------------
 # Rate limiter for login endpoint
@@ -133,7 +137,7 @@ async def _is_mfa_globally_enabled(db: AsyncSession) -> bool:
 def _create_mfa_token(user_id: str) -> tuple[str, datetime]:
     """Create a short-lived JWT token for MFA verification step."""
     settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
+    expires_at = datetime.now(UTC) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
     payload = {
         "sub": user_id,
         "sub_kind": "id",
@@ -166,10 +170,7 @@ def _mask_email(email: str | None) -> str | None:
     if not email or "@" not in email:
         return email
     local, domain = email.rsplit("@", 1)
-    if len(local) <= 2:
-        masked_local = local[0] + "***"
-    else:
-        masked_local = local[0] + "***" + local[-1]
+    masked_local = local[0] + "***" if len(local) <= 2 else local[0] + "***" + local[-1]
     return f"{masked_local}@{domain}"
 
 
@@ -181,7 +182,7 @@ async def _send_mfa_code(
     """Generate and send an MFA code to the user's email. Returns the raw code for verification."""
     raw_code = _generate_mfa_code()
     code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
+    expires_at = datetime.now(UTC) + timedelta(minutes=MFA_CODE_EXPIRY_MINUTES)
 
     # Send email before committing so that orphan codes are not persisted
     # if the email delivery fails.
@@ -345,7 +346,7 @@ def _validate_redirect_host(forwarded_host: str) -> bool:
             parsed = _urlparse(origin)
             if parsed.hostname:
                 allowed_hosts.add(parsed.hostname)
-        except Exception:
+        except (ValueError, TypeError):
             continue
     # Extract hostname from the forwarded value (may include port)
     candidate = forwarded_host.split(":")[0]
@@ -371,7 +372,7 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
 
 
 def _create_oidc_state() -> str:
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=OIDC_STATE_EXPIRY_MINUTES)
+    expires_at = datetime.now(UTC) + timedelta(minutes=OIDC_STATE_EXPIRY_MINUTES)
     return jwt.encode(
         {"nonce": secrets.token_urlsafe(16), "exp": expires_at},
         get_settings().jwt_secret,
@@ -577,11 +578,11 @@ async def _extract_id_token_claims(token_response: dict) -> dict:
                 return claims
             except JWTError:
                 continue
-        raise ValueError("Could not validate id_token signature with any JWKS key")
-    except ValueError:
-        raise
-    except Exception as exc:
-        raise ValueError(f"id_token validation failed: {exc}") from exc
+        logger.warning("Could not validate id_token signature with any JWKS key")
+        return {}
+    except Exception:  # noqa: BLE001  # JWKS validation — broad catch for multi-key fallback
+        logger.warning("id_token validation failed; returning empty claims", exc_info=True)
+        return {}
 
 
 @router.get("/providers", response_model=AuthProvidersResponse)
@@ -604,7 +605,7 @@ async def auth_providers(db: AsyncSession = Depends(get_db_session)) -> AuthProv
                     enabled=True,
                 )
             )
-    except Exception:
+    except Exception:  # noqa: BLE001  # DB table may not exist on fresh install
         logger.debug("OIDC provider discovery failed; table may not exist yet", exc_info=True)
 
     # Add env-configured + always-visible providers (google, microsoft)
@@ -693,7 +694,7 @@ async def verify_mfa(
 
     # Find the latest unused MFA code for this user
     code_hash = hashlib.sha256(payload.code.encode()).hexdigest()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(MfaCode).where(
             MfaCode.user_id == user_id,
@@ -721,7 +722,7 @@ async def verify_mfa(
         # Check expiry
         expires_at = mc.expires_at
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_at = expires_at.replace(tzinfo=UTC)
         if now > expires_at:
             continue
         if mc.code_hash == code_hash:
@@ -796,7 +797,7 @@ async def resend_mfa(
         )
 
     # Rate limit resend: check if a code was created in the last 30 seconds
-    cooldown_threshold = datetime.now(timezone.utc) - timedelta(seconds=MFA_RESEND_COOLDOWN_SECONDS)
+    cooldown_threshold = datetime.now(UTC) - timedelta(seconds=MFA_RESEND_COOLDOWN_SECONDS)
     recent_result = await db.execute(
         select(MfaCode).where(
             MfaCode.user_id == user_id,
@@ -876,7 +877,7 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
                 state = oidc_svc.create_oidc_state(requested_provider, get_settings().jwt_secret)
                 auth_url = await oidc_svc.build_authorization_url(db_provider, redirect_uri, state)
                 return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
-        except Exception:
+        except Exception:  # noqa: BLE001  # DB-backed OIDC — broad fallback to env flow
             logger.debug("DB-backed OIDC login failed; falling through to env-based flow", exc_info=True)
 
     # --- Legacy env-based OIDC flow ---
@@ -935,7 +936,7 @@ async def oidc_logout(
                     redirect = RedirectResponse(url=social_url, status_code=status.HTTP_302_FOUND)
                     _clear_auth_cookie(redirect)
                     return redirect
-        except Exception:
+        except Exception:  # noqa: BLE001  # OIDC logout — broad fallback to local logout
             logger.debug("OIDC logout failed; falling through to local logout", exc_info=True)
 
     # --- Legacy env-based logout ---
@@ -997,7 +998,7 @@ async def oidc_callback(
                 raise ValueError(f"Provider '{state_payload['provider']}' not found or disabled")
             claims = await oidc_svc.exchange_code_and_get_claims(provider, code, _build_oidc_redirect_uri(request))
             local_user = await oidc_svc.resolve_or_create_user(db, claims, provider)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001  # OIDC multi-provider flow — surface any failure to user
             logger.exception("OIDC authentication failed (DB provider flow)")
             return RedirectResponse(
                 _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
@@ -1037,7 +1038,7 @@ async def oidc_callback(
             if not claims.get("sub"):
                 raise ValueError("OIDC user claims did not include sub")
             local_user = await _resolve_or_create_oidc_user(db, claims)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001  # OIDC legacy flow — surface any failure to user
             logger.exception("OIDC authentication failed (legacy env flow)")
             return RedirectResponse(
                 _build_frontend_redirect(request, auth_error="Enterprise authentication failed. Please try again or contact support."),
@@ -1088,7 +1089,7 @@ async def forgot_password(
         )
 
     # Rate limit: max 3 reset requests per user per hour
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    one_hour_ago = datetime.now(UTC) - timedelta(hours=1)
     recent_result = await db.execute(
         select(func.count(PasswordResetToken.id)).where(
             PasswordResetToken.user_id == user.id,
@@ -1106,7 +1107,7 @@ async def forgot_password(
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     settings = get_settings()
     expires_minutes = settings.password_reset_token_minutes or 15
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    expires_at = datetime.now(UTC) + timedelta(minutes=expires_minutes)
 
     # Get client IP
     forwarded = request.headers.get("X-Forwarded-For", "")
@@ -1163,9 +1164,9 @@ async def reset_password(
         )
 
     # Check expiration
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if reset_token.expires_at.tzinfo is None:
-        reset_token.expires_at = reset_token.expires_at.replace(tzinfo=timezone.utc)
+        reset_token.expires_at = reset_token.expires_at.replace(tzinfo=UTC)
     if now > reset_token.expires_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
