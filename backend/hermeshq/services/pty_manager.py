@@ -154,6 +154,12 @@ class PTYManager:
         if exit_code is None:
             with contextlib.suppress(Exception):
                 exit_code = session.process.wait(timeout=1)
+        if exit_code is None:
+            import signal
+            with contextlib.suppress(ProcessLookupError, OSError):
+                session.process.send_signal(signal.SIGKILL)
+            with contextlib.suppress(Exception):
+                exit_code = session.process.wait(timeout=2)
         await self._audit(
             session,
             "terminal.session.closed",
