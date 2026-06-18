@@ -91,10 +91,14 @@ def create_oidc_state(provider_slug: str, jwt_secret: str) -> str:
     payload = {
         "provider": provider_slug,
         "nonce": secrets.token_urlsafe(16),
-        "exp": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
     }
     raw = json.dumps(payload).encode()
-    sig = jwt.encode({"data": base64.b64encode(raw).decode()}, jwt_secret, algorithm="HS256")
+    exp = datetime.now(timezone.utc) + timedelta(minutes=10)
+    sig = jwt.encode(
+        {"data": base64.b64encode(raw).decode(), "exp": exp},
+        jwt_secret,
+        algorithm="HS256",
+    )
     return sig
 
 
@@ -220,9 +224,16 @@ async def _validate_id_token(id_token: str, provider: OidcProvider, discovery: d
 
     for key_data in keys:
         try:
+            kty = str(key_data.get("kty", "")).upper()
+            if kty == "RSA":
+                public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+            elif kty == "EC":
+                public_key = jwt.algorithms.ECAlgorithm.from_jwk(key_data)
+            else:
+                continue
             return jwt.decode(
                 id_token,
-                key=key_data,
+                key=public_key,
                 algorithms=["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"],
                 audience=provider.client_id,
                 issuer=discovery.get("issuer"),
