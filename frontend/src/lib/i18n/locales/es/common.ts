@@ -12,6 +12,11 @@ const ns: Record<string, string> = {
   "common.no": "No",
   "common.unknown": "Desconocido",
   "common.loading": "[CARGANDO]",
+  "common.edit": "Editar",
+  "common.delete": "Eliminar",
+  "common.save": "Guardar",
+  "common.create": "Crear",
+  "common.cancel": "Cancelar",
 };
 
 export default ns;

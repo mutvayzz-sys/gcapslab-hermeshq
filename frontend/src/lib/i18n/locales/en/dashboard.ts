@@ -57,6 +57,7 @@ const ns: Record<string, string> = {
   "dashboard.day": "Day",
   "dashboard.completedTasks": "Completed",
   "dashboard.failedTasks": "Failed",
+  "dashboard.platform": "Platform",
 };
 
 export default ns;

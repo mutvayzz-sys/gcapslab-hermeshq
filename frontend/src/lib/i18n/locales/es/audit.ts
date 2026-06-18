@@ -14,6 +14,7 @@ const ns: Record<string, string> = {
   "audit.loadMore": "Cargar más",
   "audit.goBack": "Página anterior",
   "nav.audit": "Auditoría",
+  "audit.adminOnly": "El log de auditoría solo es accesible para administradores.",
 };
 
 export default ns;

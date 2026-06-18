@@ -18,6 +18,7 @@ const ns: Record<string, string> = {
   "account.confirmPassword": "Confirm password",
   "account.savePassword": "Update password",
   "account.passwordUpdated": "Password updated.",
+  "account.connectedAccounts": "Connected accounts",
 };
 
 export default ns;
