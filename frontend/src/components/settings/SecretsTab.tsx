@@ -53,7 +53,7 @@ export function SecretsTab() {
           </label>
           <label className="panel-field">
             <span className="panel-label">Value</span>
-            <input value={secretValue} onChange={(event) => setSecretValue(event.target.value)} />
+            <input type="password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} />
           </label>
           <button className="panel-button-primary w-full" type="submit">
             Store secret

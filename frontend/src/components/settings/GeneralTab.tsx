@@ -102,12 +102,16 @@ export default function GeneralTab({
   /* ───── handlers ───── */
   async function submitBranding(event: FormEvent) {
     event.preventDefault();
-    await updateSettings.mutateAsync({
-      app_name: appName || null,
-      app_short_name: appShortName || null,
-      theme_mode: themeMode,
-      default_locale: defaultLocale,
-    });
+    try {
+      await updateSettings.mutateAsync({
+        app_name: appName || null,
+        app_short_name: appShortName || null,
+        theme_mode: themeMode,
+        default_locale: defaultLocale,
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Branding update failed");
+    }
   }
 
   async function onLogoSelected(file: File | null) {
@@ -158,10 +162,14 @@ export default function GeneralTab({
         : "Merge this backup into the current instance state?",
     );
     if (!confirmed) return;
-    const job = await restoreInstanceBackup.mutateAsync({
-      file: backupImportFile, passphrase: backupImportPassphrase, mode: backupRestoreMode,
-    });
-    setActiveRestoreJobId(job.id);
+    try {
+      const job = await restoreInstanceBackup.mutateAsync({
+        file: backupImportFile, passphrase: backupImportPassphrase, mode: backupRestoreMode,
+      });
+      setActiveRestoreJobId(job.id);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Restore failed");
+    }
   }
 
   function renderBackupSummary(summary: InstanceBackupSummary | null | undefined) {
