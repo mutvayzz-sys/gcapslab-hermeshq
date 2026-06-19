@@ -1128,6 +1128,7 @@ class HermesInstallationManager:
         # Keys managed by the integration system — these get stripped and rewritten
         managed_keys: set[str] = {
             "OPENAI_BASE_URL",
+            "HERMESHQ_SHAREPOINT_SITE_URL",
             "TELEGRAM_BOT_TOKEN",
             "TELEGRAM_ALLOWED_USERS",
             "TELEGRAM_HOME_CHANNEL",

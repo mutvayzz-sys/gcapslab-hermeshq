@@ -352,6 +352,7 @@ _INTEGRATION_PLUGIN: dict[str, str] = {
 async def update_agent_m365_scopes(
     agent_id: str,
     payload: AgentScopesUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentM365ScopesRead:
@@ -412,6 +413,14 @@ async def update_agent_m365_scopes(
             agent.enabled_toolsets = current_toolsets
 
     await db.commit()
+
+    # Sync agent .env so HERMESHQ_SHAREPOINT_SITE_URL takes effect without manual restart
+    if agent:
+        try:
+            await request.app.state.installation_manager.sync_agent_installation(agent)
+        except Exception:
+            logger.warning("Failed to sync agent installation after M365 scopes update for agent %s", agent_id, exc_info=True)
+
     return {
         "allowed_scopes": assignment.m365_allowed_scopes,
         "sharepoint_site_url": (payload.sharepoint_site_url or "").strip() or None,
