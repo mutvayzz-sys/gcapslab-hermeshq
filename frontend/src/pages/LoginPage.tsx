@@ -136,7 +136,8 @@ export function LoginPage() {
         return;
       }
       setSession(data.access_token!, null);
-      navigate("/");
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from && from !== "/login" ? from : "/");
     } catch {
       setError(t("login.invalidCredentials"));
     } finally {

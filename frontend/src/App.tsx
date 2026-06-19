@@ -110,7 +110,7 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/mfa-verify" element={<MfaVerifyPage />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
           </Routes>
         </ErrorBoundary>
       </I18nProvider>

@@ -306,15 +306,15 @@ export function AppShell() {
         </main>
       </div>
 
-      {mobileNavOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-[var(--overlay)] md:hidden"
-          onClick={() => setMobileNavOpen(false)}
+      <div
+        className={`fixed inset-0 z-50 md:hidden transition-opacity duration-200 ${mobileNavOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+        style={{ background: "var(--overlay)" }}
+        onClick={() => setMobileNavOpen(false)}
+      >
+        <aside
+          className={`app-shell-mobile panel-frame absolute left-4 top-4 bottom-4 w-[min(82vw,320px)] p-5 transition-transform duration-200 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}
+          onClick={(event) => event.stopPropagation()}
         >
-          <aside
-            className="app-shell-mobile panel-frame absolute left-4 top-4 bottom-4 w-[min(82vw,320px)] p-5"
-            onClick={(event) => event.stopPropagation()}
-          >
             <div className="mb-4 flex justify-end">
               <button
                 type="button"
@@ -328,8 +328,7 @@ export function AppShell() {
               {renderNav(false)}
             </div>
           </aside>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

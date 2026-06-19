@@ -12,12 +12,14 @@ function dedupeSkills(skills: string[]) {
 export function AgentSkillsPanel({ agent, embedded = false }: { agent: Agent; embedded?: boolean }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [optimisticAssigned, setOptimisticAssigned] = useState<string[] | null>(null);
   const updateAgent = useUpdateAgent();
   const deleteInstalledSkill = useDeleteInstalledSkill();
   const { data: agentSkills, isLoading: isSkillsLoading } = useAgentSkills(agent.id);
   const { data: catalog, isFetching: isSearching } = useSkillCatalog(query, 10);
 
-  const assigned = useMemo(() => dedupeSkills(agentSkills?.assigned ?? agent.skills ?? []), [agent.skills, agentSkills?.assigned]);
+  const serverAssigned = useMemo(() => dedupeSkills(agentSkills?.assigned ?? agent.skills ?? []), [agent.skills, agentSkills?.assigned]);
+  const assigned = optimisticAssigned ?? serverAssigned;
   const installed = agentSkills?.installed ?? [];
 
   async function saveSkills(nextSkills: string[]) {
@@ -31,11 +33,23 @@ export function AgentSkillsPanel({ agent, embedded = false }: { agent: Agent; em
     if (assigned.includes(identifier)) {
       return;
     }
-    await saveSkills([...assigned, identifier]);
+    const next = dedupeSkills([...assigned, identifier]);
+    setOptimisticAssigned(next);
+    try {
+      await saveSkills(next);
+    } finally {
+      setOptimisticAssigned(null);
+    }
   }
 
   async function removeSkill(identifier: string) {
-    await saveSkills(assigned.filter((skill) => skill !== identifier));
+    const next = assigned.filter((skill) => skill !== identifier);
+    setOptimisticAssigned(next);
+    try {
+      await saveSkills(next);
+    } finally {
+      setOptimisticAssigned(null);
+    }
   }
 
   async function deleteSkill(path: string) {
