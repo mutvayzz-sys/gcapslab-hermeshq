@@ -161,6 +161,9 @@ export function CommsPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!content.trim()) {
+      return;
+    }
     setSubmitError(null);
     try {
       if (messageType === "broadcast") {
@@ -268,7 +271,7 @@ export function CommsPage() {
           <button
             type="submit"
             className="panel-button-primary w-full"
-            disabled={!fromAgentId || (messageType !== "broadcast" && (!toAgentId || (messageType === "delegate" && Boolean(selectedDelegateState?.disabled))))}
+            disabled={!content.trim() || !fromAgentId || (messageType !== "broadcast" && (!toAgentId || (messageType === "delegate" && Boolean(selectedDelegateState?.disabled))))}
           >
             {t("comms.dispatch")}
           </button>

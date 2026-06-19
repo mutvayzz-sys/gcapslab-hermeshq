@@ -9,9 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from sqlalchemy import func
+
 from hermeshq.core.security import ensure_agent_access, get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
+from hermeshq.models.node import Node
 from hermeshq.models.user import User
 from hermeshq.routers.agents_shared import _serialize_agent
 from hermeshq.schemas.agent import AgentModeUpdate, AgentRead
@@ -27,7 +30,22 @@ async def start_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
-    await ensure_agent_access(db, current_user, agent_id)
+    agent = await ensure_agent_access(db, current_user, agent_id)
+    node = await db.get(Node, agent.node_id)
+    if node:
+        active_count_result = await db.execute(
+            select(func.count()).where(
+                Agent.node_id == agent.node_id,
+                Agent.status.in_(("running", "starting")),
+                Agent.is_archived.is_(False),
+            )
+        )
+        active_count = active_count_result.scalar_one()
+        if active_count >= node.max_agents:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Node is at capacity ({active_count}/{node.max_agents} agents running)",
+            )
     supervisor = request.app.state.supervisor
     try:
         await supervisor.start_agent(agent_id)

@@ -57,8 +57,17 @@ export function ScheduledTasksPage() {
     [requestedAgentId, schedulesWithAgent],
   );
 
+  function isValidCron(expr: string): boolean {
+    const parts = expr.trim().split(/\s+/);
+    return parts.length === 5 && parts.every((p) => /^[\d*/,\-]+$/.test(p));
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isValidCron(cronExpression)) {
+      alert(t("schedules.invalidCron"));
+      return;
+    }
     try {
       await createScheduledTask.mutateAsync({
         agent_id: scheduleAgentId || agents?.[0]?.id,

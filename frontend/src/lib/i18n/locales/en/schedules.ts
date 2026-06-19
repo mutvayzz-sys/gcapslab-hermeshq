@@ -16,6 +16,7 @@ const ns: Record<string, string> = {
   "schedules.openAgent": "Open agent",
   "schedules.delete": "Delete schedule",
   "schedules.empty": "[EMPTY] no recurring tasks configured for this scope",
+  "schedules.invalidCron": "Invalid cron expression. Expected 5 space-separated fields (e.g. */15 * * * *)",
 };
 
 export default ns;
