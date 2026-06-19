@@ -226,12 +226,13 @@ export function MyAccountPage() {
           <div className="border-t border-[var(--border)] pt-4">
             <p className="panel-label">{t("account.operatorIcon")}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <label className="panel-button-secondary cursor-pointer">
-                {t("users.uploadIcon")}
+              <label className={`panel-button-secondary ${uploadAvatar.isPending ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>
+                {uploadAvatar.isPending ? t("common.loading") : t("users.uploadIcon")}
                 <input
                   className="hidden"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  disabled={uploadAvatar.isPending}
                   onChange={(event) => void onAvatarSelected(event.target.files?.[0] ?? null)}
                 />
               </label>

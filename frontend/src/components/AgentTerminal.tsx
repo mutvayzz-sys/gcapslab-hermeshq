@@ -49,6 +49,7 @@ export function AgentTerminal({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   const shouldReconnectRef = useRef(true);
   const shouldAutoScrollRef = useRef(true);
   const terminalDisabledByProfile = runtimeProfile === "standard" || archived;
@@ -130,6 +131,7 @@ export function AgentTerminal({
     const socket = new WebSocket(resolvePtyUrl(agentId, token));
     socketRef.current = socket;
     socket.onopen = () => {
+      reconnectAttemptsRef.current = 0;
       setConnected(true);
       setConnectionMessage(null);
       fitAddon.fit();
@@ -154,9 +156,12 @@ export function AgentTerminal({
         setConnectionMessage(t("agent.terminalNotFound"));
       } else if (shouldRetry) {
         setConnectionMessage(t("agent.ptyLost"));
+        const attempt = reconnectAttemptsRef.current;
+        reconnectAttemptsRef.current += 1;
+        const delay = Math.min(1200 * Math.pow(2, attempt), 30_000);
         reconnectTimerRef.current = window.setTimeout(() => {
           setReconnectNonce((value) => value + 1);
-        }, 1200);
+        }, delay);
       } else {
         setConnectionMessage(t("agent.ptyClosed"));
       }
