@@ -1,0 +1,52 @@
+name: Version Bump
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "VERSION"
+      - ".github/workflows/version-bump.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute new version
+        id: version
+        run: |
+          CURRENT=$(cat VERSION | tr -d '[:space:]')
+          TODAY=$(date -u +%Y.%-m.%-d)
+          CURRENT_DATE=$(echo "$CURRENT" | rev | cut -d. -f2- | rev)
+          CURRENT_REV=$(echo "$CURRENT" | rev | cut -d. -f1 | rev)
+
+          if [ "$CURRENT_DATE" = "$TODAY" ]; then
+            NEW_REV=$((CURRENT_REV + 1))
+          else
+            NEW_REV=1
+          fi
+
+          NEW_VERSION="${TODAY}.${NEW_REV}"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Bumping version: $CURRENT → $NEW_VERSION"
+
+      - name: Update VERSION file
+        if: steps.version.outputs.current != steps.version.outputs.new
+        run: |
+          echo "${{ steps.version.outputs.new }}" > VERSION
+
+      - name: Commit and push
+        if: steps.version.outputs.current != steps.version.outputs.new
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git push
