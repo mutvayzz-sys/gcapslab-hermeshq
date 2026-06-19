@@ -249,7 +249,7 @@ export default function GeneralTab({
               {logoUrl ? <img src={logoUrl} alt={settings?.app_name ?? "Logo"} className="h-12 w-auto max-w-[8rem] object-contain" /> : <p className="text-sm text-[var(--text-secondary)]">{t("settings.noLogo")}</p>}
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <label className="panel-button-secondary cursor-pointer">Upload PNG<input className="hidden" type="file" accept="image/png" onChange={(e) => void onLogoSelected(e.target.files?.[0] ?? null)} /></label>
+              <label className={`panel-button-secondary ${uploadLogo.isPending ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>{uploadLogo.isPending ? t("common.loading") : "Upload PNG"}<input className="hidden" type="file" accept="image/png" disabled={uploadLogo.isPending} onChange={(e) => void onLogoSelected(e.target.files?.[0] ?? null)} /></label>
               <button type="button" className="panel-button-secondary" onClick={async () => { try { await deleteLogo.mutateAsync(); } catch (error) { window.alert(error instanceof Error ? error.message : "Logo removal failed"); } }} disabled={!settings?.has_logo}>{t("settings.removeLogo")}</button>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function GeneralTab({
               {faviconUrl ? <img src={faviconUrl} alt="Favicon" className="h-10 w-10 rounded border border-[var(--border)] object-contain" /> : <p className="text-sm text-[var(--text-secondary)]">{t("settings.noFavicon")}</p>}
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <label className="panel-button-secondary cursor-pointer">Upload PNG/ICO<input className="hidden" type="file" accept="image/png,.ico,image/x-icon,image/vnd.microsoft.icon" onChange={(e) => void onFaviconSelected(e.target.files?.[0] ?? null)} /></label>
+              <label className={`panel-button-secondary ${uploadFavicon.isPending ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>{uploadFavicon.isPending ? t("common.loading") : "Upload PNG/ICO"}<input className="hidden" type="file" accept="image/png,.ico,image/x-icon,image/vnd.microsoft.icon" disabled={uploadFavicon.isPending} onChange={(e) => void onFaviconSelected(e.target.files?.[0] ?? null)} /></label>
               <button type="button" className="panel-button-secondary" onClick={async () => { try { await deleteFavicon.mutateAsync(); } catch (error) { window.alert(error instanceof Error ? error.message : "Favicon removal failed"); } }} disabled={!settings?.has_favicon}>{t("settings.removeFavicon")}</button>
             </div>
           </div>
@@ -270,7 +270,7 @@ export default function GeneralTab({
               {settings?.has_tui_skin ? <div><p className="text-sm text-[var(--text-display)]">{String(settings?.default_tui_skin ?? "unset")}</p><p className="mt-1 text-xs uppercase tracking-[0.24em] text-[var(--text-secondary)]">{String(settings?.tui_skin_filename ?? "")}</p></div> : <p className="text-sm text-[var(--text-secondary)]">{t("settings.noTuiSkin")}</p>}
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <label className="panel-button-secondary cursor-pointer">{t("settings.uploadTuiSkin")}<input className="hidden" type="file" accept=".yaml,.yml,text/yaml,application/yaml" onChange={(e) => void onTuiSkinSelected(e.target.files?.[0] ?? null)} /></label>
+              <label className={`panel-button-secondary ${uploadTuiSkin.isPending ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>{uploadTuiSkin.isPending ? t("common.loading") : t("settings.uploadTuiSkin")}<input className="hidden" type="file" accept=".yaml,.yml,text/yaml,application/yaml" disabled={uploadTuiSkin.isPending} onChange={(e) => void onTuiSkinSelected(e.target.files?.[0] ?? null)} /></label>
               <button type="button" className="panel-button-secondary" onClick={async () => { try { await deleteTuiSkin.mutateAsync(); } catch (error) { window.alert(error instanceof Error ? error.message : "TUI skin removal failed"); } }} disabled={!settings?.has_tui_skin}>{t("settings.removeTuiSkin")}</button>
             </div>
           </div>
