@@ -65,6 +65,8 @@ def is_capability_allowed(capabilities: Iterable[str], requested_capability: str
 
 def resolve_desktop_mode(user: User, settings: Settings) -> str:
     role = normalize_desktop_role(user.role)
+    if user.organization and user.organization.default_mode:
+        return user.organization.default_mode
     if role == "student":
         return "headmaster_plus_thin"
     return "headmaster_local"

@@ -66,6 +66,7 @@ async def _build_provision_response(
     
     # Phase 6.3: Resolve system prompt override from organization
     system_prompt_override: str | None = None
+    org = None
     if user.organization_id:
         from hermeshq.models.organization import Organization
         org = await db.get(Organization, user.organization_id)
@@ -75,6 +76,19 @@ async def _build_provision_response(
     # Phase 8: Cross-device session namespace
     from hermeshq.services.cross_device_session import derive_session_namespace
     session_namespace = derive_session_namespace(user)
+
+    # Phase 5: Honcho memory continuity
+    honcho_base_url: str | None = None
+    honcho_api_key: str | None = None
+    if org:
+        honcho_base_url = org.honcho_base_url
+        if org.honcho_jwt_secret:
+            from jose import jwt
+            honcho_api_key = jwt.encode(
+                {"sub": str(user.id), "peer": session_namespace},
+                org.honcho_jwt_secret,
+                algorithm="HS256",
+            )
 
     return DesktopProvisionResponse(
         mode=mode,
@@ -88,6 +102,8 @@ async def _build_provision_response(
         cloud_container_config=cloud_container_config,
         system_prompt_override=system_prompt_override,
         session_namespace=session_namespace,
+        honcho_base_url=honcho_base_url,
+        honcho_api_key=honcho_api_key,
     )
 
 

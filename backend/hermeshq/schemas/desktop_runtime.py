@@ -30,10 +30,11 @@ class DesktopProvisionResponse(BaseModel):
     user: DesktopProvisionUser
     capabilities: list[str]
     runtime: DesktopRuntimeInfo
-    local_container_config: dict | None = None
     cloud_container_config: dict | None = None
     system_prompt_override: str | None = None
     session_namespace: str | None = None
+    honcho_base_url: str | None = None
+    honcho_api_key: str | None = None
 
 
 class DesktopRuntimeValidateResponse(BaseModel):

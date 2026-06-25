@@ -2,6 +2,35 @@
 
 All notable changes to HermesHQ will be documented in this file.
 
+## v0.2.2 — 2026-06-25
+
+### Added
+- **Multi-tenant provision system** — `POST /api/desktop/provision` with mode resolution (`headmaster_local`, `headmaster_remote`, `headmaster_plus_thin`)
+- **Organization model** — `Organization` table with `kind` (school/company/personal), `default_mode`, `default_capabilities`, `system_prompt_override`
+- **User tenancy** — `organization_id` foreign key on `User` model, role-based access (`admin`, `beta_user`, `school_admin`, `staff`, `student`)
+- **Container supervisor** — Docker-based container lifecycle (create/start/stop/destroy/health monitor) with subprocess fallback
+- **Container model** — Lifecycle statuses (pending/creating/running/stopped/error/destroyed) per user
+- **Remote runtime endpoints** — Cloud container config in provision snapshot, endpoint URL generation
+- **Audit logging** — Provision events, container lifecycle, mode changes, security events
+- **System prompt override** — Organization-level system prompt injection
+- **GET /api/desktop/provision/current** — Returns resolved mode based on user role + org settings
+- **Alembic migration** — Organizations table + user foreign key
+
+### Fixed
+- **AGENTS.md stale paths** — Removed deprecated `gcaplabs-headmaster/repo/` prefix
+- **GitHub workflows** — Removed `aioncore` references, updated `iOfficeAI` → `GCAP-Labs`
+
+### Changed
+- **Version** — 0.2.1 → 0.2.2
+- **User model** — Added `organization_id`, expanded role enum
+- **Desktop provision schema** — Added `cloud_container_config`, `local_container_config`, `system_prompt_override`
+
+### Security
+- **Timing-safe token comparison** — `hmac.compare_digest()` for token validation
+- **Runtime validation** — Privileged actions require active provision
+
+---
+
 ## v2026.5.30.1 — 2026-05-30
 
 ### Added

@@ -116,6 +116,7 @@ class ContainerSupervisor:
             )
 
             container.status = "running"
+            container.docker_container_id = self._last_docker_id
             container.health_check_url = f"http://localhost:{mapped_port}/health"
             container.ports = json.dumps({"8080": mapped_port})
             await session.commit()
