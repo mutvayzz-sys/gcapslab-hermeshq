@@ -63,6 +63,15 @@ async def _build_provision_response(
     capabilities = capabilities_for_role(user.role)
     mode = resolve_desktop_mode(user, request.app.state.settings)
     cloud_container_config = await resolve_container_config(user, request.app.state.settings, db)
+    
+    # Phase 6.3: Resolve system prompt override from organization
+    system_prompt_override: str | None = None
+    if user.organization_id:
+        from hermeshq.models.organization import Organization
+        org = await db.get(Organization, user.organization_id)
+        if org:
+            system_prompt_override = org.system_prompt_override
+    
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -73,6 +82,7 @@ async def _build_provision_response(
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
         cloud_container_config=cloud_container_config,
+        system_prompt_override=system_prompt_override,
     )
 
 
