@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_current_user, is_admin, require_admin
 from hermeshq.database import get_db_session
+from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.container import Container
 from hermeshq.models.user import User
 from hermeshq.schemas.container import (
@@ -16,7 +17,34 @@ from hermeshq.services.container_supervisor import ContainerSupervisor
 router = APIRouter(prefix="/containers", tags=["containers"])
 
 
-async def _get_supervisor(request) -> ContainerSupervisor:
+async def _audit_log(
+    db: AsyncSession,
+    actor: User,
+    action: str,
+    target_type: str,
+    target_id: str | None,
+    old_value: dict | None,
+    new_value: dict | None,
+    details: dict | None,
+) -> None:
+    """Write an audit log entry."""
+    db.add(
+        AuditLog(
+            actor_id=actor.id,
+            actor_username=actor.username,
+            actor_role=actor.role,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            old_value=old_value,
+            new_value=new_value,
+            details=details or {},
+        )
+    )
+    await db.commit()
+
+
+async def _get_supervisor(request: Request) -> ContainerSupervisor:
     supervisor = getattr(request.app.state, "container_supervisor", None)
     if not supervisor:
         raise HTTPException(
@@ -56,6 +84,16 @@ async def create_container(
         user=current_user,
         org_id=payload.organization_id,
     )
+    await _audit_log(
+        db,
+        current_user,
+        "container.create",
+        "container",
+        container.id,
+        None,
+        {"status": container.status, "image": container.image},
+        {"name": container.name, "org_id": payload.organization_id},
+    )
     return container
 
 
@@ -88,6 +126,16 @@ async def start_container(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     supervisor = await _get_supervisor(request)
     updated = await supervisor.start_container(container_id)
+    await _audit_log(
+        db,
+        current_user,
+        "container.start",
+        "container",
+        container_id,
+        {"status": container.status},
+        {"status": updated.status, "health_check_url": updated.health_check_url},
+        None,
+    )
     return ContainerStartStopResponse(
         container_id=updated.id,
         status=updated.status,
@@ -109,6 +157,16 @@ async def stop_container(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     supervisor = await _get_supervisor(request)
     updated = await supervisor.stop_container(container_id)
+    await _audit_log(
+        db,
+        current_user,
+        "container.stop",
+        "container",
+        container_id,
+        {"status": container.status},
+        {"status": updated.status},
+        None,
+    )
     return ContainerStartStopResponse(
         container_id=updated.id,
         status=updated.status,
@@ -130,4 +188,14 @@ async def destroy_container(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     supervisor = await _get_supervisor(request)
     await supervisor.destroy_container(container_id)
+    await _audit_log(
+        db,
+        current_user,
+        "container.destroy",
+        "container",
+        container_id,
+        {"status": container.status, "is_active": container.is_active},
+        {"status": "destroyed", "is_active": False},
+        None,
+    )
     return None

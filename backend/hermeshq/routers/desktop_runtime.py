@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_current_user
 from hermeshq.database import get_db_session
+from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
     DesktopProvisionRequest,
@@ -26,6 +27,33 @@ router = APIRouter(prefix="/desktop", tags=["desktop"])
 
 def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
+
+
+async def _audit_log(
+    db: AsyncSession,
+    actor: User,
+    action: str,
+    target_type: str,
+    target_id: str | None,
+    old_value: dict | None,
+    new_value: dict | None,
+    details: dict | None,
+) -> None:
+    """Write an audit log entry."""
+    db.add(
+        AuditLog(
+            actor_id=actor.id,
+            actor_username=actor.username,
+            actor_role=actor.role,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            old_value=old_value,
+            new_value=new_value,
+            details=details or {},
+        )
+    )
+    await db.commit()
 
 
 async def _build_provision_response(
@@ -55,7 +83,18 @@ async def provision_desktop_runtime(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
-    return await _build_provision_response(current_user, request, db)
+    response = await _build_provision_response(current_user, request, db)
+    await _audit_log(
+        db,
+        current_user,
+        "desktop.provision",
+        "desktop_runtime",
+        current_user.id,
+        None,
+        {"mode": response.mode, "capabilities": response.capabilities},
+        {"client": payload.client, "version": payload.version, "platform": payload.platform},
+    )
+    return response
 
 
 @router.get("/provision/current", response_model=DesktopProvisionResponse)
@@ -71,14 +110,35 @@ async def get_current_desktop_provision(
 async def validate_desktop_runtime(
     payload: DesktopRuntimeValidateRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ) -> DesktopRuntimeValidateResponse:
     role = normalize_desktop_role(current_user.role)
     capabilities = capabilities_for_role(role)
     if not is_capability_allowed(capabilities, payload.requested_capability):
+        await _audit_log(
+            db,
+            current_user,
+            "desktop.runtime_validate_denied",
+            "desktop_runtime",
+            current_user.id,
+            None,
+            {"requested_capability": payload.requested_capability, "role": role},
+            {"runtime_id": payload.runtime_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Capability not allowed",
         )
+    await _audit_log(
+        db,
+        current_user,
+        "desktop.runtime_validate",
+        "desktop_runtime",
+        current_user.id,
+        None,
+        {"allowed": True, "capabilities": capabilities, "role": role},
+        {"runtime_id": payload.runtime_id, "requested_capability": payload.requested_capability},
+    )
     return DesktopRuntimeValidateResponse(
         allowed=True,
         capabilities=capabilities,
