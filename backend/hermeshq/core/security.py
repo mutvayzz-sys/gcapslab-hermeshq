@@ -154,7 +154,7 @@ async def get_websocket_user(websocket: WebSocket, db: AsyncSession) -> User | N
 
 
 def is_admin(user: User) -> bool:
-    return (user.role or ROLE_USER) == ROLE_ADMIN
+    return (user.role or ROLE_USER) in (ROLE_ADMIN, "school_admin")
 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
