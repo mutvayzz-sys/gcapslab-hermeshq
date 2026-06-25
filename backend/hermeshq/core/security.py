@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from hermeshq.config import get_settings
 from hermeshq.database import get_db_session
@@ -78,7 +79,9 @@ def create_agent_service_token(agent_id: str) -> str:
 async def get_user_by_username(db: AsyncSession, username: str | None) -> User | None:
     if not username:
         return None
-    result = await db.execute(select(User).where(User.username == username))
+    result = await db.execute(
+        select(User).where(User.username == username).options(selectinload(User.organization))
+    )
     return result.scalar_one_or_none()
 
 
@@ -86,19 +89,22 @@ async def get_user_by_subject(db: AsyncSession, subject: str | None, subject_kin
     if not subject:
         return None
     if subject_kind == "id":
-        return await db.get(User, subject)
+        result = await db.execute(
+            select(User).where(User.id == subject).options(selectinload(User.organization))
+        )
+        return result.scalar_one_or_none()
     if subject_kind == "username":
         return await get_user_by_username(db, subject)
-    user = await db.get(User, subject)
-    if user:
-        return user
     result = await db.execute(
-        select(User).where(
+        select(User)
+        .where(
             or_(
+                User.id == subject,
                 User.username == subject,
                 User.oidc_subject == subject,
             )
         )
+        .options(selectinload(User.organization))
     )
     return result.scalar_one_or_none()
 
