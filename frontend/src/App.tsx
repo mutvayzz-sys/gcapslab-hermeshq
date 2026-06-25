@@ -17,7 +17,9 @@ import {
 import { useSessionStore } from "./stores/sessionStore";
 import { AgentDetailPage } from "./pages/AgentDetailPage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { AuditPage } from "./pages/AuditPage";
 import { CommsPage } from "./pages/CommsPage";
+import { ContainersPage } from "./pages/ContainersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
@@ -26,9 +28,9 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ManualPage } from "./pages/ManualPage";
 import { MyAccountPage } from "./pages/MyAccountPage";
 import { NodesPage } from "./pages/NodesPage";
-import { AuditPage } from "./pages/AuditPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { ScheduledTasksPage } from "./pages/ScheduledTasksPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -134,6 +136,8 @@ export default function App() {
             <Route path="/comms" element={<CommsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/audit" element={<AuditPage />} />
+            <Route path="/organizations" element={<OrganizationsPage />} />
+            <Route path="/containers" element={<ContainersPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
