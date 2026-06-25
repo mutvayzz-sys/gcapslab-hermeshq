@@ -4,6 +4,7 @@ from hermeshq.models.agent_assignment import AgentAssignment
 from hermeshq.models.app_settings import AppSettings
 from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.base import Base
+from hermeshq.models.container import Container
 from hermeshq.models.conversation_thread import ConversationThread
 from hermeshq.models.hermes_version import HermesVersion
 from hermeshq.models.integration_draft import IntegrationDraft
@@ -33,6 +34,7 @@ __all__ = [
     "AppSettings",
     "AuditLog",
     "Base",
+    "Container",
     "ConversationThread",
     "HermesVersion",
     "IntegrationDraft",

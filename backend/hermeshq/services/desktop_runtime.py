@@ -1,6 +1,10 @@
 from collections.abc import Iterable
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from hermeshq.config import Settings
+from hermeshq.models.container import Container
 from hermeshq.models.user import User
 
 DESKTOP_RUNTIME_TTL_SECONDS = 300
@@ -64,3 +68,23 @@ def resolve_desktop_mode(user: User, settings: Settings) -> str:
     if role == "student":
         return "headmaster_plus_thin"
     return "headmaster_local"
+
+
+async def resolve_container_config(user: User, settings: Settings, db: AsyncSession) -> dict | None:
+    """Return cloud container config if the user has an active remote container."""
+    if resolve_desktop_mode(user, settings) != "headmaster_remote":
+        return None
+    result = await db.execute(
+        select(Container).where(
+            Container.user_id == user.id,
+            Container.is_active.is_(True),
+            Container.status != "destroyed",
+        )
+    )
+    container = result.scalar_one_or_none()
+    if not container:
+        return None
+    return {
+        "endpoint_url": container.health_check_url,
+        "container_id": container.id,
+    }

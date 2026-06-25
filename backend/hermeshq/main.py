@@ -24,6 +24,7 @@ from hermeshq.routers import (
     auth,
     backup,
     comms,
+    containers,
     dashboard,
     desktop_runtime,
     hermes_versions,
@@ -54,6 +55,7 @@ from hermeshq.routers import (
 )
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
+from hermeshq.services.container_supervisor import ContainerSupervisor
 from hermeshq.services.agent_identity import derive_agent_identity
 from hermeshq.services.agent_supervisor import AgentSupervisor
 from hermeshq.services.comms_router import CommsRouter
@@ -227,6 +229,8 @@ async def lifespan(app: FastAPI):
     app.state.google_chat_gateways = app.state.enterprise_gateways.google_chat_gateways
     app.state.kapso_gateways = app.state.enterprise_gateways.kapso_gateways
     app.state.comms_router = CommsRouter(AsyncSessionLocal, app.state.event_broker)
+    app.state.container_supervisor = ContainerSupervisor(settings, AsyncSessionLocal)
+    await app.state.container_supervisor.start_health_monitor()
 
     async def log_terminal_activity(agent_id: str, event_type: str, message: str, details: dict) -> None:
         async with AsyncSessionLocal() as session:
@@ -309,6 +313,7 @@ async def lifespan(app: FastAPI):
         with contextlib.suppress(asyncio.CancelledError):
             await enterprise_bootstrap_task
     await app.state.scheduler.stop()
+    await app.state.container_supervisor.stop_health_monitor()
     await app.state.gateway_supervisor.shutdown()
     await app.state.enterprise_gateways.shutdown()
     api_gateway_bootstrap_task = getattr(app.state, "api_gateway_bootstrap_task", None)
@@ -364,6 +369,7 @@ app.include_router(terminal_sessions.router, prefix=settings.api_prefix)
 app.include_router(scheduled_tasks.router, prefix=settings.api_prefix)
 app.include_router(oidc_admin.router, prefix=settings.api_prefix)
 app.include_router(organizations.router, prefix=settings.api_prefix)
+app.include_router(containers.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(audit.router, prefix=settings.api_prefix)
 app.include_router(mcp_server.router)
