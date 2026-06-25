@@ -42,9 +42,7 @@ class Settings(BaseSettings):
     admin_password: str = ""
     admin_display_name: str = "Hermes Operator"
 
-    workspaces_root: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parents[2] / "workspaces"
-    )
+    workspaces_root: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2] / "workspaces")
     branding_root: Path | None = None
     hermes_skins_root: Path | None = None
     agent_assets_root: Path | None = None
@@ -69,6 +67,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         if self.jwt_secret == "":
             import secrets as _secrets
+
             self.jwt_secret = _secrets.token_urlsafe(32)
             # Persist the generated secret so it survives container restarts.
             # Without this, the SecretVault (which uses jwt_secret as Fernet seed

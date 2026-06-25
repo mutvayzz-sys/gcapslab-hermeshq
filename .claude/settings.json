@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys,json,subprocess; d=json.load(sys.stdin); f=d.get('tool_input',{}).get('file_path',''); (subprocess.run(['uvx','ruff','format',f],capture_output=True),subprocess.run(['uvx','ruff','check','--fix',f],capture_output=True)) if f.endswith('.py') and 'backend' in f.replace(chr(92),'/') else None\" 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Formatting backend Python file with ruff..."
+          }
+        ]
+      }
+    ]
+  }
+}

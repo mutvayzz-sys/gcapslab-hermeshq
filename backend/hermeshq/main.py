@@ -25,6 +25,7 @@ from hermeshq.routers import (
     backup,
     comms,
     dashboard,
+    desktop_runtime,
     hermes_versions,
     integration_factory,
     integration_packages,
@@ -128,9 +129,7 @@ async def bootstrap_defaults() -> None:
             if normalized_default_provider != settings_row.default_provider:
                 settings_row.default_provider = normalized_default_provider
         enabled_packages = [
-            slug
-            for slug in (settings_row.enabled_integration_packages or [])
-            if isinstance(slug, str) and slug.strip()
+            slug for slug in (settings_row.enabled_integration_packages or []) if isinstance(slug, str) and slug.strip()
         ]
         for slug in DEFAULT_ENABLED_INTEGRATION_PACKAGES:
             if slug not in enabled_packages:
@@ -192,7 +191,7 @@ async def lifespan(app: FastAPI):
     if not settings.fernet_key:
         logger.warning(
             "⚠️ FERNET_KEY not set — SecretVault is using jwt_secret as fallback. "
-            "Generate a key with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            'Generate a key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
     app.state.secret_vault = SecretVault(secret_vault_seed)
     app.state.hermes_version_manager = HermesVersionManager(AsyncSessionLocal)
@@ -227,6 +226,7 @@ async def lifespan(app: FastAPI):
     app.state.google_chat_gateways = app.state.enterprise_gateways.google_chat_gateways
     app.state.kapso_gateways = app.state.enterprise_gateways.kapso_gateways
     app.state.comms_router = CommsRouter(AsyncSessionLocal, app.state.event_broker)
+
     async def log_terminal_activity(agent_id: str, event_type: str, message: str, details: dict) -> None:
         async with AsyncSessionLocal() as session:
             agent = await session.get(Agent, agent_id)
@@ -285,11 +285,17 @@ async def lifespan(app: FastAPI):
 
     app.state.pty_manager = PTYManager(settings.pty_shell, audit_callback=log_terminal_activity)
     app.state.supervisor.pty_manager = app.state.pty_manager
+    app.state.api_gateway_supervisor = AgentApiGatewaySupervisor(
+        AsyncSessionLocal,
+        app.state.installation_manager,
+    )
+    app.state.supervisor.api_gateway_supervisor = app.state.api_gateway_supervisor
     app.state.scheduler = SchedulerService(AsyncSessionLocal, app.state.supervisor.submit_task)
     await app.state.supervisor.bootstrap_runtime()
     await app.state.scheduler.start()
     app.state.gateway_bootstrap_task = asyncio.create_task(app.state.gateway_supervisor.bootstrap_gateways())
     app.state.enterprise_bootstrap_task = asyncio.create_task(app.state.enterprise_gateways.bootstrap())
+    app.state.api_gateway_bootstrap_task = asyncio.create_task(app.state.api_gateway_supervisor.bootstrap())
     yield
     gateway_bootstrap_task = getattr(app.state, "gateway_bootstrap_task", None)
     if gateway_bootstrap_task:
@@ -304,6 +310,12 @@ async def lifespan(app: FastAPI):
     await app.state.scheduler.stop()
     await app.state.gateway_supervisor.shutdown()
     await app.state.enterprise_gateways.shutdown()
+    api_gateway_bootstrap_task = getattr(app.state, "api_gateway_bootstrap_task", None)
+    if api_gateway_bootstrap_task:
+        api_gateway_bootstrap_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await api_gateway_bootstrap_task
+    await app.state.api_gateway_supervisor.shutdown()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -336,6 +348,7 @@ app.include_router(agents.router, prefix=settings.api_prefix)
 app.include_router(tasks.router, prefix=settings.api_prefix)
 app.include_router(runtime_ledger.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
+app.include_router(desktop_runtime.router, prefix=settings.api_prefix)
 app.include_router(comms.router, prefix=settings.api_prefix)
 app.include_router(internal_agents.router, prefix=settings.api_prefix)
 app.include_router(internal_control.router, prefix=settings.api_prefix)
@@ -392,6 +405,7 @@ async def stream(websocket: WebSocket) -> None:
             return
 
     from hermeshq.core.security import decode_access_token_claims
+
     claims = decode_access_token_claims(token or "")
     if not claims or not claims.get("sub"):
         await websocket.close(code=4401)
@@ -408,6 +422,7 @@ async def stream(websocket: WebSocket) -> None:
     else:
         async with AsyncSessionLocal() as session:
             from hermeshq.core.security import get_user_by_subject
+
             user = await get_user_by_subject(session, user_id, claims.get("sub_kind"))
             if not user or not user.is_active:
                 await websocket.close(code=4401)

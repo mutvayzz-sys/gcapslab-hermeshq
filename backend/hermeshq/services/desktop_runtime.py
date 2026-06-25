@@ -1,0 +1,54 @@
+from collections.abc import Iterable
+
+from hermeshq.models.user import User
+
+DESKTOP_RUNTIME_TTL_SECONDS = 300
+DESKTOP_MODE = "headmaster_local"
+
+CAP_CHAT = "chat"
+CAP_TERMINAL = "terminal"
+CAP_LOCAL_FILES = "local_files"
+CAP_COWORK = "cowork"
+CAP_MODEL_SELECTION = "model_selection"
+CAP_RUNTIME_SETTINGS = "runtime_settings"
+
+ALL_DESKTOP_CAPABILITIES = (
+    CAP_CHAT,
+    CAP_TERMINAL,
+    CAP_LOCAL_FILES,
+    CAP_COWORK,
+    CAP_MODEL_SELECTION,
+    CAP_RUNTIME_SETTINGS,
+)
+
+ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "admin": ALL_DESKTOP_CAPABILITIES,
+    "user": ALL_DESKTOP_CAPABILITIES,
+    "staff": ALL_DESKTOP_CAPABILITIES,
+    "student": (CAP_CHAT, CAP_COWORK, CAP_MODEL_SELECTION),
+}
+
+
+def normalize_desktop_role(role: str | None) -> str:
+    normalized = (role or "user").strip().lower()
+    return normalized if normalized in ROLE_CAPABILITIES else "user"
+
+
+def capabilities_for_role(role: str | None) -> list[str]:
+    return list(ROLE_CAPABILITIES[normalize_desktop_role(role)])
+
+
+def desktop_user_payload(user: User) -> dict[str, str]:
+    role = normalize_desktop_role(user.role)
+    return {
+        "id": str(user.id),
+        "username": str(user.username),
+        "role": role,
+    }
+
+
+def is_capability_allowed(capabilities: Iterable[str], requested_capability: str | None) -> bool:
+    requested = (requested_capability or "").strip()
+    if not requested:
+        return True
+    return requested in set(capabilities)

@@ -47,6 +47,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
+_API_PORT_BASE = 8765
+
+
+async def _allocate_api_port(db: AsyncSession) -> int:
+    from sqlalchemy import func
+
+    result = await db.execute(select(func.max(Agent.api_port)).where(Agent.api_port.is_not(None)))
+    max_port = result.scalar_one_or_none()
+    return (max_port + 1) if max_port else _API_PORT_BASE
+
 
 def _aux_to_plain_dict(value: dict) -> dict | None:
     """Convert auxiliary_models entries (Pydantic models or dicts) to plain dicts."""
@@ -98,6 +108,7 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
 ) -> AgentRead:
     from hermeshq.models.node import Node
+
     node = await db.get(Node, payload.node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -109,7 +120,9 @@ async def create_agent(
         slug=payload.slug,
     )
     unique_slug = await ensure_unique_agent_slug(db, slug)
-    hermes_version = await _validate_hermes_version(request, payload.hermes_version or runtime_defaults.get("hermes_version"))
+    hermes_version = await _validate_hermes_version(
+        request, payload.hermes_version or runtime_defaults.get("hermes_version")
+    )
     agent = Agent(
         node_id=payload.node_id,
         name=name,
@@ -137,6 +150,7 @@ async def create_agent(
         supervisor_agent_id=payload.supervisor_agent_id,
         workspace_path="pending",
         auxiliary_models=auxiliary_models_to_db(payload.auxiliary_models),
+        api_server_enabled=payload.api_server_enabled,
     )
     _apply_runtime_profile_defaults(
         agent,
@@ -158,6 +172,12 @@ async def create_agent(
         },
     )
     _sync_agent_integration_toolsets(agent, await _load_enabled_integration_slugs(db))
+    if payload.api_server_enabled:
+        import secrets as _secrets
+
+        agent.api_port = await _allocate_api_port(db)
+        agent.api_server_key = _secrets.token_urlsafe(32)
+
     db.add(agent)
     await db.flush()
     workspace_manager = request.app.state.workspace_manager
@@ -302,13 +322,23 @@ async def update_agent(
         "gateway_notifications_mode",
     }
     should_restart_gateways = bool(set(update_data).intersection(restart_gateway_fields))
-    should_reset_session = runtime_profile_changed or hermes_version_changed or bool(
-        {"approval_mode", "tool_progress_mode", "gateway_notifications_mode"}.intersection(update_data)
+    should_reset_session = (
+        runtime_profile_changed
+        or hermes_version_changed
+        or bool({"approval_mode", "tool_progress_mode", "gateway_notifications_mode"}.intersection(update_data))
     )
-    if any(
-        field in update_data
-        for field in ("name", "friendly_name", "slug", "system_prompt", "soul_md")
-    ):
+    if "api_server_enabled" in update_data:
+        enabling = update_data["api_server_enabled"]
+        if enabling and not agent.api_port:
+            import secrets as _secrets
+
+            agent.api_port = await _allocate_api_port(db)
+            agent.api_server_key = _secrets.token_urlsafe(32)
+        elif not enabling:
+            agent.api_port = None
+            agent.api_server_key = None
+
+    if any(field in update_data for field in ("name", "friendly_name", "slug", "system_prompt", "soul_md")):
         request.app.state.workspace_manager.sync_config(
             agent.id,
             agent.name,
@@ -339,9 +369,7 @@ async def update_agent(
         for platform, enabled in channel_result.all():
             if enabled:
                 await request.app.state.gateway_supervisor.restart_channel(agent_id, platform)
-    result = await db.execute(
-        select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id)
-    )
+    result = await db.execute(select(Agent).options(selectinload(Agent.node)).where(Agent.id == agent_id))
     return _serialize_agent(request, result.scalar_one())
 
 
@@ -397,21 +425,13 @@ async def delete_agent(
     for task_id in active_task_ids:
         await supervisor.cancel_task(task_id)
     channel_platforms = list(
-        (
-            await db.execute(
-                select(MessagingChannel.platform).where(MessagingChannel.agent_id == agent_id)
-            )
-        ).scalars()
+        (await db.execute(select(MessagingChannel.platform).where(MessagingChannel.agent_id == agent_id))).scalars()
     )
     for platform in channel_platforms:
         with contextlib.suppress(Exception):
             await request.app.state.gateway_supervisor.stop_channel(agent_id, platform)
 
-    await db.execute(
-        update(Agent)
-        .where(Agent.supervisor_agent_id == agent_id)
-        .values(supervisor_agent_id=None)
-    )
+    await db.execute(update(Agent).where(Agent.supervisor_agent_id == agent_id).values(supervisor_agent_id=None))
     await db.execute(
         update(Task)
         .where(Task.agent_id == agent_id, Task.status == "queued")
@@ -423,15 +443,9 @@ async def delete_agent(
         .values(status="cancelled", error_message="Agent archived", completed_at=func.now())
     )
     await db.execute(
-        update(MessagingChannel)
-        .where(MessagingChannel.agent_id == agent_id)
-        .values(enabled=False, status="stopped")
+        update(MessagingChannel).where(MessagingChannel.agent_id == agent_id).values(enabled=False, status="stopped")
     )
-    await db.execute(
-        update(ScheduledTask)
-        .where(ScheduledTask.agent_id == agent_id)
-        .values(enabled=False)
-    )
+    await db.execute(update(ScheduledTask).where(ScheduledTask.agent_id == agent_id).values(enabled=False))
 
     was_already_archived = agent.is_archived
     agent.status = "stopped"

@@ -60,6 +60,7 @@ class AgentCreate(BaseModel):
     integration_configs: dict[str, dict] | None = None
     team_tags: list[str] = []
     supervisor_agent_id: str | None = None
+    api_server_enabled: bool = False
 
 
 class AgentUpdate(BaseModel):
@@ -93,6 +94,7 @@ class AgentUpdate(BaseModel):
     status: AgentStatus | None = None
     supervisor_agent_id: str | None = None
     mcp_servers: list[dict] | None = None
+    api_server_enabled: bool | None = None
 
 
 class AgentRead(ORMModel):
@@ -137,6 +139,9 @@ class AgentRead(ORMModel):
     archive_reason: str | None
     supervisor_agent_id: str | None
     mcp_servers: list[dict] | None = None
+    api_server_enabled: bool
+    api_port: int | None
+    api_url: str | None = None
     total_tasks: int
     total_tokens_used: int
     last_activity: datetime | None

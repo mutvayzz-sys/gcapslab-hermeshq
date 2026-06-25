@@ -122,13 +122,33 @@ def _build_avatar_path(agent: Agent) -> Path | None:
     return _build_avatar_path_shared(_agent_avatar_base(), agent.id, agent.avatar_filename)
 
 
+def _build_agent_api_url(agent: Agent) -> str | None:
+    if not agent.api_server_enabled or not agent.api_port:
+        return None
+    from urllib.parse import urlparse
+
+    base = (get_settings().public_base_url or "").rstrip("/")
+    if base:
+        parsed = urlparse(base)
+        host = parsed.hostname or "localhost"
+        scheme = parsed.scheme or "http"
+        return f"{scheme}://{host}:{agent.api_port}/v1"
+    return f"http://localhost:{agent.api_port}/v1"
+
+
 def _serialize_agent(request: Request, agent: Agent) -> AgentRead:
     payload = AgentRead.model_validate(agent)
     avatar_url = None
     if agent.avatar_filename:
         version = int(agent.updated_at.timestamp()) if agent.updated_at else 0
         avatar_url = f"{get_settings().api_prefix}/agents/{agent.id}/avatar?v={version}"
-    return payload.model_copy(update={"avatar_url": avatar_url, "has_avatar": bool(agent.avatar_filename)})
+    return payload.model_copy(
+        update={
+            "avatar_url": avatar_url,
+            "has_avatar": bool(agent.avatar_filename),
+            "api_url": _build_agent_api_url(agent),
+        }
+    )
 
 
 async def _load_bulk_agents(
@@ -297,7 +317,7 @@ def _sync_agent_integration_toolsets(agent: Agent, enabled_integration_slugs: li
     }
     retained_enabled = [toolset for toolset in (agent.enabled_toolsets or []) if toolset not in known_toolsets]
     retained_disabled = [toolset for toolset in (agent.disabled_toolsets or []) if toolset not in known_toolsets]
-    for slug in (agent.integration_configs or {}):
+    for slug in agent.integration_configs or {}:
         integration = get_managed_integration(str(slug), enabled_integration_slugs)
         if integration and integration.get("plugin_slug"):
             retained_enabled.append(str(integration["plugin_slug"]))
