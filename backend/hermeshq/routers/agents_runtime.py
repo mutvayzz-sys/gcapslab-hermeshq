@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from hermeshq.core.security import ensure_agent_access, get_current_user
+from hermeshq.core.security import ensure_agent_access, get_current_user, require_admin
 from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.node import Node
