@@ -33,14 +33,14 @@ async def init_database() -> None:
 
     Uses subprocess to run Alembic, which avoids event-loop conflicts
     between Alembic's async env.py and the running FastAPI event loop.
-    Fixed: uses 'head' (singular) instead of 'heads' to avoid issues
-    with multiple migration heads.
+    Uses 'heads' so deployments with multiple independent migration
+    branches can initialize a fresh database.
     """
     import subprocess
     import sys
 
     result = subprocess.run(
-        [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "heads"],
         capture_output=True,
         text=True,
         cwd=str(Path(__file__).resolve().parent.parent),

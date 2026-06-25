@@ -1,7 +1,7 @@
 """add api_server fields to agents
 
-Revision ID: a1b2c3d4e5f6
-Revises: f5a7d3e29b18
+Revision ID: b3c4d5e6f7a8
+Revises: 6cd8e9f0a1b2
 Create Date: 2026-06-25 00:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
 
-revision: str = "a1b2c3d4e5f6"
-down_revision: str | None = "f5a7d3e29b18"
+revision: str = "b3c4d5e6f7a8"
+down_revision: str | None = "6cd8e9f0a1b2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

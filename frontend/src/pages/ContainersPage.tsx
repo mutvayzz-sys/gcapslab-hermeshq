@@ -22,7 +22,7 @@ interface ContainerItem {
   updated_at: string;
 }
 
-export default function ContainersPage() {
+export function ContainersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 

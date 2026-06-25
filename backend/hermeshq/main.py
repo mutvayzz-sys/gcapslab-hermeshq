@@ -55,6 +55,7 @@ from hermeshq.routers import (
 )
 from hermeshq.routers import settings as settings_router
 from hermeshq.schemas.common import HealthResponse
+from hermeshq.services.agent_api_gateway import AgentApiGatewaySupervisor
 from hermeshq.services.container_supervisor import ContainerSupervisor
 from hermeshq.services.agent_identity import derive_agent_identity
 from hermeshq.services.agent_supervisor import AgentSupervisor

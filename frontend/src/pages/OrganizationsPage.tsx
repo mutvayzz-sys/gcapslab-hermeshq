@@ -21,19 +21,23 @@ interface Organization {
   updated_at: string;
 }
 
-export default function OrganizationsPage() {
+type OrganizationKind = Organization['kind'];
+
+const emptyOrganizationForm = {
+  name: '',
+  slug: '',
+  kind: 'company' as OrganizationKind,
+  default_mode: '',
+  default_capabilities: '',
+  system_prompt_override: '',
+};
+
+export function OrganizationsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    slug: '',
-    kind: 'company' as const,
-    default_mode: '',
-    default_capabilities: '',
-    system_prompt_override: '',
-  });
+  const [formData, setFormData] = useState(emptyOrganizationForm);
 
   const { data: orgs, isLoading } = useQuery({
     queryKey: ['organizations'],
@@ -105,7 +109,7 @@ export default function OrganizationsPage() {
 
   const openCreate = () => {
     setEditingOrg(null);
-    setFormData({ name: '', slug: '', kind: 'company', default_mode: '', default_capabilities: '', system_prompt_override: '' });
+    setFormData(emptyOrganizationForm);
     setIsModalOpen(true);
   };
 
@@ -144,7 +148,7 @@ export default function OrganizationsPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input label="Name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
           <Input label="Slug" value={formData.slug} onChange={(e) => setFormData({ ...formData, slug: e.target.value })} required />
-          <Select label="Kind" value={formData.kind} onChange={(e) => setFormData({ ...formData, kind: e.target.value as any })} options={[{ value: 'school', label: 'School' }, { value: 'company', label: 'Company' }, { value: 'personal', label: 'Personal' }]} />
+          <Select label="Kind" value={formData.kind} onChange={(e) => setFormData({ ...formData, kind: e.target.value as OrganizationKind })} options={[{ value: 'school', label: 'School' }, { value: 'company', label: 'Company' }, { value: 'personal', label: 'Personal' }]} />
           <Input label="Default Mode" value={formData.default_mode} onChange={(e) => setFormData({ ...formData, default_mode: e.target.value })} placeholder="headmaster_local, headmaster_remote, headmaster_plus_thin" />
           <Input label="Default Capabilities" value={formData.default_capabilities} onChange={(e) => setFormData({ ...formData, default_capabilities: e.target.value })} placeholder="comma-separated list" />
           <Input label="System Prompt Override" value={formData.system_prompt_override} onChange={(e) => setFormData({ ...formData, system_prompt_override: e.target.value })} placeholder="Optional system prompt" />

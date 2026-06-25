@@ -61,7 +61,7 @@ services:
       WORKSPACES_ROOT: ${WORKSPACES_ROOT:-/app/workspaces}
       BRANDING_ROOT: ${BRANDING_ROOT:-/app/workspaces/_branding}
       PTY_SHELL: ${PTY_SHELL:-/bin/sh}
-      CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend"]}'
+      CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend","https://hermeshq.gcaplabs.com"]}'
       CONCURRENCY_SEMAPHORE: ${CONCURRENCY_SEMAPHORE:-8}
       HQ_BOOTSTRAP_TIMEOUT: ${HQ_BOOTSTRAP_TIMEOUT:-30}
       HQ_BOOTSTRAP_RETRIES: ${HQ_BOOTSTRAP_RETRIES:-2}
@@ -106,6 +106,24 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-3420}:80"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - default
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: hermeshq-tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      frontend:
+        condition: service_started
     restart: unless-stopped
     logging:
       driver: json-file
