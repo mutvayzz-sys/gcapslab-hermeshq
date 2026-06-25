@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_current_user
+from hermeshq.database import get_db_session
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
     DesktopProvisionRequest,
@@ -15,6 +17,7 @@ from hermeshq.services.desktop_runtime import (
     desktop_user_payload,
     is_capability_allowed,
     normalize_desktop_role,
+    resolve_container_config,
     resolve_desktop_mode,
 )
 
@@ -25,10 +28,13 @@ def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _build_provision_response(user: User, request: Request) -> DesktopProvisionResponse:
+async def _build_provision_response(
+    user: User, request: Request, db: AsyncSession
+) -> DesktopProvisionResponse:
     server_url = _base_url(request)
     capabilities = capabilities_for_role(user.role)
     mode = resolve_desktop_mode(user, request.app.state.settings)
+    cloud_container_config = await resolve_container_config(user, request.app.state.settings, db)
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -38,6 +44,7 @@ def _build_provision_response(user: User, request: Request) -> DesktopProvisionR
             validate_url=f"{server_url}/api/desktop/runtime/validate",
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
+        cloud_container_config=cloud_container_config,
     )
 
 
@@ -46,16 +53,18 @@ async def provision_desktop_runtime(
     payload: DesktopProvisionRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
-    return _build_provision_response(current_user, request)
+    return await _build_provision_response(current_user, request, db)
 
 
 @router.get("/provision/current", response_model=DesktopProvisionResponse)
 async def get_current_desktop_provision(
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
-    return _build_provision_response(current_user, request)
+    return await _build_provision_response(current_user, request, db)
 
 
 @router.post("/runtime/validate", response_model=DesktopRuntimeValidateResponse)
