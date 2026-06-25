@@ -5,6 +5,7 @@ class DesktopProvisionRequest(BaseModel):
     client: str = Field(min_length=1, max_length=64)
     version: str = Field(min_length=1, max_length=32)
     platform: str = Field(min_length=1, max_length=32)
+    mode: str | None = Field(default=None, max_length=32)
 
 
 class DesktopRuntimeValidateRequest(BaseModel):
@@ -29,6 +30,9 @@ class DesktopProvisionResponse(BaseModel):
     user: DesktopProvisionUser
     capabilities: list[str]
     runtime: DesktopRuntimeInfo
+    local_container_config: dict | None = None
+    cloud_container_config: dict | None = None
+    system_prompt_override: str | None = None
 
 
 class DesktopRuntimeValidateResponse(BaseModel):

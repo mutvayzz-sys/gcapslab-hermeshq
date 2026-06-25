@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hermeshq.models.base import Base, TimestampMixin
@@ -17,6 +17,9 @@ class User(TimestampMixin, Base):
     auth_source: Mapped[str] = mapped_column(String(32), default="local", index=True)
     oidc_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     role: Mapped[str] = mapped_column(String(16), default="user", index=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     theme_preference: Mapped[str] = mapped_column(String(16), default="default")
     locale_preference: Mapped[str] = mapped_column(String(16), default="default")
@@ -41,3 +44,4 @@ class User(TimestampMixin, Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    organization = relationship("Organization", back_populates="users")

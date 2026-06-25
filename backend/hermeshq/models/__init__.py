@@ -13,6 +13,7 @@ from hermeshq.models.messaging_channel import MessagingChannel
 from hermeshq.models.mfa_code import MfaCode
 from hermeshq.models.node import Node
 from hermeshq.models.oidc_provider import OidcProvider
+from hermeshq.models.organization import Organization
 from hermeshq.models.password_reset import PasswordResetToken
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.scheduled_task import ScheduledTask
@@ -40,6 +41,7 @@ __all__ = [
     "MessagingChannel",
     "Node",
     "OidcProvider",
+    "Organization",
     "PasswordResetToken",
     "ProviderDefinition",
     "ScheduledTask",

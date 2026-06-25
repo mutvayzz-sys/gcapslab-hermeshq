@@ -53,11 +53,13 @@ def test_inactive_user_cannot_provision() -> None:
 @pytest.mark.parametrize(
     ("role", "expected"),
     [
-        ("admin", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings"}),
-        ("user", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings"}),
-        ("staff", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings"}),
+        ("admin", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
+        ("user", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
+        ("staff", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
         ("student", {"chat", "cowork", "model_selection"}),
-        ("unknown", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings"}),
+        ("unknown", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
+        ("beta_user", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
+        ("school_admin", {"chat", "terminal", "local_files", "cowork", "model_selection", "runtime_settings", "admin_audit"}),
     ],
 )
 def test_role_to_capability_mapping(role: str, expected: set[str]) -> None:
