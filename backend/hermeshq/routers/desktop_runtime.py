@@ -72,6 +72,10 @@ async def _build_provision_response(
         if org:
             system_prompt_override = org.system_prompt_override
     
+    # Phase 8: Cross-device session namespace
+    from hermeshq.services.cross_device_session import derive_session_namespace
+    session_namespace = derive_session_namespace(user)
+
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -83,6 +87,7 @@ async def _build_provision_response(
         ),
         cloud_container_config=cloud_container_config,
         system_prompt_override=system_prompt_override,
+        session_namespace=session_namespace,
     )
 
 

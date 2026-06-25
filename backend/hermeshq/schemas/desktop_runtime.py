@@ -33,6 +33,7 @@ class DesktopProvisionResponse(BaseModel):
     local_container_config: dict | None = None
     cloud_container_config: dict | None = None
     system_prompt_override: str | None = None
+    session_namespace: str | None = None
 
 
 class DesktopRuntimeValidateResponse(BaseModel):
