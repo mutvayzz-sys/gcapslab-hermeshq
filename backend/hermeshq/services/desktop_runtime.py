@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 
+from hermeshq.config import Settings
 from hermeshq.models.user import User
 
 DESKTOP_RUNTIME_TTL_SECONDS = 300
@@ -11,6 +12,7 @@ CAP_LOCAL_FILES = "local_files"
 CAP_COWORK = "cowork"
 CAP_MODEL_SELECTION = "model_selection"
 CAP_RUNTIME_SETTINGS = "runtime_settings"
+CAP_ADMIN_AUDIT = "admin_audit"
 
 ALL_DESKTOP_CAPABILITIES = (
     CAP_CHAT,
@@ -19,12 +21,15 @@ ALL_DESKTOP_CAPABILITIES = (
     CAP_COWORK,
     CAP_MODEL_SELECTION,
     CAP_RUNTIME_SETTINGS,
+    CAP_ADMIN_AUDIT,
 )
 
 ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "admin": ALL_DESKTOP_CAPABILITIES,
     "user": ALL_DESKTOP_CAPABILITIES,
     "staff": ALL_DESKTOP_CAPABILITIES,
+    "beta_user": ALL_DESKTOP_CAPABILITIES,
+    "school_admin": ALL_DESKTOP_CAPABILITIES,
     "student": (CAP_CHAT, CAP_COWORK, CAP_MODEL_SELECTION),
 }
 
@@ -52,3 +57,10 @@ def is_capability_allowed(capabilities: Iterable[str], requested_capability: str
     if not requested:
         return True
     return requested in set(capabilities)
+
+
+def resolve_desktop_mode(user: User, settings: Settings) -> str:
+    role = normalize_desktop_role(user.role)
+    if role == "student":
+        return "headmaster_plus_thin"
+    return "headmaster_local"

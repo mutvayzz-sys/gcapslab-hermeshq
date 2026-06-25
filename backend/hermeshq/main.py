@@ -39,6 +39,7 @@ from hermeshq.routers import (
     messaging_channels,
     nodes,
     oidc_admin,
+    organizations,
     providers,
     runtime_ledger,
     runtime_profiles,
@@ -362,6 +363,7 @@ app.include_router(logs.router, prefix=settings.api_prefix)
 app.include_router(terminal_sessions.router, prefix=settings.api_prefix)
 app.include_router(scheduled_tasks.router, prefix=settings.api_prefix)
 app.include_router(oidc_admin.router, prefix=settings.api_prefix)
+app.include_router(organizations.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(audit.router, prefix=settings.api_prefix)
 app.include_router(mcp_server.router)

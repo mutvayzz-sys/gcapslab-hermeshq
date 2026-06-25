@@ -28,6 +28,7 @@ import hermeshq.models.messaging_channel  # noqa: F401, E402
 import hermeshq.models.mfa_code  # noqa: F401, E402
 import hermeshq.models.node  # noqa: F401, E402
 import hermeshq.models.oidc_provider  # noqa: F401, E402
+import hermeshq.models.organization  # noqa: F401, E402
 import hermeshq.models.password_reset  # noqa: F401, E402
 import hermeshq.models.provider  # noqa: F401, E402
 import hermeshq.models.scheduled_task  # noqa: F401, E402
