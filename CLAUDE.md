@@ -6,6 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HermesHQ is a Docker-first multi-agent control plane. Backend: FastAPI + SQLAlchemy 2.0 (async) + PostgreSQL 16. Frontend: React 19 + TypeScript + Vite + TailwindCSS v4. A WhatsApp bridge (Node.js/Baileys) is bundled into the backend Docker image.
 
+### Architecture (v0.2.2)
+
+**Three-product system:**
+- **HermesHQ** (this repo): Cloud backend + web frontend for multi-tenant agent management
+- **HeadmasterUI** (desktop): Electron app for local/cloud hybrid agent runtime
+- **Headmaster iOS** (mobile): Swift/SwiftUI app for remote chat and agent control
+
+**Key backend features:**
+- Organization/school tenancy with role-based access (admin, school_admin, beta_user, user, student, staff)
+- Desktop provision modes: `headmaster_local`, `headmaster_remote`, `headmaster_plus_thin`
+- Cloud container supervisor for per-user Docker containers
+- Cross-device session namespace for shared desktop + iOS experience
+- Audit logging for all provision, container, and mode changes
+- Server-controlled system prompt and capability gating
+
 ## Dev Workflow
 
 Code is edited locally; the full stack runs on a separate always-on machine via Docker Compose. There is no local stack — don't assume `uvicorn` or `npm run dev` can be run locally.
