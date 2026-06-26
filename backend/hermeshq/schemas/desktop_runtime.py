@@ -24,6 +24,17 @@ class DesktopRuntimeInfo(BaseModel):
     ttl_seconds: int
 
 
+class DesktopProvisionProvider(BaseModel):
+    slug: str
+    name: str
+    runtime_provider: str
+    auth_type: str
+    base_url: str | None = None
+    default_model: str | None = None
+    available_models: list[str] = []
+    enabled: bool = True
+
+
 class DesktopProvisionResponse(BaseModel):
     mode: str
     hermeshq_url: str
@@ -35,6 +46,15 @@ class DesktopProvisionResponse(BaseModel):
     session_namespace: str | None = None
     honcho_base_url: str | None = None
     honcho_api_key: str | None = None
+    # Provider catalog + default model so the desktop can populate its model
+    # selector from HermesHQ instead of relying solely on the local runtime's
+    # /api/model/options (which only sees whatever API keys are in the local
+    # .env). Populated from ProviderDefinition rows + the user's assigned
+    # agent config.
+    providers: list[DesktopProvisionProvider] = []
+    default_model: str | None = None
+    default_provider: str | None = None
+    default_base_url: str | None = None
 
 
 class DesktopRuntimeValidateResponse(BaseModel):

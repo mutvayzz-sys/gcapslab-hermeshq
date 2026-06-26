@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hermeshq.core.security import get_current_user
 from hermeshq.database import get_db_session
+from hermeshq.models.agent import Agent
+from hermeshq.models.agent_assignment import AgentAssignment
 from hermeshq.models.audit_log import AuditLog
+from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
+    DesktopProvisionProvider,
     DesktopProvisionRequest,
     DesktopProvisionResponse,
     DesktopRuntimeInfo,
@@ -90,6 +95,52 @@ async def _build_provision_response(
                 algorithm="HS256",
             )
 
+    # Provider catalog + default model: ship the enabled ProviderDefinition
+    # rows so the desktop can populate its model selector from HermesHQ
+    # instead of relying solely on the local runtime's /api/model/options.
+    provider_rows = (
+        await db.execute(
+            select(ProviderDefinition)
+            .where(ProviderDefinition.enabled.is_(True))
+            .order_by(ProviderDefinition.sort_order, ProviderDefinition.name)
+        )
+    ).scalars().all()
+    providers = [
+        DesktopProvisionProvider(
+            slug=p.slug,
+            name=p.name,
+            runtime_provider=p.runtime_provider,
+            auth_type=p.auth_type,
+            base_url=p.base_url,
+            default_model=p.default_model,
+            available_models=p.available_models or [],
+            enabled=p.enabled,
+        )
+        for p in provider_rows
+    ]
+
+    # Default model: resolve from the user's assigned agent (first active
+    # assignment). Falls back to the first provider's default_model.
+    default_model: str | None = None
+    default_provider: str | None = None
+    default_base_url: str | None = None
+    assignment = (
+        await db.execute(
+            select(Agent)
+            .join(AgentAssignment, AgentAssignment.agent_id == Agent.id)
+            .where(AgentAssignment.user_id == user.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if assignment:
+        default_model = assignment.model
+        default_provider = assignment.provider
+        default_base_url = assignment.base_url
+    if not default_model and providers:
+        default_model = providers[0].default_model
+        default_provider = providers[0].slug
+        default_base_url = providers[0].base_url
+
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -104,6 +155,10 @@ async def _build_provision_response(
         session_namespace=session_namespace,
         honcho_base_url=honcho_base_url,
         honcho_api_key=honcho_api_key,
+        providers=providers,
+        default_model=default_model,
+        default_provider=default_provider,
+        default_base_url=default_base_url,
     )
 
 
