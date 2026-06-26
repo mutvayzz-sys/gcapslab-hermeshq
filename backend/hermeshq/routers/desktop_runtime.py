@@ -70,8 +70,8 @@ async def _build_provision_response(
 ) -> DesktopProvisionResponse:
     server_url = _base_url(request)
     capabilities = capabilities_for_role(user.role)
-    mode = resolve_desktop_mode(user, request.app.state.settings)
-    cloud_container_config = await resolve_container_config(user, request.app.state.settings, db)
+    mode = resolve_desktop_mode(user)
+    cloud_container_config = await resolve_container_config(user, db)
     
     # Phase 6.3: Resolve system prompt override from organization
     system_prompt_override: str | None = None

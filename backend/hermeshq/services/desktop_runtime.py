@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hermeshq.config import Settings
 from hermeshq.models.container import Container
 from hermeshq.models.user import User
 
@@ -63,7 +62,7 @@ def is_capability_allowed(capabilities: Iterable[str], requested_capability: str
     return requested in set(capabilities)
 
 
-def resolve_desktop_mode(user: User, settings: Settings) -> str:
+def resolve_desktop_mode(user: User) -> str:
     role = normalize_desktop_role(user.role)
     if user.organization and user.organization.default_mode:
         return user.organization.default_mode
@@ -72,9 +71,9 @@ def resolve_desktop_mode(user: User, settings: Settings) -> str:
     return "headmaster_local"
 
 
-async def resolve_container_config(user: User, settings: Settings, db: AsyncSession) -> dict | None:
+async def resolve_container_config(user: User, db: AsyncSession) -> dict | None:
     """Return cloud container config if the user has an active remote container."""
-    if resolve_desktop_mode(user, settings) != "headmaster_remote":
+    if resolve_desktop_mode(user) != "headmaster_remote":
         return None
     result = await db.execute(
         select(Container).where(
