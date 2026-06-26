@@ -147,11 +147,23 @@ async def _build_provision_response(
         default_provider = providers[0].slug
         default_base_url = providers[0].base_url
 
-    # Resolve provider API key from server env and ship it to the desktop
-    # so the local Hermes runtime can authenticate with the configured provider.
+    # Resolve provider API key and ship it to the desktop so the local Hermes
+    # runtime can authenticate with the configured provider.
+    # Resolution order: env var → Secret vault (where admin stored the key via UI).
     runtime_env: dict[str, str] = {}
     if assignment and assignment.api_key_ref:
         key_value = os.environ.get(assignment.api_key_ref)
+        if not key_value:
+            from hermeshq.models.secret import Secret
+            from sqlalchemy import select as _select
+            secret_row = (
+                await db.execute(_select(Secret).where(Secret.name == assignment.api_key_ref))
+            ).scalar_one_or_none()
+            if secret_row:
+                try:
+                    key_value = request.app.state.secret_vault.decrypt(secret_row.value_enc)
+                except Exception:
+                    key_value = None
         if key_value:
             runtime_env[assignment.api_key_ref] = key_value
 
