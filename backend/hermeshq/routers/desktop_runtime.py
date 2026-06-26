@@ -10,6 +10,7 @@ from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
+    DesktopProvisionAppSettings,
     DesktopProvisionProvider,
     DesktopProvisionRequest,
     DesktopProvisionResponse,
@@ -141,6 +142,24 @@ async def _build_provision_response(
         default_provider = providers[0].slug
         default_base_url = providers[0].base_url
 
+    # App settings (branding/theme) from AppSettings table
+    from hermeshq.models.app_settings import AppSettings
+    from hermeshq.routers.settings import _settings_to_public_read
+    app_settings_row = await db.get(AppSettings, "default")
+    app_settings = None
+    if app_settings_row:
+        public_read = _settings_to_public_read(app_settings_row)
+        app_settings = DesktopProvisionAppSettings(
+            app_name=public_read.app_name,
+            app_short_name=public_read.app_short_name,
+            theme_mode=public_read.theme_mode,
+            default_locale=public_read.default_locale,
+            logo_url=public_read.logo_url,
+            favicon_url=public_read.favicon_url,
+            has_logo=public_read.has_logo,
+            has_favicon=public_read.has_favicon,
+        )
+
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -159,6 +178,7 @@ async def _build_provision_response(
         default_model=default_model,
         default_provider=default_provider,
         default_base_url=default_base_url,
+        app_settings=app_settings,
     )
 
 

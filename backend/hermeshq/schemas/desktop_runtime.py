@@ -35,6 +35,19 @@ class DesktopProvisionProvider(BaseModel):
     enabled: bool = True
 
 
+class DesktopProvisionAppSettings(BaseModel):
+    """Public app settings shipped in the provision response so the desktop can
+    apply admin-configured branding/theme without making a separate round-trip."""
+    app_name: str
+    app_short_name: str
+    theme_mode: str
+    default_locale: str
+    logo_url: str | None = None
+    favicon_url: str | None = None
+    has_logo: bool = False
+    has_favicon: bool = False
+
+
 class DesktopProvisionResponse(BaseModel):
     mode: str
     hermeshq_url: str
@@ -55,6 +68,8 @@ class DesktopProvisionResponse(BaseModel):
     default_model: str | None = None
     default_provider: str | None = None
     default_base_url: str | None = None
+    # Admin-configured branding/theme settings (from AppSettings)
+    app_settings: DesktopProvisionAppSettings | None = None
 
 
 class DesktopRuntimeValidateResponse(BaseModel):
