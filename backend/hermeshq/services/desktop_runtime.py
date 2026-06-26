@@ -89,4 +89,5 @@ async def resolve_container_config(user: User, settings: Settings, db: AsyncSess
     return {
         "endpoint_url": container.health_check_url,
         "container_id": container.id,
+        "api_server_key": container.api_server_key,
     }

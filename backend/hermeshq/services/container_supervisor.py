@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import os
+import secrets
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from hermeshq.config import Settings, get_settings
 from hermeshq.models.container import Container
+from hermeshq.models.organization import Organization
 from hermeshq.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -89,17 +91,33 @@ class ContainerSupervisor:
             await session.commit()
             await session.refresh(container)
 
+            # Fetch org for Nous credentials
+            org: Organization | None = None
+            if container.organization_id:
+                org = await session.get(Organization, container.organization_id)
+
             # Prepare host data directory
             host_data_dir = os.path.join("/data", "containers", container.user_id)
             os.makedirs(host_data_dir, exist_ok=True)
 
             # Build environment variables
             hq_url = self.settings.public_base_url or "http://localhost:8000"
-            env_vars = {
+            api_server_key = secrets.token_urlsafe(32)
+            env_vars: dict[str, str] = {
                 "HERMES_MODE": "headmaster_remote",
                 "HERMES_HQ_URL": hq_url,
                 "USER_ID": container.user_id,
+                "API_SERVER_ENABLED": "true",
+                "API_SERVER_HOST": "0.0.0.0",
+                "API_SERVER_PORT": "8080",
+                "API_SERVER_KEY": api_server_key,
             }
+            if org and org.nous_api_key:
+                env_vars["NOUS_API_KEY"] = org.nous_api_key
+            if org and org.nous_base_url:
+                env_vars["NOUS_BASE_URL"] = org.nous_base_url
+
+            container.api_server_key = api_server_key
             container.env_vars = json.dumps(env_vars)
 
             # Build volume mounts

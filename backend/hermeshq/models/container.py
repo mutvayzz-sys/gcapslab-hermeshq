@@ -23,6 +23,7 @@ class Container(TimestampMixin, Base):
     # JSON string: [{"host_path": "/data/user-123", "container_path": "/app/data"}]
     env_vars: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON string: {"HERMES_MODE": "headmaster_remote", "API_KEY": "..."}
+    api_server_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     health_check_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_healthy_at: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

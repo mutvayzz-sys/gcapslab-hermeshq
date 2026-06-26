@@ -10,6 +10,7 @@ from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
+    CloudContainerConfig,
     DesktopProvisionAppSettings,
     DesktopProvisionProvider,
     DesktopProvisionRequest,
@@ -86,6 +87,7 @@ async def _build_provision_response(
     # Phase 5: Honcho memory continuity
     honcho_base_url: str | None = None
     honcho_api_key: str | None = None
+    nous_api_key: str | None = None
     if org:
         honcho_base_url = org.honcho_base_url
         if org.honcho_jwt_secret:
@@ -95,6 +97,7 @@ async def _build_provision_response(
                 org.honcho_jwt_secret,
                 algorithm="HS256",
             )
+        nous_api_key = org.nous_api_key or None
 
     # Provider catalog + default model: ship the enabled ProviderDefinition
     # rows so the desktop can populate its model selector from HermesHQ
@@ -160,6 +163,10 @@ async def _build_provision_response(
             has_favicon=public_read.has_favicon,
         )
 
+    typed_container_config: CloudContainerConfig | None = None
+    if cloud_container_config:
+        typed_container_config = CloudContainerConfig(**cloud_container_config)
+
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -169,11 +176,12 @@ async def _build_provision_response(
             validate_url=f"{server_url}/api/desktop/runtime/validate",
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
-        cloud_container_config=cloud_container_config,
+        cloud_container_config=typed_container_config,
         system_prompt_override=system_prompt_override,
         session_namespace=session_namespace,
         honcho_base_url=honcho_base_url,
         honcho_api_key=honcho_api_key,
+        nous_api_key=nous_api_key,
         providers=providers,
         default_model=default_model,
         default_provider=default_provider,

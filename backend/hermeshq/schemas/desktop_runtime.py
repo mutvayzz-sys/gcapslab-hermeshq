@@ -48,17 +48,24 @@ class DesktopProvisionAppSettings(BaseModel):
     has_favicon: bool = False
 
 
+class CloudContainerConfig(BaseModel):
+    endpoint_url: str | None = None
+    container_id: str
+    api_server_key: str | None = None
+
+
 class DesktopProvisionResponse(BaseModel):
     mode: str
     hermeshq_url: str
     user: DesktopProvisionUser
     capabilities: list[str]
     runtime: DesktopRuntimeInfo
-    cloud_container_config: dict | None = None
+    cloud_container_config: CloudContainerConfig | None = None
     system_prompt_override: str | None = None
     session_namespace: str | None = None
     honcho_base_url: str | None = None
     honcho_api_key: str | None = None
+    nous_api_key: str | None = None
     # Provider catalog + default model so the desktop can populate its model
     # selector from HermesHQ instead of relying solely on the local runtime's
     # /api/model/options (which only sees whatever API keys are in the local

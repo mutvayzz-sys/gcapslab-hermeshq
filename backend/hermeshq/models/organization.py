@@ -18,5 +18,7 @@ class Organization(TimestampMixin, Base):
     system_prompt_override: Mapped[str | None] = mapped_column(Text, nullable=True)
     honcho_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     honcho_jwt_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nous_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    nous_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     users = relationship("User", back_populates="organization")
