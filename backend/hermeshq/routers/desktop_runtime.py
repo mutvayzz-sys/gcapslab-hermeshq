@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,6 +147,14 @@ async def _build_provision_response(
         default_provider = providers[0].slug
         default_base_url = providers[0].base_url
 
+    # Resolve provider API key from server env and ship it to the desktop
+    # so the local Hermes runtime can authenticate with the configured provider.
+    runtime_env: dict[str, str] = {}
+    if assignment and assignment.api_key_ref:
+        key_value = os.environ.get(assignment.api_key_ref)
+        if key_value:
+            runtime_env[assignment.api_key_ref] = key_value
+
     # App settings (branding/theme) from AppSettings table
     from hermeshq.models.app_settings import AppSettings
     from hermeshq.routers.settings import _settings_to_public_read
@@ -187,6 +197,7 @@ async def _build_provision_response(
         default_provider=default_provider,
         default_base_url=default_base_url,
         app_settings=app_settings,
+        runtime_env=runtime_env,
     )
 
 

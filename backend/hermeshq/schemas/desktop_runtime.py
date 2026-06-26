@@ -77,6 +77,10 @@ class DesktopProvisionResponse(BaseModel):
     default_base_url: str | None = None
     # Admin-configured branding/theme settings (from AppSettings)
     app_settings: DesktopProvisionAppSettings | None = None
+    # Env vars to inject into the local Hermes runtime .env on login.
+    # HermesHQ resolves provider api_key_ref values server-side and ships
+    # them here so the desktop doesn't need to know each provider's env var name.
+    runtime_env: dict[str, str] = {}
 
 
 class DesktopRuntimeValidateResponse(BaseModel):
