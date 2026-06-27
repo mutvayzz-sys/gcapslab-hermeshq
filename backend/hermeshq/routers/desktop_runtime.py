@@ -249,6 +249,25 @@ async def validate_desktop_runtime(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopRuntimeValidateResponse:
+    # Verify the user is active — inactive users get no provision
+    if not current_user.is_active:
+        await _audit_log(
+            db,
+            current_user,
+            "desktop.runtime_validate_denied",
+            "desktop_runtime",
+            current_user.id,
+            None,
+            {"reason": "user_inactive", "role": current_user.role},
+            {"runtime_id": payload.runtime_id},
+        )
+        return DesktopRuntimeValidateResponse(
+            allowed=False,
+            capabilities=[],
+            role=normalize_desktop_role(current_user.role),
+            ttl_seconds=0,
+        )
+
     role = normalize_desktop_role(current_user.role)
     capabilities = capabilities_for_role(role)
     if not is_capability_allowed(capabilities, payload.requested_capability):
