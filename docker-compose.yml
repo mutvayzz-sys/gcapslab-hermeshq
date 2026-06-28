@@ -125,9 +125,10 @@ services:
   tunnel:
     image: cloudflare/cloudflared:latest
     container_name: hermeshq-tunnel
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - /Users/mattywow/.cloudflared/28e28a4e-343c-4ba2-acdb-09a0fc24d296.json:/etc/cloudflared/28e28a4e-343c-4ba2-acdb-09a0fc24d296.json:ro
+      - /Users/mattywow/.cloudflared/hermeshq.yml:/etc/cloudflared/config.yml:ro
     depends_on:
       frontend:
         condition: service_started

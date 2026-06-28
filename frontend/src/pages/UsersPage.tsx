@@ -387,7 +387,7 @@ export function UsersPage() {
                   </div>
                 </div>
                 <div className='space-y-4'>
-                  {user.role === 'pending' && (
+                  {user.is_active === false && (
                     <div className='rounded-md border border-yellow-400 bg-yellow-50 p-3 dark:bg-yellow-900/20'>
                       <p className='mb-2 text-sm font-medium text-yellow-800 dark:text-yellow-300'>Pending approval</p>
                       <div className='flex flex-wrap gap-2'>
