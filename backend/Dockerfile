@@ -27,7 +27,7 @@ COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --prefix=/install -r /app/requirements.txt \
     && pip install --no-cache-dir --prefix=/install \
        Pillow \
-       git+https://github.com/NousResearch/hermes-agent.git@v2026.5.7
+       git+https://github.com/NousResearch/hermes-agent.git@v2026.6.19
 
 # --- Node.js dependencies (whatsapp-bridge) ---
 RUN mkdir -p /app/hermeshq/assets/whatsapp-bridge
