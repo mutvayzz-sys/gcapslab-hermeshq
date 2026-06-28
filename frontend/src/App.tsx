@@ -19,7 +19,6 @@ import { AgentDetailPage } from './pages/AgentDetailPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { AuditPage } from './pages/AuditPage';
 import { CommsPage } from './pages/CommsPage';
-import { ContainersPage } from './pages/ContainersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -144,7 +143,6 @@ export default function App() {
             <Route path='/settings' element={<SettingsPage />} />
             <Route path='/audit' element={<AuditPage />} />
             <Route path='/organizations' element={<OrganizationsPage />} />
-            <Route path='/containers' element={<ContainersPage />} />
           </Route>
           <Route path='*' element={<Navigate to='/' replace />} />
         </Routes>

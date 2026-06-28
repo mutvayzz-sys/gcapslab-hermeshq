@@ -15,7 +15,6 @@ import tareasIcon from "../../assets/icon/tareas.png";
 import programacionesIcon from "../../assets/icon/programaciones.png";
 import usuariosIcon from "../../assets/icon/usuarios.png";
 import nodosIcon from "../../assets/icon/nodos.png";
-import dockerIcon from "../../assets/icon/docker.svg";
 import commsIcon from "../../assets/icon/comms.png";
 import configuracionIcon from "../../assets/icon/configuracion.png";
 import manualIcon from "../../assets/icon/manual.png";
@@ -66,7 +65,6 @@ export function AppShell() {
         { to: "/tasks", label: "Tasks", icon: tareasIcon },
         { to: "/schedules", label: "Schedules", icon: programacionesIcon },
         { to: "/users", label: "Users", icon: usuariosIcon },
-        { to: "/containers", label: "Containers", icon: dockerIcon },
         { to: "/nodes", label: "Nodes", icon: nodosIcon },
         { to: "/comms", label: "Comms", icon: commsIcon },
         { to: "/settings", label: "Settings", icon: configuracionIcon },
