@@ -65,6 +65,7 @@ export function AppShell() {
         { to: "/tasks", label: "Tasks", icon: tareasIcon },
         { to: "/schedules", label: "Schedules", icon: programacionesIcon },
         { to: "/users", label: "Users", icon: usuariosIcon },
+        { to: "/containers", label: "Containers", icon: nodosIcon },
         { to: "/nodes", label: "Nodes", icon: nodosIcon },
         { to: "/comms", label: "Comms", icon: commsIcon },
         { to: "/settings", label: "Settings", icon: configuracionIcon },
