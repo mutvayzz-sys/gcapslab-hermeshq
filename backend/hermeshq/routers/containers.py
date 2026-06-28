@@ -9,6 +9,7 @@ from hermeshq.models.container import Container
 from hermeshq.models.user import User
 from hermeshq.schemas.container import (
     ContainerCreate,
+    ContainerProvisionRequest,
     ContainerResponse,
     ContainerStartStopResponse,
 )
@@ -95,6 +96,59 @@ async def create_container(
         {"name": container.name, "org_id": payload.organization_id},
     )
     return container
+
+
+@router.post("/provision", response_model=ContainerResponse, status_code=status.HTTP_201_CREATED)
+async def provision_user_container(
+    request: Request,
+    payload: ContainerProvisionRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ContainerResponse:
+    """Create and start a Hermes container for a given user. Admin only."""
+    target_user = await db.get(User, payload.user_id)
+    if not target_user or not target_user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    existing = (
+        await db.execute(
+            select(Container).where(
+                Container.user_id == target_user.id,
+                Container.is_active.is_(True),
+                Container.status != "destroyed",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already has an active container",
+        )
+
+    supervisor = await _get_supervisor(request)
+    container = await supervisor.create_container(user=target_user, org_id=target_user.organization_id)
+
+    if payload.name:
+        c = await db.get(Container, container.id)
+        if c:
+            c.name = payload.name
+            await db.commit()
+            await db.refresh(c)
+            container = c
+
+    updated = await supervisor.start_container(container.id)
+
+    await _audit_log(
+        db,
+        current_user,
+        "container.provision",
+        "container",
+        updated.id,
+        None,
+        {"status": updated.status, "user_id": target_user.id},
+        {"target_user": target_user.username, "image": updated.image},
+    )
+    return updated
 
 
 @router.get("/{container_id}", response_model=ContainerResponse)

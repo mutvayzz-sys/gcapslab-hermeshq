@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     from_name: str | None = None
     public_base_url: str | None = None
     password_reset_token_minutes: int = 15
+    # Public-facing host used to build container endpoint URLs sent to the desktop app.
+    # E.g. "http://165.x.x.x" or "https://vps.example.com". Falls back to public_base_url then localhost.
+    container_host_url: str | None = None
 
     admin_username: str = "admin"
     admin_password: str = ""

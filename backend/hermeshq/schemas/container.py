@@ -7,6 +7,11 @@ class ContainerCreate(BaseModel):
     image: str | None = Field(default="hermes:latest", max_length=255)
 
 
+class ContainerProvisionRequest(BaseModel):
+    user_id: str = Field(..., max_length=36)
+    name: str | None = Field(default=None, max_length=128)
+
+
 class ContainerResponse(BaseModel):
     id: str
     user_id: str

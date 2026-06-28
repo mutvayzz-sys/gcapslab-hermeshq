@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hermeshq.config import get_settings
 from hermeshq.models.container import Container
 from hermeshq.models.user import User
 
@@ -72,21 +73,27 @@ def resolve_desktop_mode(user: User) -> str:
 
 
 async def resolve_container_config(user: User, db: AsyncSession) -> dict | None:
-    """Return cloud container config if the user has an active remote container."""
-    if resolve_desktop_mode(user) != "headmaster_remote":
-        return None
+    """Return cloud container config if the user has an active running container."""
     result = await db.execute(
         select(Container).where(
             Container.user_id == user.id,
             Container.is_active.is_(True),
-            Container.status != "destroyed",
+            Container.status == "running",
         )
     )
     container = result.scalar_one_or_none()
     if not container:
         return None
+
+    # Build the public endpoint URL for the desktop app.
+    # Traffic routes through nginx at /runtime/{container-name}/ on the hermes_runtime network —
+    # no host ports are exposed. CONTAINER_HOST_URL (or public_base_url) is the domain.
+    settings = get_settings()
+    host = (settings.container_host_url or settings.public_base_url or "").rstrip("/")
+    endpoint_url = f"{host}/runtime/{container.name}" if host else None
+
     return {
-        "endpoint_url": container.health_check_url,
+        "endpoint_url": endpoint_url,
         "container_id": container.id,
         "api_server_key": container.api_server_key,
     }

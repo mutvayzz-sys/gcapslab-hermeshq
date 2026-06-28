@@ -124,23 +124,24 @@ class ContainerSupervisor:
             volume_mounts = [{"host_path": host_data_dir, "container_path": "/app/data"}]
             container.volume_mounts = json.dumps(volume_mounts)
 
-            # Determine port mapping: expose container 8080 to an ephemeral host port
-            mapped_port = await self._run_container(
+            # Start container on the hermes_runtime network — no host port mapping.
+            # nginx (also on hermes_runtime) proxies to it by container name.
+            await self._run_container(
                 container.name,
                 container.image,
-                container_ports={"8080/tcp": None},  # docker assigns ephemeral port
                 volumes={host_data_dir: {"bind": "/app/data", "mode": "rw"}},
                 environment=env_vars,
             )
 
             container.status = "running"
             container.docker_container_id = self._last_docker_id
-            container.health_check_url = f"http://localhost:{mapped_port}/health"
-            container.ports = json.dumps({"8080": mapped_port})
+            # Internal URL reachable from the backend via Docker DNS on hermes_runtime
+            container.health_check_url = f"http://{container.name}:8080/health"
+            container.ports = None
             await session.commit()
             await session.refresh(container)
 
-        logger.info("Container %s started on port %s", container_id, mapped_port)
+        logger.info("Container %s started (network=hermes_runtime)", container_id)
         return container
 
     async def stop_container(self, container_id: str) -> Container:
@@ -246,28 +247,29 @@ class ContainerSupervisor:
 
     # -- Docker helpers ------------------------------------------------------
 
+    _RUNTIME_NETWORK = "hermes_runtime"
+
     async def _run_container(
         self,
         name: str,
         image: str,
-        container_ports: dict,
         volumes: dict,
         environment: dict,
-    ) -> int:
-        """Run a Docker container and return the mapped host port."""
+    ) -> None:
+        """Start a container on the hermes_runtime network (no host port mapping)."""
         if self._docker is not None:
-            return await self._docker_run_sdk(name, image, container_ports, volumes, environment)
-        return await self._docker_run_subprocess(name, image, container_ports, volumes, environment)
+            await self._docker_run_sdk(name, image, volumes, environment)
+        else:
+            await self._docker_run_subprocess(name, image, volumes, environment)
 
     async def _docker_run_sdk(
         self,
         name: str,
         image: str,
-        container_ports: dict,
         volumes: dict,
         environment: dict,
-    ) -> int:
-        """Run container via docker-py SDK."""
+    ) -> None:
+        """Run container via docker-py SDK on hermes_runtime network."""
         loop = asyncio.get_event_loop()
         container = await loop.run_in_executor(
             None,
@@ -275,39 +277,31 @@ class ContainerSupervisor:
                 image,
                 name=name,
                 detach=True,
-                ports=container_ports,
+                network=self._RUNTIME_NETWORK,
                 volumes=volumes,
                 environment=environment,
             ),
         )
-        # Refresh to get NetworkSettings
-        container.reload()
-        docker_id = container.id
-        mapped_port = container.ports.get("8080/tcp", [{}])[0].get("HostPort", "0")
-        # Update the DB record with docker_container_id — we do this in the caller,
-        # but we need the id here.  Return both via a simple trick: store temporarily.
-        self._last_docker_id = docker_id  # type: ignore[attr-defined]
-        return int(mapped_port)
+        self._last_docker_id = container.id  # type: ignore[attr-defined]
 
     async def _docker_run_subprocess(
         self,
         name: str,
         image: str,
-        container_ports: dict,
         volumes: dict,
         environment: dict,
-    ) -> int:
-        """Run container via subprocess fallback."""
-        port_spec = "-P"  # publish all exposed ports to ephemeral host ports
-        env_args = [f"-e {k}={v}" for k, v in environment.items()]
-        vol_args = [f"-v {host}:{bind['bind']}:{bind['mode']}" for host, bind in volumes.items()]
+    ) -> None:
+        """Run container via subprocess fallback on hermes_runtime network."""
+        env_args: list[str] = []
+        for k, v in environment.items():
+            env_args += ["-e", f"{k}={v}"]
+        vol_args: list[str] = []
+        for host, bind in volumes.items():
+            vol_args += ["-v", f"{host}:{bind['bind']}:{bind['mode']}"]
         cmd = [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            name,
-            port_spec,
+            "docker", "run", "-d",
+            "--name", name,
+            "--network", self._RUNTIME_NETWORK,
             *env_args,
             *vol_args,
             image,
@@ -321,24 +315,7 @@ class ContainerSupervisor:
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
             raise RuntimeError(f"docker run failed: {stderr.decode()}")
-        docker_id = stdout.decode().strip()
-        self._last_docker_id = docker_id  # type: ignore[attr-defined]
-
-        # Inspect to get mapped port
-        inspect_proc = await asyncio.create_subprocess_exec(
-            "docker",
-            "inspect",
-            "--format",
-            "{{(index (index .NetworkSettings.Ports \"8080/tcp\") 0).HostPort}}",
-            docker_id,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        inspect_stdout, inspect_stderr = await inspect_proc.communicate()
-        if inspect_proc.returncode != 0:
-            raise RuntimeError(f"docker inspect failed: {inspect_stderr.decode()}")
-        mapped_port = int(inspect_stdout.decode().strip())
-        return mapped_port
+        self._last_docker_id = stdout.decode().strip()  # type: ignore[attr-defined]
 
     async def _docker_stop(self, docker_container_id: str) -> None:
         if self._docker is not None:
