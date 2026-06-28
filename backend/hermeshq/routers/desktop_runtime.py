@@ -12,7 +12,6 @@ from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
-    CloudContainerConfig,
     DesktopProvisionAppSettings,
     DesktopProvisionProvider,
     DesktopProvisionRequest,
@@ -27,7 +26,6 @@ from hermeshq.services.desktop_runtime import (
     desktop_user_payload,
     is_capability_allowed,
     normalize_desktop_role,
-    resolve_container_config,
     resolve_desktop_mode,
 )
 
@@ -70,8 +68,7 @@ async def _build_provision_response(
 ) -> DesktopProvisionResponse:
     server_url = _base_url(request)
     capabilities = capabilities_for_role(user.role)
-    cloud_container_config = await resolve_container_config(user, db)
-    mode = "headmaster_remote" if cloud_container_config else resolve_desktop_mode(user)
+    mode = resolve_desktop_mode(user)
     
     # Phase 6.3: Resolve system prompt override from organization
     system_prompt_override: str | None = None
@@ -185,10 +182,6 @@ async def _build_provision_response(
             has_favicon=public_read.has_favicon,
         )
 
-    typed_container_config: CloudContainerConfig | None = None
-    if cloud_container_config:
-        typed_container_config = CloudContainerConfig(**cloud_container_config)
-
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -198,7 +191,6 @@ async def _build_provision_response(
             validate_url=f"{server_url}/api/desktop/runtime/validate",
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
-        cloud_container_config=typed_container_config,
         system_prompt_override=system_prompt_override,
         session_namespace=session_namespace,
         honcho_base_url=honcho_base_url,

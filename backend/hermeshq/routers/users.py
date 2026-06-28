@@ -241,34 +241,12 @@ async def approve_and_provision_user(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> UserManagedRead:
-    from hermeshq.models.container import Container
-    from hermeshq.routers.containers import _get_supervisor
-    from sqlalchemy import select as sa_select
-
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role != "pending":
         raise HTTPException(status_code=400, detail="User is not pending approval")
     user.role = "beta_user"
-    await db.flush()
-
-    existing = (await db.execute(
-        sa_select(Container).where(
-            Container.user_id == user.id,
-            Container.is_active.is_(True),
-            Container.status != "destroyed",
-        )
-    )).scalar_one_or_none()
-
-    if not existing:
-        try:
-            supervisor = await _get_supervisor(request)
-            container = await supervisor.create_container(user=user, org_id=user.organization_id)
-            await supervisor.start_container(container.id)
-        except Exception:
-            logger.warning("Container provisioning failed during approve-and-provision for user %s", user_id, exc_info=True)
-
     await db.commit()
     await db.refresh(user)
     return await _to_read(request, db, user)
