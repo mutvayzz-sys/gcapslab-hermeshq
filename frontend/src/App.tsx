@@ -144,7 +144,6 @@ export default function App() {
             <Route path='/settings' element={<SettingsPage />} />
             <Route path='/audit' element={<AuditPage />} />
             <Route path='/organizations' element={<OrganizationsPage />} />
-            <Toaster />
           </Route>
           <Toaster />
           <Route path='*' element={<Navigate to='/' replace />} />
