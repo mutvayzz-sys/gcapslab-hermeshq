@@ -146,6 +146,7 @@ export default function App() {
             <Route path='/organizations' element={<OrganizationsPage />} />
             <Toaster />
           </Route>
+          <Toaster />
           <Route path='*' element={<Navigate to='/' replace />} />
         </Routes>
       </ErrorBoundary>
