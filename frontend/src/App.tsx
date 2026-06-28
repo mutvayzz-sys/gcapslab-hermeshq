@@ -145,9 +145,9 @@ export default function App() {
             <Route path='/audit' element={<AuditPage />} />
             <Route path='/organizations' element={<OrganizationsPage />} />
           </Route>
-          <Toaster />
           <Route path='*' element={<Navigate to='/' replace />} />
         </Routes>
+        <Toaster />
       </ErrorBoundary>
     </I18nProvider>
   );
