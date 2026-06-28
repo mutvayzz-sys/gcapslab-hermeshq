@@ -1,49 +1,58 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from 'react';
 
-import { useAgents } from "../api/agents";
-import { useCreateUser, useDeleteUser, useDeleteUserAvatar, useUpdateUser, useUploadUserAvatar, useUsers } from "../api/users";
-import { UserAvatar } from "../components/UserAvatar";
-import { useI18n } from "../lib/i18n";
-import { useSessionStore } from "../stores/sessionStore";
+import { useAgents } from '../api/agents';
+import {
+  useApproveAndProvisionUser,
+  useApproveUser,
+  useCreateUser,
+  useDeleteUser,
+  useDeleteUserAvatar,
+  useUpdateUser,
+  useUploadUserAvatar,
+  useUsers,
+} from '../api/users';
+import { UserAvatar } from '../components/UserAvatar';
+import { useI18n } from '../lib/i18n';
+import { useSessionStore } from '../stores/sessionStore';
 
 const emptyCreateForm = {
-  username: "",
-  display_name: "",
-  password: "",
-  role: "user",
+  username: '',
+  display_name: '',
+  password: '',
+  role: 'user',
   is_active: true,
   assigned_agent_ids: [] as string[],
-  telegram_id: "",
-  whatsapp_user: "",
-  teams_id: "",
-  google_chat_email: "",
-  kapso_id: "",
-  kapso_number: "",
+  telegram_id: '',
+  whatsapp_user: '',
+  teams_id: '',
+  google_chat_email: '',
+  kapso_id: '',
+  kapso_number: '',
 };
 
 function validatePassword(value: string) {
   if (value.length < 8) {
-    return "Password must have at least 8 characters.";
+    return 'Password must have at least 8 characters.';
   }
   if (!/[A-Z]/.test(value)) {
-    return "Password must include at least one uppercase letter.";
+    return 'Password must include at least one uppercase letter.';
   }
   if (!/[0-9]/.test(value)) {
-    return "Password must include at least one number.";
+    return 'Password must include at least one number.';
   }
   if (!/[^A-Za-z0-9]/.test(value)) {
-    return "Password must include at least one special character.";
+    return 'Password must include at least one special character.';
   }
   return null;
 }
 
 function extractErrorMessage(error: unknown) {
-  if (typeof error === "object" && error && "response" in error) {
+  if (typeof error === 'object' && error && 'response' in error) {
     const response = (error as { response?: { data?: unknown } }).response;
     const data = response?.data;
-    if (typeof data === "object" && data && "detail" in data) {
+    if (typeof data === 'object' && data && 'detail' in data) {
       const detail = (data as { detail?: unknown }).detail;
-      if (typeof detail === "string") {
+      if (typeof detail === 'string') {
         return detail;
       }
       if (Array.isArray(detail) && detail.length) {
@@ -54,12 +63,12 @@ function extractErrorMessage(error: unknown) {
       }
     }
   }
-  return error instanceof Error ? error.message : "Request failed";
+  return error instanceof Error ? error.message : 'Request failed';
 }
 
 export function UsersPage() {
   const currentUser = useSessionStore((state) => state.user);
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === 'admin';
   const { t } = useI18n();
   const { data: agents } = useAgents();
   const { data: users } = useUsers(isAdmin);
@@ -68,13 +77,24 @@ export function UsersPage() {
   const uploadUserAvatar = useUploadUserAvatar();
   const deleteUserAvatar = useDeleteUserAvatar();
   const updateUser = useUpdateUser();
+  const approveUser = useApproveUser();
+  const approveAndProvisionUser = useApproveAndProvisionUser();
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [displayNameDrafts, setDisplayNameDrafts] = useState<Record<string, string>>({});
-  const [channelIdDrafts, setChannelIdDrafts] = useState<Record<string, {
-    telegram_id: string; whatsapp_user: string; teams_id: string;
-    google_chat_email: string; kapso_id: string; kapso_number: string;
-  }>>({});
+  const [channelIdDrafts, setChannelIdDrafts] = useState<
+    Record<
+      string,
+      {
+        telegram_id: string;
+        whatsapp_user: string;
+        teams_id: string;
+        google_chat_email: string;
+        kapso_id: string;
+        kapso_number: string;
+      }
+    >
+  >({});
   const [createError, setCreateError] = useState<string | null>(null);
   const [createInfo, setCreateInfo] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, string | null>>({});
@@ -82,17 +102,15 @@ export function UsersPage() {
 
   const agentOptions = useMemo(
     () => (agents ?? []).map((agent) => ({ id: agent.id, label: agent.friendly_name || agent.name })),
-    [agents],
+    [agents]
   );
 
   if (currentUser && !isAdmin) {
     return (
-      <section className="panel-frame p-6">
-        <p className="panel-label">{t("users.users")}</p>
-        <h2 className="mt-2 text-3xl text-[var(--text-display)]">{t("nodes.adminRequired")}</h2>
-        <p className="mt-4 max-w-[42rem] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("users.adminOnly")}
-        </p>
+      <section className='panel-frame p-6'>
+        <p className='panel-label'>{t('users.users')}</p>
+        <h2 className='mt-2 text-3xl text-[var(--text-display)]'>{t('nodes.adminRequired')}</h2>
+        <p className='mt-4 max-w-[42rem] text-sm leading-6 text-[var(--text-secondary)]'>{t('users.adminOnly')}</p>
       </section>
     );
   }
@@ -109,14 +127,14 @@ export function UsersPage() {
     try {
       await createUser.mutateAsync(createForm);
       setCreateForm(emptyCreateForm);
-      setCreateInfo(t("users.created"));
+      setCreateInfo(t('users.created'));
     } catch (error) {
       setCreateError(extractErrorMessage(error));
     }
   }
 
   async function onDeleteUser(userId: string, username: string) {
-    const confirmed = window.confirm(t("users.deleteConfirm", { username }));
+    const confirmed = window.confirm(t('users.deleteConfirm', { username }));
     if (!confirmed) {
       return;
     }
@@ -139,26 +157,30 @@ export function UsersPage() {
   }
 
   return (
-    <div className="users-page grid gap-6 xl:grid-cols-[0.68fr_1.32fr]">
-      <form className="users-create-card panel-frame p-6" onSubmit={onCreateUser}>
-        <p className="panel-label">{t("users.users")}</p>
-        <h2 className="mt-2 text-3xl text-[var(--text-display)]">{t("users.createOperator")}</h2>
-        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-          {t("users.createCopy")}
-        </p>
-        <div className="mt-6 space-y-4">
-          <label className="panel-field">
-            <span className="panel-label">{t("login.username")}</span>
-            <input value={createForm.username} onChange={(event) => setCreateForm((current) => ({ ...current, username: event.target.value }))} />
-          </label>
-          <label className="panel-field">
-            <span className="panel-label">{t("users.displayName")}</span>
-            <input value={createForm.display_name} onChange={(event) => setCreateForm((current) => ({ ...current, display_name: event.target.value }))} />
-          </label>
-          <label className="panel-field">
-            <span className="panel-label">{t("login.password")}</span>
+    <div className='users-page grid gap-6 xl:grid-cols-[0.68fr_1.32fr]'>
+      <form className='users-create-card panel-frame p-6' onSubmit={onCreateUser}>
+        <p className='panel-label'>{t('users.users')}</p>
+        <h2 className='mt-2 text-3xl text-[var(--text-display)]'>{t('users.createOperator')}</h2>
+        <p className='mt-3 text-sm leading-6 text-[var(--text-secondary)]'>{t('users.createCopy')}</p>
+        <div className='mt-6 space-y-4'>
+          <label className='panel-field'>
+            <span className='panel-label'>{t('login.username')}</span>
             <input
-              type="password"
+              value={createForm.username}
+              onChange={(event) => setCreateForm((current) => ({ ...current, username: event.target.value }))}
+            />
+          </label>
+          <label className='panel-field'>
+            <span className='panel-label'>{t('users.displayName')}</span>
+            <input
+              value={createForm.display_name}
+              onChange={(event) => setCreateForm((current) => ({ ...current, display_name: event.target.value }))}
+            />
+          </label>
+          <label className='panel-field'>
+            <span className='panel-label'>{t('login.password')}</span>
+            <input
+              type='password'
               minLength={8}
               value={createForm.password}
               onChange={(event) => {
@@ -167,19 +189,24 @@ export function UsersPage() {
                 setCreateForm((current) => ({ ...current, password: event.target.value }));
               }}
             />
-            <p className="mt-2 text-xs uppercase tracking-[0.08em] text-[var(--text-disabled)]">
-              {t("users.passwordHint")}
+            <p className='mt-2 text-xs uppercase tracking-[0.08em] text-[var(--text-disabled)]'>
+              {t('users.passwordHint')}
             </p>
           </label>
-          <label className="panel-field">
-            <span className="panel-label">{t("users.role")}</span>
-            <select value={createForm.role} onChange={(event) => setCreateForm((current) => ({ ...current, role: event.target.value as "admin" | "user" }))}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+          <label className='panel-field'>
+            <span className='panel-label'>{t('users.role')}</span>
+            <select
+              value={createForm.role}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, role: event.target.value as 'admin' | 'user' }))
+              }
+            >
+              <option value='user'>User</option>
+              <option value='admin'>Admin</option>
             </select>
           </label>
-          <label className="panel-field">
-            <span className="panel-label">{t("users.assignedAgents")}</span>
+          <label className='panel-field'>
+            <span className='panel-label'>{t('users.assignedAgents')}</span>
             <select
               multiple
               value={createForm.assigned_agent_ids}
@@ -189,7 +216,7 @@ export function UsersPage() {
                   assigned_agent_ids: Array.from(event.target.selectedOptions, (option) => option.value),
                 }))
               }
-              className="min-h-40"
+              className='min-h-40'
             >
               {agentOptions.map((agent) => (
                 <option key={agent.id} value={agent.id}>
@@ -198,71 +225,95 @@ export function UsersPage() {
               ))}
             </select>
           </label>
-          <div className="border-t border-[var(--border)] pt-4">
-            <p className="panel-label mb-3">Messaging Channels</p>
-            <div className="space-y-3">
-              <label className="panel-field">
-                <span className="panel-label">ID Telegram</span>
-                <input value={createForm.telegram_id} onChange={(e) => setCreateForm((c) => ({ ...c, telegram_id: e.target.value }))} placeholder="Optional" />
+          <div className='border-t border-[var(--border)] pt-4'>
+            <p className='panel-label mb-3'>Messaging Channels</p>
+            <div className='space-y-3'>
+              <label className='panel-field'>
+                <span className='panel-label'>ID Telegram</span>
+                <input
+                  value={createForm.telegram_id}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, telegram_id: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
-              <label className="panel-field">
-                <span className="panel-label">User WhatsApp</span>
-                <input value={createForm.whatsapp_user} onChange={(e) => setCreateForm((c) => ({ ...c, whatsapp_user: e.target.value }))} placeholder="Optional" />
+              <label className='panel-field'>
+                <span className='panel-label'>User WhatsApp</span>
+                <input
+                  value={createForm.whatsapp_user}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, whatsapp_user: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
-              <label className="panel-field">
-                <span className="panel-label">ID MS Teams</span>
-                <input value={createForm.teams_id} onChange={(e) => setCreateForm((c) => ({ ...c, teams_id: e.target.value }))} placeholder="Optional" />
+              <label className='panel-field'>
+                <span className='panel-label'>ID MS Teams</span>
+                <input
+                  value={createForm.teams_id}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, teams_id: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
-              <label className="panel-field">
-                <span className="panel-label">Email Google Chat</span>
-                <input value={createForm.google_chat_email} onChange={(e) => setCreateForm((c) => ({ ...c, google_chat_email: e.target.value }))} placeholder="Optional" />
+              <label className='panel-field'>
+                <span className='panel-label'>Email Google Chat</span>
+                <input
+                  value={createForm.google_chat_email}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, google_chat_email: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
-              <label className="panel-field">
-                <span className="panel-label">ID Kapso</span>
-                <input value={createForm.kapso_id} onChange={(e) => setCreateForm((c) => ({ ...c, kapso_id: e.target.value }))} placeholder="Optional" />
+              <label className='panel-field'>
+                <span className='panel-label'>ID Kapso</span>
+                <input
+                  value={createForm.kapso_id}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, kapso_id: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
-              <label className="panel-field">
-                <span className="panel-label">Number Kapso</span>
-                <input value={createForm.kapso_number} onChange={(e) => setCreateForm((c) => ({ ...c, kapso_number: e.target.value }))} placeholder="Optional" />
+              <label className='panel-field'>
+                <span className='panel-label'>Number Kapso</span>
+                <input
+                  value={createForm.kapso_number}
+                  onChange={(e) => setCreateForm((c) => ({ ...c, kapso_number: e.target.value }))}
+                  placeholder='Optional'
+                />
               </label>
             </div>
           </div>
-          <label className="mt-2 flex items-center gap-3 text-sm text-[var(--text-secondary)]">
+          <label className='mt-2 flex items-center gap-3 text-sm text-[var(--text-secondary)]'>
             <input
-              type="checkbox"
+              type='checkbox'
               checked={createForm.is_active}
               onChange={(event) => setCreateForm((current) => ({ ...current, is_active: event.target.checked }))}
-              className="h-4 w-4"
+              className='h-4 w-4'
             />
-            {t("users.activeAccount")}
+            {t('users.activeAccount')}
           </label>
-          <button className="panel-button-primary w-full" type="submit" disabled={createUser.isPending}>
-            {createUser.isPending ? t("common.loading") : t("users.create")}
+          <button className='panel-button-primary w-full' type='submit' disabled={createUser.isPending}>
+            {createUser.isPending ? t('common.loading') : t('users.create')}
           </button>
-          {createError ? <p className="text-sm text-[var(--accent)]">{createError}</p> : null}
-          {createInfo ? <p className="text-sm text-[var(--success)]">{createInfo}</p> : null}
+          {createError ? <p className='text-sm text-[var(--accent)]'>{createError}</p> : null}
+          {createInfo ? <p className='text-sm text-[var(--success)]'>{createInfo}</p> : null}
         </div>
       </form>
 
-      <section className="users-directory-card panel-frame p-6">
-        <div className="flex items-end justify-between gap-4 border-b border-[var(--border)] pb-4">
+      <section className='users-directory-card panel-frame p-6'>
+        <div className='flex items-end justify-between gap-4 border-b border-[var(--border)] pb-4'>
           <div>
-            <p className="panel-label">{t("users.directory")}</p>
-            <h2 className="mt-2 text-3xl text-[var(--text-display)]">{t("users.accessRegistry")}</h2>
+            <p className='panel-label'>{t('users.directory')}</p>
+            <h2 className='mt-2 text-3xl text-[var(--text-display)]'>{t('users.accessRegistry')}</h2>
           </div>
-          <p className="panel-label">{t("users.accounts", { count: users?.length ?? 0 })}</p>
+          <p className='panel-label'>{t('users.accounts', { count: users?.length ?? 0 })}</p>
         </div>
-        <div className="mt-2">
+        <div className='mt-2'>
           {(users ?? []).map((user) => (
-            <article key={user.id} className="users-row border-b border-[var(--border)] py-5">
-              <div className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
-                <div className="flex items-start gap-4">
-                  <UserAvatar user={user} sizeClass="h-14 w-14" className="shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="panel-label">{user.username}</p>
-                    <div className="mt-2 grid gap-3">
-                      <label className="panel-field">
-                        <span className="panel-label">{t("users.displayName")}</span>
+            <article key={user.id} className='users-row border-b border-[var(--border)] py-5'>
+              <div className='grid gap-5 xl:grid-cols-[1fr_0.9fr]'>
+                <div className='flex items-start gap-4'>
+                  <UserAvatar user={user} sizeClass='h-14 w-14' className='shrink-0' />
+                  <div className='min-w-0 flex-1'>
+                    <p className='panel-label'>{user.username}</p>
+                    <div className='mt-2 grid gap-3'>
+                      <label className='panel-field'>
+                        <span className='panel-label'>{t('users.displayName')}</span>
                         <input
                           value={displayNameDrafts[user.id] ?? user.display_name}
                           onChange={(event) =>
@@ -270,14 +321,17 @@ export function UsersPage() {
                           }
                         />
                       </label>
-                      <div className="flex flex-wrap gap-2">
+                      <div className='flex flex-wrap gap-2'>
                         <button
-                          type="button"
-                          className="panel-button-secondary"
+                          type='button'
+                          className='panel-button-secondary'
                           onClick={async () => {
                             const displayName = (displayNameDrafts[user.id] ?? user.display_name).trim();
                             if (!displayName) {
-                              setRowMessages((current) => ({ ...current, [user.id]: `${t("users.displayName")} cannot be empty.` }));
+                              setRowMessages((current) => ({
+                                ...current,
+                                [user.id]: `${t('users.displayName')} cannot be empty.`,
+                              }));
                               return;
                             }
                             try {
@@ -285,7 +339,7 @@ export function UsersPage() {
                                 userId: user.id,
                                 payload: { display_name: displayName },
                               });
-                              setRowMessages((current) => ({ ...current, [user.id]: t("users.displayNameUpdated") }));
+                              setRowMessages((current) => ({ ...current, [user.id]: t('users.displayNameUpdated') }));
                               setRowSuccess((current) => ({ ...current, [user.id]: true }));
                             } catch (error) {
                               setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
@@ -293,24 +347,24 @@ export function UsersPage() {
                             }
                           }}
                         >
-                          {t("users.saveDisplayName")}
+                          {t('users.saveDisplayName')}
                         </button>
                       </div>
-                      <div className="border-t border-[var(--border)] pt-3">
-                        <p className="panel-label">{t("users.icon")}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <label className="panel-button-secondary cursor-pointer">
-                            {t("users.uploadIcon")}
+                      <div className='border-t border-[var(--border)] pt-3'>
+                        <p className='panel-label'>{t('users.icon')}</p>
+                        <div className='mt-3 flex flex-wrap gap-2'>
+                          <label className='panel-button-secondary cursor-pointer'>
+                            {t('users.uploadIcon')}
                             <input
-                              className="hidden"
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
+                              className='hidden'
+                              type='file'
+                              accept='image/png,image/jpeg,image/webp'
                               onChange={(event) => void onAvatarSelected(user.id, event.target.files?.[0] ?? null)}
                             />
                           </label>
                           <button
-                            type="button"
-                            className="panel-button-secondary"
+                            type='button'
+                            className='panel-button-secondary'
                             onClick={() => void deleteUserAvatar.mutateAsync(user.id)}
                             disabled={!user.has_avatar || deleteUserAvatar.isPending}
                           >
@@ -319,49 +373,89 @@ export function UsersPage() {
                         </div>
                       </div>
                     </div>
-                    <p className="users-role-pill mt-3 text-sm uppercase tracking-[0.1em] text-[var(--text-secondary)]">
-                      {user.role} / {user.is_active ? "active" : "inactive"}
+                    <p className='users-role-pill mt-3 text-sm uppercase tracking-[0.1em] text-[var(--text-secondary)]'>
+                      {user.role} / {user.is_active ? 'active' : 'inactive'}
                     </p>
-                    <p className="mt-3 text-sm text-[var(--text-secondary)]">
-                      Assigned:{" "}
+                    <p className='mt-3 text-sm text-[var(--text-secondary)]'>
+                      Assigned:{' '}
                       {user.assigned_agent_ids.length
                         ? user.assigned_agent_ids
                             .map((agentId) => agentOptions.find((option) => option.id === agentId)?.label ?? agentId)
-                            .join(", ")
-                        : "No agents"}
+                            .join(', ')
+                        : 'No agents'}
                     </p>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <label className="panel-field">
-                    <span className="panel-label">Role</span>
+                <div className='space-y-4'>
+                  {user.role === 'pending' && (
+                    <div className='rounded-md border border-yellow-400 bg-yellow-50 p-3 dark:bg-yellow-900/20'>
+                      <p className='mb-2 text-sm font-medium text-yellow-800 dark:text-yellow-300'>Pending approval</p>
+                      <div className='flex flex-wrap gap-2'>
+                        <button
+                          type='button'
+                          className='panel-button-secondary'
+                          disabled={approveUser.isPending}
+                          onClick={() => {
+                            approveUser.mutateAsync(user.id).catch((error: unknown) => {
+                              setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                              setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                            });
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type='button'
+                          className='panel-button-primary'
+                          disabled={approveAndProvisionUser.isPending}
+                          onClick={() => {
+                            approveAndProvisionUser.mutateAsync(user.id).catch((error: unknown) => {
+                              setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                              setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                            });
+                          }}
+                        >
+                          Approve + Provision container
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <label className='panel-field'>
+                    <span className='panel-label'>Role</span>
                     <select
                       value={user.role}
                       onChange={(event) => {
                         const value = event.target.value;
-                        updateUser.mutateAsync({ userId: user.id, payload: { role: value } }).catch((error: unknown) => {
-                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
-                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
-                        });
+                        updateUser
+                          .mutateAsync({ userId: user.id, payload: { role: value } })
+                          .catch((error: unknown) => {
+                            setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                          });
                       }}
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
+                      <option value='pending'>Pending</option>
+                      <option value='user'>User</option>
+                      <option value='beta_user'>Beta User</option>
+                      <option value='staff'>Staff</option>
+                      <option value='admin'>Admin</option>
                     </select>
                   </label>
-                  <label className="panel-field">
-                    <span className="panel-label">Assigned agents</span>
+                  <label className='panel-field'>
+                    <span className='panel-label'>Assigned agents</span>
                     <select
                       multiple
                       value={user.assigned_agent_ids}
                       onChange={(event) => {
                         const ids = Array.from(event.target.selectedOptions, (option) => option.value);
-                        updateUser.mutateAsync({ userId: user.id, payload: { assigned_agent_ids: ids } }).catch((error: unknown) => {
-                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
-                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
-                        });
+                        updateUser
+                          .mutateAsync({ userId: user.id, payload: { assigned_agent_ids: ids } })
+                          .catch((error: unknown) => {
+                            setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                          });
                       }}
-                      className="min-h-32"
+                      className='min-h-32'
                     >
                       {agentOptions.map((agent) => (
                         <option key={agent.id} value={agent.id}>
@@ -370,28 +464,26 @@ export function UsersPage() {
                       ))}
                     </select>
                   </label>
-                  <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                    <label className="panel-field">
-                      <span className="panel-label">Reset password</span>
+                  <div className='grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end'>
+                    <label className='panel-field'>
+                      <span className='panel-label'>Reset password</span>
                       <input
-                        type="password"
+                        type='password'
                         minLength={8}
-                        value={passwordDrafts[user.id] ?? ""}
-                        onChange={(event) =>
-                          {
-                            setRowMessages((current) => ({ ...current, [user.id]: null }));
-                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
-                            setPasswordDrafts((current) => ({ ...current, [user.id]: event.target.value }));
-                          }
-                        }
-                        placeholder="New password"
+                        value={passwordDrafts[user.id] ?? ''}
+                        onChange={(event) => {
+                          setRowMessages((current) => ({ ...current, [user.id]: null }));
+                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                          setPasswordDrafts((current) => ({ ...current, [user.id]: event.target.value }));
+                        }}
+                        placeholder='New password'
                       />
                     </label>
                     <button
-                      type="button"
-                      className="panel-button-secondary"
+                      type='button'
+                      className='panel-button-secondary'
                       onClick={async () => {
-                        const password = (passwordDrafts[user.id] ?? "").trim();
+                        const password = (passwordDrafts[user.id] ?? '').trim();
                         if (!password) {
                           return;
                         }
@@ -402,8 +494,8 @@ export function UsersPage() {
                         }
                         try {
                           await updateUser.mutateAsync({ userId: user.id, payload: { password } });
-                          setPasswordDrafts((current) => ({ ...current, [user.id]: "" }));
-                          setRowMessages((current) => ({ ...current, [user.id]: "Password updated." }));
+                          setPasswordDrafts((current) => ({ ...current, [user.id]: '' }));
+                          setRowMessages((current) => ({ ...current, [user.id]: 'Password updated.' }));
                           setRowSuccess((current) => ({ ...current, [user.id]: true }));
                         } catch (error) {
                           setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
@@ -414,22 +506,24 @@ export function UsersPage() {
                       Save password
                     </button>
                     <button
-                      type="button"
-                      className="panel-button-secondary"
+                      type='button'
+                      className='panel-button-secondary'
                       onClick={() => {
-                        updateUser.mutateAsync({ userId: user.id, payload: { is_active: !user.is_active } }).catch((error: unknown) => {
-                          setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
-                          setRowSuccess((current) => ({ ...current, [user.id]: false }));
-                        });
+                        updateUser
+                          .mutateAsync({ userId: user.id, payload: { is_active: !user.is_active } })
+                          .catch((error: unknown) => {
+                            setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));
+                            setRowSuccess((current) => ({ ...current, [user.id]: false }));
+                          });
                       }}
                     >
-                      {user.is_active ? "Deactivate" : "Activate"}
+                      {user.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
-                  <div className="flex justify-end">
+                  <div className='flex justify-end'>
                     <button
-                      type="button"
-                      className="panel-button-secondary border-[var(--accent)] text-[var(--accent)]"
+                      type='button'
+                      className='panel-button-secondary border-[var(--accent)] text-[var(--accent)]'
                       onClick={() => void onDeleteUser(user.id, user.username)}
                       disabled={currentUser?.id === user.id || deleteUser.isPending}
                     >
@@ -437,45 +531,76 @@ export function UsersPage() {
                     </button>
                   </div>
                   {rowMessages[user.id] ? (
-                    <p className={`text-sm ${rowSuccess[user.id] ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
+                    <p className={`text-sm ${rowSuccess[user.id] ? 'text-[var(--success)]' : 'text-[var(--accent)]'}`}>
                       {rowMessages[user.id]}
                     </p>
                   ) : null}
-                  <div className="border-t border-[var(--border)] pt-3">
-                    <p className="panel-label mb-3">Messaging Channels</p>
-                    <div className="space-y-3">
-                      {(["telegram_id", "whatsapp_user", "teams_id", "google_chat_email", "kapso_id", "kapso_number"] as const).map((field) => {
+                  <div className='border-t border-[var(--border)] pt-3'>
+                    <p className='panel-label mb-3'>Messaging Channels</p>
+                    <div className='space-y-3'>
+                      {(
+                        [
+                          'telegram_id',
+                          'whatsapp_user',
+                          'teams_id',
+                          'google_chat_email',
+                          'kapso_id',
+                          'kapso_number',
+                        ] as const
+                      ).map((field) => {
                         const labels: Record<string, string> = {
-                          telegram_id: "ID Telegram", whatsapp_user: "User WhatsApp", teams_id: "ID MS Teams",
-                          google_chat_email: "Email Google Chat", kapso_id: "ID Kapso", kapso_number: "Number Kapso",
+                          telegram_id: 'ID Telegram',
+                          whatsapp_user: 'User WhatsApp',
+                          teams_id: 'ID MS Teams',
+                          google_chat_email: 'Email Google Chat',
+                          kapso_id: 'ID Kapso',
+                          kapso_number: 'Number Kapso',
                         };
                         const draft = channelIdDrafts[user.id];
-                        const currentValue = draft ? draft[field] : (user[field] ?? "");
+                        const currentValue = draft ? draft[field] : (user[field] ?? '');
                         return (
-                          <label key={field} className="panel-field">
-                            <span className="panel-label">{labels[field]}</span>
+                          <label key={field} className='panel-field'>
+                            <span className='panel-label'>{labels[field]}</span>
                             <input
                               value={currentValue}
                               onChange={(e) =>
                                 setChannelIdDrafts((prev) => {
-                                  const base = prev[user.id] ?? { telegram_id: user.telegram_id ?? "", whatsapp_user: user.whatsapp_user ?? "", teams_id: user.teams_id ?? "", google_chat_email: user.google_chat_email ?? "", kapso_id: user.kapso_id ?? "", kapso_number: user.kapso_number ?? "" };
+                                  const base = prev[user.id] ?? {
+                                    telegram_id: user.telegram_id ?? '',
+                                    whatsapp_user: user.whatsapp_user ?? '',
+                                    teams_id: user.teams_id ?? '',
+                                    google_chat_email: user.google_chat_email ?? '',
+                                    kapso_id: user.kapso_id ?? '',
+                                    kapso_number: user.kapso_number ?? '',
+                                  };
                                   return { ...prev, [user.id]: { ...base, [field]: e.target.value } };
                                 })
                               }
-                              placeholder="—"
+                              placeholder='—'
                             />
                           </label>
                         );
                       })}
                       <button
-                        type="button"
-                        className="panel-button-secondary"
+                        type='button'
+                        className='panel-button-secondary'
                         onClick={async () => {
-                          const draft = channelIdDrafts[user.id] ?? { telegram_id: user.telegram_id ?? "", whatsapp_user: user.whatsapp_user ?? "", teams_id: user.teams_id ?? "", google_chat_email: user.google_chat_email ?? "", kapso_id: user.kapso_id ?? "", kapso_number: user.kapso_number ?? "" };
+                          const draft = channelIdDrafts[user.id] ?? {
+                            telegram_id: user.telegram_id ?? '',
+                            whatsapp_user: user.whatsapp_user ?? '',
+                            teams_id: user.teams_id ?? '',
+                            google_chat_email: user.google_chat_email ?? '',
+                            kapso_id: user.kapso_id ?? '',
+                            kapso_number: user.kapso_number ?? '',
+                          };
                           try {
                             await updateUser.mutateAsync({ userId: user.id, payload: { ...draft } });
-                            setChannelIdDrafts((prev) => { const next = { ...prev }; delete next[user.id]; return next; });
-                            setRowMessages((current) => ({ ...current, [user.id]: "Channel IDs updated." }));
+                            setChannelIdDrafts((prev) => {
+                              const next = { ...prev };
+                              delete next[user.id];
+                              return next;
+                            });
+                            setRowMessages((current) => ({ ...current, [user.id]: 'Channel IDs updated.' }));
                             setRowSuccess((current) => ({ ...current, [user.id]: true }));
                           } catch (error) {
                             setRowMessages((current) => ({ ...current, [user.id]: extractErrorMessage(error) }));

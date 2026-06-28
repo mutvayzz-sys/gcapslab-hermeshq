@@ -69,6 +69,7 @@ services:
       # Set to the public-facing URL, e.g. "https://hq.gcaplabs.com"
       # Containers are proxied through nginx at /runtime/{container-name}/ — no ports exposed.
       CONTAINER_HOST_URL: ${CONTAINER_HOST_URL:-}
+      OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
     volumes:
       - hermeshq_workspaces:/app/workspaces
     extra_hosts:

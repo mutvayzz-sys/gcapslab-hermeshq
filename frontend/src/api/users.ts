@@ -1,13 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiClient } from "./client";
-import type { ManagedUser } from "../types/api";
+import { apiClient } from './client';
+import type { ManagedUser } from '../types/api';
 
 export function useUsers(enabled = true) {
   return useQuery({
-    queryKey: ["users"],
+    queryKey: ['users'],
     queryFn: async () => {
-      const { data } = await apiClient.get<ManagedUser[]>("/users");
+      const { data } = await apiClient.get<ManagedUser[]>('/users');
       return data;
     },
     enabled,
@@ -18,11 +18,11 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      const { data } = await apiClient.post<ManagedUser>("/users", payload);
+      const { data } = await apiClient.post<ManagedUser>('/users', payload);
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 }
@@ -35,9 +35,9 @@ export function useUpdateUser() {
       return data;
     },
     onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      await queryClient.invalidateQueries({ queryKey: ["users", variables.userId] });
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['users', variables.userId] });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
     },
   });
 }
@@ -50,8 +50,8 @@ export function useDeleteUser() {
       return userId;
     },
     onSuccess: async (_, userId) => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      await queryClient.invalidateQueries({ queryKey: ["users", userId] });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['users', userId] });
     },
   });
 }
@@ -61,15 +61,15 @@ export function useUploadUserAvatar() {
   return useMutation({
     mutationFn: async ({ userId, file }: { userId: string; file: File }) => {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append('file', file);
       const { data } = await apiClient.post<ManagedUser>(`/users/${userId}/avatar`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
     },
   });
 }
@@ -82,8 +82,35 @@ export function useDeleteUserAvatar() {
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
+
+export function useApproveUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data } = await apiClient.post<ManagedUser>(`/users/${userId}/approve`);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useApproveAndProvisionUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data } = await apiClient.post<ManagedUser>(`/users/${userId}/approve-and-provision`);
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['containers'] });
     },
   });
 }

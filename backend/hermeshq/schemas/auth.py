@@ -113,3 +113,21 @@ class MfaStatusResponse(BaseModel):
     """MFA configuration status."""
     enabled: bool = False
     email_configured: bool = False
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_\-\.]+$")
+    password: str = Field(min_length=8, max_length=256)
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default=None, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        _validate_password_strength(value)
+        return value
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    username: str

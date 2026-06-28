@@ -35,6 +35,7 @@ ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "beta_user": ALL_DESKTOP_CAPABILITIES,
     "school_admin": ALL_DESKTOP_CAPABILITIES,
     "student": (CAP_CHAT, CAP_COWORK, CAP_MODEL_SELECTION),
+    "pending": (),
 }
 
 

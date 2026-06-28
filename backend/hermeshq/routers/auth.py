@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from jose import JWTError, jwt
 from sqlalchemy import func, select
@@ -52,6 +52,8 @@ from hermeshq.schemas.auth import (
     MfaStatusResponse,
     MfaVerifyRequest,
     PasswordResetResponse,
+    RegisterRequest,
+    RegisterResponse,
     ResetPasswordRequest,
     TokenResponse,
     UserPreferencesUpdate,
@@ -76,6 +78,10 @@ from hermeshq.services.email_service import EmailServiceError, get_email_service
 _LOGIN_MAX_ATTEMPTS = 10
 _LOGIN_WINDOW_SECONDS = 300  # 5 minutes
 _login_attempts: dict[str, list[float]] = defaultdict(list)
+
+# Tracks OIDC states initiated from the Electron desktop app so the callback
+# can redirect to /desktop-oauth-success instead of the web login page.
+_DESKTOP_OAUTH_STATES: set[str] = set()
 
 
 def _check_login_rate(ip: str) -> None:
@@ -353,7 +359,9 @@ def _validate_redirect_host(forwarded_host: str) -> bool:
     return candidate in allowed_hosts
 
 
-def _build_frontend_redirect(request: Request, *, token: str | None = None, auth_error: str | None = None) -> str:
+def _build_frontend_redirect(
+    request: Request, *, token: str | None = None, auth_error: str | None = None, desktop: bool = False
+) -> str:
     forwarded_host = request.headers.get("x-forwarded-host")
     if forwarded_host and not _validate_redirect_host(forwarded_host):
         logger.warning("Rejected X-Forwarded-Host %r — not in allowed origins", forwarded_host)
@@ -363,9 +371,9 @@ def _build_frontend_redirect(request: Request, *, token: str | None = None, auth
     base_url = f"{scheme}://{host}/"
     if token:
         query = urlencode({"token": token})
-        return f"{base_url}login?{query}"
+        path = "desktop-oauth-success" if desktop else "login"
+        return f"{base_url}{path}?{query}"
     if auth_error:
-        # Failed auth: redirect to /login so LoginPage.tsx can display the error
         query = urlencode({"auth_error": auth_error})
         return f"{base_url}login?{query}"
     return base_url
@@ -499,6 +507,7 @@ async def _resolve_or_create_oidc_user(db: AsyncSession, claims: dict) -> User:
 
     if not user:
         username = await _generate_unique_username(db, _derive_username_seed(email, display_name, subject))
+        new_role = "pending" if get_settings().open_signup else "user"
         user = User(
             username=username,
             email=email,
@@ -506,7 +515,7 @@ async def _resolve_or_create_oidc_user(db: AsyncSession, claims: dict) -> User:
             password_hash=hash_password(secrets.token_urlsafe(32)),
             auth_source="oidc",
             oidc_subject=subject or None,
-            role="user",
+            role=new_role,
             is_active=True,
         )
         db.add(user)
@@ -640,6 +649,9 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
         _record_login_attempt(client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    if user.role == "pending":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your account is pending approval. An administrator will review your request shortly.")
+
     # Check if MFA is required
     mfa_enabled = await _is_mfa_globally_enabled(db)
     if mfa_enabled and user.email:
@@ -664,6 +676,35 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
     token, expires_at = create_access_token(user.id, subject_kind="id", role=user.role or "user")
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token, expires_at=expires_at)
+
+
+# ---------------------------------------------------------------------------
+# Open Sign-Up Registration
+# ---------------------------------------------------------------------------
+
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db_session)) -> RegisterResponse:
+    if not get_settings().open_signup:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Open sign-up is not enabled")
+    existing = await db.execute(select(User).where(User.username == payload.username))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
+    if payload.email:
+        existing_email = await db.execute(select(User).where(User.email == payload.email))
+        if existing_email.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    user = User(
+        username=payload.username,
+        email=payload.email,
+        display_name=payload.display_name or payload.username,
+        password_hash=hash_password(payload.password),
+        auth_source="local",
+        role="pending",
+        is_active=True,
+    )
+    db.add(user)
+    await db.commit()
+    return RegisterResponse(message="Account created. An administrator will review and approve your request.", username=payload.username)
 
 
 # ---------------------------------------------------------------------------
@@ -864,7 +905,12 @@ async def refresh_token(
 
 
 @router.get("/oidc/login", include_in_schema=False)
-async def oidc_login(request: Request, provider: str | None = None, db: AsyncSession = Depends(get_db_session)) -> RedirectResponse:
+async def oidc_login(
+    request: Request,
+    provider: str | None = None,
+    desktop: bool = Query(False),
+    db: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
     requested_provider = (provider or "").strip().lower()
 
     # --- Try DB-based multi-provider first ---
@@ -875,6 +921,8 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
             if db_provider:
                 redirect_uri = _build_oidc_redirect_uri(request)
                 state = oidc_svc.create_oidc_state(requested_provider, get_settings().jwt_secret)
+                if desktop:
+                    _DESKTOP_OAUTH_STATES.add(state)
                 auth_url = await oidc_svc.build_authorization_url(db_provider, redirect_uri, state)
                 return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
         except Exception:  # noqa: BLE001  # DB-backed OIDC — broad fallback to env flow
@@ -904,13 +952,16 @@ async def oidc_login(request: Request, provider: str | None = None, db: AsyncSes
     authorization_endpoint = _translate_oidc_browser_endpoint(discovery.get("authorization_endpoint"))
     if not authorization_endpoint:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="OIDC discovery missing authorization endpoint")
+    state = _create_oidc_state()
+    if desktop:
+        _DESKTOP_OAUTH_STATES.add(state)
     params = urlencode(
         {
             "client_id": get_settings().oidc_client_id,
             "redirect_uri": _build_oidc_redirect_uri(request),
             "response_type": "code",
             "scope": get_settings().oidc_scope,
-            "state": _create_oidc_state(),
+            "state": state,
         }
     )
     return RedirectResponse(url=f"{authorization_endpoint}?{params}", status_code=status.HTTP_302_FOUND)
@@ -974,6 +1025,9 @@ async def oidc_callback(
     error_description: str | None = None,
     db: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
+    is_desktop = state in _DESKTOP_OAUTH_STATES if state else False
+    _DESKTOP_OAUTH_STATES.discard(state or "")
+
     if error:
         return RedirectResponse(
             _build_frontend_redirect(request, auth_error=(error_description or error)),
@@ -1055,8 +1109,13 @@ async def oidc_callback(
             _build_frontend_redirect(request, auth_error="This HermesHQ user is inactive"),
             status_code=status.HTTP_302_FOUND,
         )
+    if local_user.role == "pending":
+        return RedirectResponse(
+            _build_frontend_redirect(request, auth_error="Your account is pending approval. An administrator will review your request shortly."),
+            status_code=status.HTTP_302_FOUND,
+        )
     token, _ = create_access_token(local_user.id, subject_kind="id", role=local_user.role or "user")
-    redirect = RedirectResponse(_build_frontend_redirect(request, token=token), status_code=status.HTTP_302_FOUND)
+    redirect = RedirectResponse(_build_frontend_redirect(request, token=token, desktop=is_desktop), status_code=status.HTTP_302_FOUND)
     _set_auth_cookie(redirect, token)
     return redirect
 

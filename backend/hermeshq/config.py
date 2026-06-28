@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Public-facing host used to build container endpoint URLs sent to the desktop app.
     # E.g. "http://165.x.x.x" or "https://vps.example.com". Falls back to public_base_url then localhost.
     container_host_url: str | None = None
+    open_signup: bool = False
 
     admin_username: str = "admin"
     admin_password: str = ""
