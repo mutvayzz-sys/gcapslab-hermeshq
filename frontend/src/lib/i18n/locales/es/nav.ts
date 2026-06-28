@@ -4,7 +4,6 @@ const ns: Record<string, string> = {
   "nav.tasks": "Tareas",
   "nav.schedules": "Programaciones",
   "nav.users": "Usuarios",
-  "nav.containers": "Contenedores",
   "nav.nodes": "Nodos",
   "nav.comms": "Comms",
   "nav.settings": "Configuración",

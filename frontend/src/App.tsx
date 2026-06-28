@@ -19,6 +19,7 @@ import { AgentDetailPage } from './pages/AgentDetailPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { AuditPage } from './pages/AuditPage';
 import { CommsPage } from './pages/CommsPage';
+import { Toaster } from './components/ui/Toaster';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -143,6 +144,7 @@ export default function App() {
             <Route path='/settings' element={<SettingsPage />} />
             <Route path='/audit' element={<AuditPage />} />
             <Route path='/organizations' element={<OrganizationsPage />} />
+            <Toaster />
           </Route>
           <Route path='*' element={<Navigate to='/' replace />} />
         </Routes>

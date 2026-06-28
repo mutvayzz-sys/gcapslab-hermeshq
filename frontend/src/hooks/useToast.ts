@@ -1,4 +1,4 @@
-type ToastVariant = 'success' | 'error' | 'info';
+import { useToastStore, ToastVariant } from '../stores/toastStore';
 
 type ToastInput = {
   title: string;
@@ -7,14 +7,9 @@ type ToastInput = {
 };
 
 export function useToast() {
+  const push = useToastStore((s) => s.push);
   function toast({ title, description, variant = 'info' }: ToastInput) {
-    const message = description ? `${title}: ${description}` : title;
-    if (variant === 'error') {
-      window.alert(message);
-      return;
-    }
-    console.info(message);
+    push({ title, description, variant });
   }
-
   return { toast };
 }
