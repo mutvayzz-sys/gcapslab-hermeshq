@@ -10,7 +10,7 @@ export function DesktopOAuthSuccessPage() {
   useEffect(() => {
     const token = searchParams.get('token');
     if (token) {
-      setSession(token);
+      setSession(token, null);
     }
   }, [searchParams, setSession]);
 

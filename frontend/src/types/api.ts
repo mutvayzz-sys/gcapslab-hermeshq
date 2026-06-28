@@ -1,16 +1,16 @@
-export type AgentStatus = "running" | "stopped" | "starting" | "error" | "paused";
-export type TaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type AgentStatus = 'running' | 'stopped' | 'starting' | 'error' | 'paused';
+export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface User {
   id: string;
   username: string;
   email: string | null;
   display_name: string;
-  auth_source: "local" | "oidc";
-  role: "admin" | "user";
+  auth_source: 'local' | 'oidc';
+  role: 'admin' | 'user' | 'pending' | 'beta_user' | 'staff' | 'school_admin' | 'student';
   is_active: boolean;
-  theme_preference: "default" | "dark" | "light" | "system" | "enterprise" | "sixmanager" | "sixmanager-light";
-  locale_preference: "default" | "en" | "es";
+  theme_preference: 'default' | 'dark' | 'light' | 'system' | 'enterprise' | 'sixmanager' | 'sixmanager-light';
+  locale_preference: 'default' | 'en' | 'es';
   avatar_url: string | null;
   has_avatar: boolean;
 }
@@ -23,7 +23,7 @@ export interface AuthProvider {
 }
 
 export interface AuthProvidersResponse {
-  auth_mode: "local" | "hybrid" | "oidc";
+  auth_mode: 'local' | 'hybrid' | 'oidc';
   local_login_enabled: boolean;
   oidc_enabled: boolean;
   providers: AuthProvider[];
@@ -144,7 +144,11 @@ export interface Agent {
   archived_at: string | null;
   archive_reason: string | null;
   supervisor_agent_id: string | null;
-  mcp_servers?: Array<{ name?: string; url?: string; tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> }>;
+  mcp_servers?: Array<{
+    name?: string;
+    url?: string;
+    tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }>;
+  }>;
   total_tasks: number;
   total_tokens_used: number;
   last_activity: string | null;
@@ -172,8 +176,8 @@ export interface AppSettings {
   app_version: string;
   app_name: string | null;
   app_short_name: string | null;
-  theme_mode: "dark" | "light" | "system" | "enterprise" | "sixmanager" | "sixmanager-light";
-  default_locale: "en" | "es";
+  theme_mode: 'dark' | 'light' | 'system' | 'enterprise' | 'sixmanager' | 'sixmanager-light';
+  default_locale: 'en' | 'es';
   default_provider: string | null;
   default_model: string | null;
   default_api_key_ref: string | null;
@@ -226,8 +230,8 @@ export interface InstanceBackupValidation {
 
 export interface InstanceBackupRestoreResult {
   id: string;
-  status: "queued" | "running" | "succeeded" | "failed";
-  mode: "replace" | "merge";
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  mode: 'replace' | 'merge';
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -242,7 +246,7 @@ export interface HermesVersion {
   version: string;
   release_tag: string | null;
   description: string | null;
-  source: "bundled" | "managed" | string;
+  source: 'bundled' | 'managed' | string;
   installed: boolean;
   install_status: string;
   installed_path: string | null;
@@ -273,7 +277,7 @@ export interface ProviderDefinition {
   slug: string;
   name: string;
   runtime_provider: string;
-  auth_type: "api_key" | "oauth_external" | string;
+  auth_type: 'api_key' | 'oauth_external' | string;
   base_url: string | null;
   default_model: string | null;
   available_models: string[] | null;
@@ -375,7 +379,7 @@ export interface IntegrationDraftFile {
 }
 
 export interface IntegrationDraftCheck {
-  level: "info" | "warning" | "error";
+  level: 'info' | 'warning' | 'error';
   code: string;
   message: string;
   path: string | null;
