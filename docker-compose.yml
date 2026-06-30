@@ -197,3 +197,4 @@ networks:
   default:
   hermes_runtime:
     name: hermes_runtime
+    external: true
