@@ -66,13 +66,22 @@ services:
       CONCURRENCY_SEMAPHORE: ${CONCURRENCY_SEMAPHORE:-8}
       HQ_BOOTSTRAP_TIMEOUT: ${HQ_BOOTSTRAP_TIMEOUT:-30}
       HQ_BOOTSTRAP_RETRIES: ${HQ_BOOTSTRAP_RETRIES:-2}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://hq.gcaplabs.com}
       # Public domain used to build container endpoint URLs sent to the desktop app.
-      # Set to the public-facing URL, e.g. "https://hq.gcaplabs.com"
-      # Containers are proxied through nginx at /runtime/{container-name}/ — no ports exposed.
+      # Legacy path-mode fallback. Prefer RUN_DOMAIN for Traefik-routed Agent37 runtimes.
       CONTAINER_HOST_URL: ${CONTAINER_HOST_URL:-}
+      RUN_DOMAIN: ${RUN_DOMAIN:-run.gcaplabs.com}
+      FORWARD_AUTH_HMAC_SECRET: ${FORWARD_AUTH_HMAC_SECRET:-}
+      FORWARD_AUTH_TOKEN_TTL_SECONDS: ${FORWARD_AUTH_TOKEN_TTL_SECONDS:-86400}
+      FORWARD_AUTH_URL: ${FORWARD_AUTH_URL:-http://127.0.0.1:18081/}
       RUNTIME_CONTAINER_IMAGE: ${RUNTIME_CONTAINER_IMAGE:-headmaster-hermes-runtime:latest}
       RUNTIME_CONTAINER_NETWORK: ${RUNTIME_CONTAINER_NETWORK:-hermes_runtime}
       RUNTIME_CONTAINER_IDLE_TTL_SECONDS: ${RUNTIME_CONTAINER_IDLE_TTL_SECONDS:-3600}
+      RUNTIME_CONTAINER_CPU: ${RUNTIME_CONTAINER_CPU:-2}
+      RUNTIME_CONTAINER_MEMORY: ${RUNTIME_CONTAINER_MEMORY:-4g}
+      RUNTIME_CONTAINER_PIDS_LIMIT: ${RUNTIME_CONTAINER_PIDS_LIMIT:-512}
+      RUNTIME_CONTAINER_SHM_SIZE: ${RUNTIME_CONTAINER_SHM_SIZE:-1g}
+      RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE: ${RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE:-headmaster-forward-auth@docker}
       OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
     volumes:
       - hermeshq_workspaces:/app/workspaces
@@ -143,6 +152,27 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    networks:
+      - default
+
+  headmaster-forward-auth:
+    build:
+      context: ./docker/forward-auth
+    container_name: headmaster-forward-auth
+    environment:
+      HEADMASTER_FORWARD_AUTH_SECRET: ${FORWARD_AUTH_HMAC_SECRET:-}
+      HEADMASTER_FORWARD_AUTH_TTL_SECONDS: ${FORWARD_AUTH_TOKEN_TTL_SECONDS:-86400}
+      PORT: 8080
+    ports:
+      - '127.0.0.1:18081:8080'
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    security_opt:
+      - no-new-privileges:true
     networks:
       - default
 

@@ -1,34 +1,46 @@
-FROM python:3.11-slim
+FROM node:24-bookworm
 
+ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV API_SERVER_ENABLED=true
-ENV API_SERVER_HOST=0.0.0.0
-ENV API_SERVER_PORT=8080
+ENV PORT=3737
+ENV HOST=0.0.0.0
+ENV GATEWAY_DEFAULT_AGENT=hermes
+ENV HERMES_HOME=/home/hermes/.hermes
+ENV HERMES_AGENT_DIR=/opt/hermes-agent
+ENV HERMES_PYTHON=/opt/hermes-venv/bin/python
+ENV AGENT37_GATEWAY_HOME=/home/hermes/.agent37-gateway
+ENV GATEWAY_WORKSPACE_DIR=/home/hermes/workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
     build-essential \
+    python3 \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    "git+https://github.com/NousResearch/hermes-agent.git"
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent \
+    && python3 -m venv /opt/hermes-venv \
+    && /opt/hermes-venv/bin/pip install --upgrade pip setuptools wheel \
+    && /opt/hermes-venv/bin/pip install -e /opt/hermes-agent
 
-RUN useradd --create-home --shell /bin/bash hermes
+WORKDIR /opt/agent37-gateway
+COPY third_party/agent37/gateway/package*.json ./
+RUN npm ci
+COPY third_party/agent37/gateway/ ./
+RUN npm run build && npm prune --omit=dev
 
-# Bake a default runtime config so fresh containers have a working model without
-# requiring manual setup. NOUS_API_KEY is injected at runtime by the container
-# supervisor; this sets the provider routing and gateway flags.
-RUN mkdir -p /home/hermes/.hermes && \
-    printf 'model:\n  provider: nous-api\n  base_url: "https://inference-api.nousresearch.com/v1"\nweb:\n  use_gateway: true\nimage_gen:\n  use_gateway: true\n' \
-    > /home/hermes/.hermes/config.yaml && \
-    chown -R hermes:hermes /home/hermes/.hermes
+RUN useradd --create-home --shell /bin/bash hermes \
+    && mkdir -p /home/hermes/.hermes /home/hermes/.agent37-gateway /home/hermes/workspace \
+    && printf 'model:\n  provider: nous-api\n  base_url: "https://inference-api.nousresearch.com/v1"\nweb:\n  use_gateway: true\nimage_gen:\n  use_gateway: true\n' > /home/hermes/.hermes/config.yaml \
+    && chown -R hermes:hermes /home/hermes /opt/hermes-agent /opt/hermes-venv /opt/agent37-gateway
 
 USER hermes
-WORKDIR /home/hermes
+WORKDIR /home/hermes/workspace
 
-EXPOSE 8080
+EXPOSE 3737
 
-CMD ["hermes", "gateway"]
+CMD ["node", "/opt/agent37-gateway/dist/server/server/index.js"]

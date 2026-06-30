@@ -188,6 +188,9 @@ async def _build_provision_response(
         )
 
     cloud_container_config: DesktopCloudContainerConfig | None = None
+    runtime_base_url: str | None = None
+    runtime_health_url: str | None = None
+    runtime_version_url: str | None = None
     if mode == "headmaster_remote":
         if not hasattr(request.app.state, "container_supervisor"):
             raise HTTPException(status_code=503, detail="Cloud runtime supervisor is not available")
@@ -199,10 +202,15 @@ async def _build_provision_response(
                 runtime_env=runtime_env,
             )
             await db.commit()
+            runtime_base_url = request.app.state.container_supervisor.public_endpoint_url(container)
+            runtime_health_url = request.app.state.container_supervisor.runtime_health_url(container)
+            runtime_version_url = request.app.state.container_supervisor.runtime_version_url(container)
             cloud_container_config = DesktopCloudContainerConfig(
-                endpoint_url=request.app.state.container_supervisor.public_endpoint_url(container),
+                endpoint_url=runtime_base_url,
                 container_id=container.id,
                 api_server_key=container.api_server_key,
+                forward_auth_token=request.app.state.container_supervisor.forward_auth_token(container),
+                forward_auth_expires_at=request.app.state.container_supervisor.forward_auth_expires_at().isoformat(),
             )
         except ContainerSupervisorError as exc:
             await db.rollback()
@@ -214,7 +222,11 @@ async def _build_provision_response(
         user=desktop_user_payload(user),
         capabilities=capabilities,
         runtime=DesktopRuntimeInfo(
+            base_url=runtime_base_url,
+            api_base_path="/v1",
+            health_url=runtime_health_url,
             validate_url=f"{server_url}/api/desktop/runtime/validate",
+            version_url=runtime_version_url,
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
         cloud_container_config=cloud_container_config,

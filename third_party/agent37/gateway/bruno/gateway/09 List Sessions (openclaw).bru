@@ -1,0 +1,33 @@
+meta {
+  name: 09 List Sessions (openclaw)
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v1/sessions?agent=openclaw
+  body: none
+  auth: none
+}
+
+params:query {
+  agent: openclaw
+}
+
+tests {
+  test("returns 200", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("openclaw sessions", function () {
+    expect(res.body.agent).to.equal("openclaw");
+    expect(res.body.data).to.be.an("array");
+  });
+}
+
+docs {
+  The OpenClaw chat sessions on this instance, selected with `?agent=openclaw`
+  (`hermes` | `openclaw`), projected from OpenClaw's own store as `{ agent, data }`.
+  Omitting `?agent=` falls back to the instance's default harness — not a merged
+  listing. Unknown agent values return a 400 validation_error.
+}

@@ -33,6 +33,8 @@ class RuntimeContainerProvisionResponse(BaseModel):
     container: RuntimeContainerRead
     endpoint_url: str
     api_server_key: str
+    forward_auth_token: str | None = None
+    forward_auth_expires_at: str | None = None
 
 
 class RuntimeContainerHealthRead(BaseModel):
@@ -50,5 +52,7 @@ class UserContainerResponse(BaseModel):
     Runs API without going through the full desktop provision flow."""
     endpoint_url: str
     api_server_key: str
+    forward_auth_token: str | None = None
+    forward_auth_expires_at: str | None = None
     container_name: str
     status: str

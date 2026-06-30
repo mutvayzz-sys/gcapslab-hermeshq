@@ -1,0 +1,44 @@
+{
+  "name": "agent37-gateway",
+  "version": "0.4.0",
+  "description": "A unified, Responses-style adapter API that runs on each instance and routes each turn to the harness it targets. Hermes and OpenClaw today; Claude Code next.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agent37-gateway": "bin/agent37-gateway.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "NODE_ENV=development tsx watch --include='server/workers/**/*.py' server/index.ts",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && npm run build:server && npm run build:assets",
+    "build:server": "tsc -p server/tsconfig.json",
+    "build:assets": "rsync -a --prune-empty-dirs --exclude='__pycache__' --include='*/' --include='*.py' --exclude='*' server/ dist/server/server/",
+    "start": "NODE_ENV=production node dist/server/server/index.js",
+    "prod": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "selftest:worker": "node bin/hermes-worker-selftest.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

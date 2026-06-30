@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -28,6 +30,8 @@ class RuntimeContainerSupervisor:
         self.settings = settings or get_settings()
 
     def public_endpoint_url(self, container: RuntimeContainer) -> str:
+        if self.settings.run_domain:
+            return f"https://hm-{container.id[:12]}.{self.settings.run_domain.strip('.')}"
         base = (
             self.settings.container_host_url
             or self.settings.public_base_url
@@ -36,7 +40,28 @@ class RuntimeContainerSupervisor:
         return f"{base}{container.endpoint_path}"
 
     def runtime_health_url(self, container: RuntimeContainer) -> str:
-        return f"http://{container.container_name}:8080/health"
+        if self.settings.run_domain:
+            return f"{self.public_endpoint_url(container)}/v1/health"
+        return f"http://{container.container_name}:3737/v1/health"
+
+    def runtime_version_url(self, container: RuntimeContainer) -> str:
+        return f"{self.public_endpoint_url(container)}/v1/version"
+
+    def forward_auth_token(self, container: RuntimeContainer) -> str:
+        secret = (self.settings.forward_auth_hmac_secret or "").strip()
+        if not secret:
+            return container.api_server_key
+        expires_hex = format(int(self.forward_auth_expires_at().timestamp()), "x")
+        signature = hmac.new(
+            secret.encode("utf-8"),
+            f"{container.id}:{expires_hex}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"{expires_hex}.{signature}"
+
+    def forward_auth_expires_at(self) -> datetime:
+        ttl = int(getattr(self.settings, "forward_auth_token_ttl_seconds", 24 * 60 * 60) or 24 * 60 * 60)
+        return datetime.now(UTC) + timedelta(seconds=ttl)
 
     async def ensure_user_runtime(
         self,
@@ -161,7 +186,7 @@ class RuntimeContainerSupervisor:
             container_name=name,
             image=self.settings.runtime_container_image,
             status="provisioning",
-            endpoint_path=f"/runtime/{name}",
+            endpoint_path="/" if self.settings.run_domain else f"/runtime/{name}",
             api_server_key=secrets.token_urlsafe(32),
         )
 
@@ -177,10 +202,8 @@ class RuntimeContainerSupervisor:
             "HERMES_MODE": "headmaster_remote",
             "HERMES_HQ_URL": (self.settings.container_host_url or self.settings.public_base_url or "").rstrip("/"),
             "USER_ID": user.id,
-            "API_SERVER_ENABLED": "true",
-            "API_SERVER_HOST": "0.0.0.0",
-            "API_SERVER_PORT": "8080",
-            "API_SERVER_KEY": container.api_server_key,
+            "PORT": "3737",
+            "GATEWAY_DEFAULT_AGENT": "hermes",
         }
         if agent:
             env["AGENT_ID"] = agent.id
@@ -192,11 +215,48 @@ class RuntimeContainerSupervisor:
             container.container_name,
             "--network",
             self.settings.runtime_container_network,
+            "--cpus",
+            str(self.settings.runtime_container_cpu),
+            "--memory",
+            str(self.settings.runtime_container_memory),
+            "--pids-limit",
+            str(self.settings.runtime_container_pids_limit),
+            "--shm-size",
+            str(self.settings.runtime_container_shm_size),
+            "--security-opt",
+            "no-new-privileges",
             "--label",
             f"hermeshq.runtime_container_id={container.id}",
             "--label",
             f"hermeshq.user_id={user.id}",
         ]
+        if self.settings.run_domain:
+            router_name = f"hm-{container.id[:12]}"
+            host = f"{router_name}.{self.settings.run_domain.strip('.')}"
+            inject_id_middleware = f"{router_name}-inject-id"
+            auth_middleware = f"{router_name}-forward-auth"
+            args.extend(
+                [
+                    "--label",
+                    "traefik.enable=true",
+                    "--label",
+                    f"traefik.http.routers.{router_name}.rule=Host(`{host}`)",
+                    "--label",
+                    f"traefik.http.routers.{router_name}.entrypoints=websecure",
+                    "--label",
+                    f"traefik.http.routers.{router_name}.tls=true",
+                    "--label",
+                    f"traefik.http.services.{router_name}.loadbalancer.server.port=3737",
+                    "--label",
+                    f"traefik.http.middlewares.{inject_id_middleware}.headers.customrequestheaders.X-Headmaster-Container-Id={container.id}",
+                    "--label",
+                    f"traefik.http.middlewares.{auth_middleware}.forwardauth.address={self.settings.forward_auth_url}",
+                    "--label",
+                    f"traefik.http.middlewares.{auth_middleware}.forwardauth.trustForwardHeader=true",
+                    "--label",
+                    f"traefik.http.routers.{router_name}.middlewares={inject_id_middleware},{auth_middleware}",
+                ]
+            )
         for key, value in sorted(env.items()):
             if value is None:
                 continue

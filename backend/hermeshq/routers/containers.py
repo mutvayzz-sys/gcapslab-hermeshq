@@ -91,6 +91,8 @@ async def get_my_container(
     return UserContainerResponse(
         endpoint_url=request.app.state.container_supervisor.public_endpoint_url(container),
         api_server_key=container.api_server_key,
+        forward_auth_token=request.app.state.container_supervisor.forward_auth_token(container),
+        forward_auth_expires_at=request.app.state.container_supervisor.forward_auth_expires_at().isoformat(),
         container_name=container.container_name,
         status=container.status,
     )
@@ -138,6 +140,8 @@ async def provision_container(
         container=container,
         endpoint_url=request.app.state.container_supervisor.public_endpoint_url(container),
         api_server_key=container.api_server_key,
+        forward_auth_token=request.app.state.container_supervisor.forward_auth_token(container),
+        forward_auth_expires_at=request.app.state.container_supervisor.forward_auth_expires_at().isoformat(),
     )
 
 

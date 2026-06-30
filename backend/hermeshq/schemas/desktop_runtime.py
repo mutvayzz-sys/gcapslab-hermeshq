@@ -20,7 +20,11 @@ class DesktopProvisionUser(BaseModel):
 
 
 class DesktopRuntimeInfo(BaseModel):
+    base_url: str | None = None
+    api_base_path: str = "/v1"
+    health_url: str | None = None
     validate_url: str
+    version_url: str | None = None
     ttl_seconds: int
 
 
@@ -28,6 +32,8 @@ class DesktopCloudContainerConfig(BaseModel):
     endpoint_url: str | None = None
     container_id: str
     api_server_key: str | None = None
+    forward_auth_token: str | None = None
+    forward_auth_expires_at: str | None = None
 
 
 class DesktopProvisionProvider(BaseModel):

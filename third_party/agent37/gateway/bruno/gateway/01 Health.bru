@@ -1,0 +1,29 @@
+meta {
+  name: 01 Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/health
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns 200", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("default backend reachable", function () {
+    expect(res.body.ok).to.equal(true);
+    expect(res.body.healthy).to.equal(true);
+  });
+}
+
+docs {
+  Liveness + whether a harness backend is reachable. Defaults to the instance's
+  configured backend; add `?agent=hermes|openclaw` to target one explicitly.
+  Returns `{ ok, agent, healthy }` (plus a legacy `hermes` field when Hermes is
+  probed). No auth — the gateway runs on localhost behind the host/Docker.
+}

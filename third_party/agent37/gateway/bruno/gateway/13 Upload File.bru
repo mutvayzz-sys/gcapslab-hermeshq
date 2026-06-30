@@ -1,0 +1,46 @@
+meta {
+  name: 13 Upload File
+  type: http
+  seq: 13
+}
+
+put {
+  url: {{baseUrl}}/v1/files/content?path=~/.agent37-gateway/workspace/bruno-upload.txt
+  body: text
+  auth: none
+}
+
+params:query {
+  path: ~/.agent37-gateway/workspace/bruno-upload.txt
+}
+
+body:text {
+  Hello from Bruno. The secret marker is 4242.
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.path) {
+    bru.setEnvVar("uploadedFilePath", res.body.path, { persist: true });
+  }
+}
+
+tests {
+  test("returns 200", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("returns the written FileEntry", function () {
+    expect(res.body.path).to.be.a("string");
+    expect(res.body.type).to.equal("file");
+    expect(res.body.size).to.be.a("number");
+  });
+}
+
+docs {
+  Writes the raw request body to `path` (not multipart) and returns the written
+  file's `FileEntry`. The returned `path` (saved to the env as
+  `uploadedFilePath`) is the file's identity — attach it to a turn by adding
+  `"files": ["{{uploadedFilePath}}"]` to Create Response, or read it back with
+  14 Download File. Edit the body or `path` to write anything; `overwrite`
+  defaults to true.
+}

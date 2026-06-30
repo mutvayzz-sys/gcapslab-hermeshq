@@ -40,8 +40,17 @@ async def test_run_container_uses_latest_configured_image_and_private_network(mo
     settings = SimpleNamespace(
         runtime_container_image="headmaster-hermes-runtime:latest",
         runtime_container_network="hermes_runtime",
+        runtime_container_cpu="2",
+        runtime_container_memory="4g",
+        runtime_container_pids_limit=512,
+        runtime_container_shm_size="1g",
+        runtime_container_traefik_middleware="headmaster-forward-auth@docker",
+        forward_auth_url="http://127.0.0.1:18081/",
+        forward_auth_hmac_secret="test-secret",
+        forward_auth_token_ttl_seconds=86400,
         container_host_url="https://hermeshq.gcaplabs.com",
         public_base_url=None,
+        run_domain=None,
     )
     supervisor = RuntimeContainerSupervisor(settings)
     calls: list[tuple[str, ...]] = []
@@ -77,7 +86,60 @@ async def test_run_container_uses_latest_configured_image_and_private_network(mo
     assert "hermes_runtime" in args
     assert "headmaster-hermes-runtime:latest" == args[-1]
     assert "-p" not in args
-    assert "API_SERVER_ENABLED=true" in args
-    assert "API_SERVER_PORT=8080" in args
-    assert "API_SERVER_KEY=secret-key" in args
+    assert "PORT=3737" in args
+    assert "GATEWAY_DEFAULT_AGENT=hermes" in args
     assert "NOUS_API_KEY=nous-key" in args
+    assert "--cpus" in args
+    assert "--memory" in args
+    assert "--pids-limit" in args
+    assert "--shm-size" in args
+
+
+@pytest.mark.asyncio
+async def test_run_container_adds_traefik_labels_when_run_domain_is_configured(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        runtime_container_image="headmaster-hermes-runtime:latest",
+        runtime_container_network="hermes_runtime",
+        runtime_container_cpu="2",
+        runtime_container_memory="4g",
+        runtime_container_pids_limit=512,
+        runtime_container_shm_size="1g",
+        runtime_container_traefik_middleware="headmaster-forward-auth@docker",
+        forward_auth_url="http://127.0.0.1:18081/",
+        forward_auth_hmac_secret="test-secret",
+        forward_auth_token_ttl_seconds=86400,
+        container_host_url=None,
+        public_base_url="https://hq.gcaplabs.com",
+        run_domain="run.gcaplabs.com",
+    )
+    supervisor = RuntimeContainerSupervisor(settings)
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_docker(*args: str) -> str:
+        calls.append(args)
+        return "container-id"
+
+    monkeypatch.setattr(supervisor, "_docker", fake_docker)
+    user = User(id="user-12345678", username="beta", display_name="Beta", password_hash="x", role="beta_user")
+    container = RuntimeContainer(
+        id="abcdef1234567890",
+        user_id=user.id,
+        container_name="hermes-user1234-abcd1234",
+        image=settings.runtime_container_image,
+        endpoint_path="/",
+        api_server_key="secret-key",
+    )
+
+    await supervisor._run_container(container, user, None, {})
+
+    args = calls[0]
+    assert supervisor.public_endpoint_url(container) == "https://hm-abcdef123456.run.gcaplabs.com"
+    assert "traefik.enable=true" in args
+    assert "traefik.http.routers.hm-abcdef123456.rule=Host(`hm-abcdef123456.run.gcaplabs.com`)" in args
+    assert "traefik.http.services.hm-abcdef123456.loadbalancer.server.port=3737" in args
+    assert (
+        "traefik.http.middlewares.hm-abcdef123456-inject-id.headers.customrequestheaders.X-Headmaster-Container-Id=abcdef1234567890"
+        in args
+    )
+    assert "traefik.http.middlewares.hm-abcdef123456-forward-auth.forwardauth.address=http://127.0.0.1:18081/" in args
+    assert "traefik.http.routers.hm-abcdef123456.middlewares=hm-abcdef123456-inject-id,hm-abcdef123456-forward-auth" in args

@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # Public-facing host used to build container endpoint URLs sent to the desktop app.
     # E.g. "http://165.x.x.x" or "https://vps.example.com". Falls back to public_base_url then localhost.
     container_host_url: str | None = None
+    run_domain: str | None = None
+    forward_auth_hmac_secret: str | None = None
+    forward_auth_token_ttl_seconds: int = 24 * 60 * 60
+    forward_auth_url: str = "http://127.0.0.1:18081/"
+    runtime_container_cpu: str = "2"
+    runtime_container_memory: str = "4g"
+    runtime_container_pids_limit: int = 512
+    runtime_container_shm_size: str = "1g"
+    runtime_container_traefik_middleware: str = "headmaster-forward-auth@docker"
     runtime_container_image: str = "headmaster-hermes-runtime:latest"
     runtime_container_network: str = "hermes_runtime"
     runtime_container_idle_ttl_seconds: int = 3600
