@@ -66,4 +66,5 @@ def resolve_desktop_mode(user: User) -> str:
         return user.organization.default_mode
     if role == "student":
         return "headmaster_plus_thin"
-    return "headmaster_local"
+    # Beta: all users get a remote container by default
+    return "headmaster_remote"
