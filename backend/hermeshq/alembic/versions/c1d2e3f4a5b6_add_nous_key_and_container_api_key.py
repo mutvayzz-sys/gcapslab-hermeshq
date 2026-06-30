@@ -21,6 +21,9 @@ depends_on: str | Sequence[str] | None = None
 def _column_exists(table_name: str, column_name: str) -> bool:
     bind = op.get_bind()
     insp = inspect(bind)
+    # Table may not exist yet (e.g. containers table is created by a later migration)
+    if not insp.has_table(table_name):
+        return False
     columns = [col["name"] for col in insp.get_columns(table_name)]
     return column_name in columns
 
