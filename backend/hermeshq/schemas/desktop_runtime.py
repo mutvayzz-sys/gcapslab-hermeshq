@@ -24,6 +24,12 @@ class DesktopRuntimeInfo(BaseModel):
     ttl_seconds: int
 
 
+class DesktopCloudContainerConfig(BaseModel):
+    endpoint_url: str | None = None
+    container_id: str
+    api_server_key: str | None = None
+
+
 class DesktopProvisionProvider(BaseModel):
     slug: str
     name: str
@@ -54,6 +60,7 @@ class DesktopProvisionResponse(BaseModel):
     user: DesktopProvisionUser
     capabilities: list[str]
     runtime: DesktopRuntimeInfo
+    cloud_container_config: DesktopCloudContainerConfig | None = None
     system_prompt_override: str | None = None
     session_namespace: str | None = None
     honcho_base_url: str | None = None

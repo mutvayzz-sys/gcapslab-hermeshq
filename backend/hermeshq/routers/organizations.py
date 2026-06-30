@@ -38,6 +38,10 @@ async def create_organization(
         default_mode=payload.default_mode,
         default_capabilities=payload.default_capabilities,
         system_prompt_override=payload.system_prompt_override,
+        honcho_base_url=payload.honcho_base_url,
+        honcho_jwt_secret=payload.honcho_jwt_secret,
+        nous_api_key=payload.nous_api_key,
+        nous_base_url=payload.nous_base_url,
     )
     db.add(org)
     await db.commit()
@@ -79,6 +83,14 @@ async def update_organization(
         org.default_capabilities = payload.default_capabilities
     if payload.system_prompt_override is not None:
         org.system_prompt_override = payload.system_prompt_override
+    if payload.honcho_base_url is not None:
+        org.honcho_base_url = payload.honcho_base_url
+    if payload.honcho_jwt_secret is not None:
+        org.honcho_jwt_secret = payload.honcho_jwt_secret
+    if payload.nous_api_key is not None:
+        org.nous_api_key = payload.nous_api_key
+    if payload.nous_base_url is not None:
+        org.nous_base_url = payload.nous_base_url
     await db.commit()
     await db.refresh(org)
     return org

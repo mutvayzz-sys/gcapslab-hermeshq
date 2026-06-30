@@ -5,13 +5,27 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from hermeshq.core.security import get_current_user
+from hermeshq.database import get_db_session
 from hermeshq.routers.desktop_runtime import router
 from hermeshq.services.desktop_runtime import capabilities_for_role
+
+
+class FakeDb:
+    def add(self, _value):
+        return None
+
+    async def commit(self):
+        return None
+
+
+async def _fake_db_session():
+    yield FakeDb()
 
 
 def _client_for_user(user: SimpleNamespace | None = None) -> TestClient:
     app = FastAPI()
     app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_db_session] = _fake_db_session
     if user is not None:
         app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)

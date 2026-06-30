@@ -12,6 +12,7 @@ from hermeshq.models.audit_log import AuditLog
 from hermeshq.models.provider import ProviderDefinition
 from hermeshq.models.user import User
 from hermeshq.schemas.desktop_runtime import (
+    DesktopCloudContainerConfig,
     DesktopProvisionAppSettings,
     DesktopProvisionProvider,
     DesktopProvisionRequest,
@@ -20,6 +21,7 @@ from hermeshq.schemas.desktop_runtime import (
     DesktopRuntimeValidateRequest,
     DesktopRuntimeValidateResponse,
 )
+from hermeshq.services.container_supervisor import ContainerSupervisorError
 from hermeshq.services.desktop_runtime import (
     DESKTOP_RUNTIME_TTL_SECONDS,
     capabilities_for_role,
@@ -69,16 +71,17 @@ async def _build_provision_response(
     server_url = _base_url(request)
     capabilities = capabilities_for_role(user.role)
     mode = resolve_desktop_mode(user)
-    
+
     # Phase 6.3: Resolve system prompt override from organization
     system_prompt_override: str | None = None
     org = None
     if user.organization_id:
         from hermeshq.models.organization import Organization
+
         org = await db.get(Organization, user.organization_id)
         if org:
             system_prompt_override = org.system_prompt_override
-    
+
     # Phase 8: Cross-device session namespace
     from hermeshq.services.cross_device_session import derive_session_namespace
     session_namespace = derive_session_namespace(user)
@@ -163,6 +166,8 @@ async def _build_provision_response(
                     key_value = None
         if key_value:
             runtime_env[assignment.api_key_ref] = key_value
+    if nous_api_key:
+        runtime_env["NOUS_API_KEY"] = nous_api_key
 
     # App settings (branding/theme) from AppSettings table
     from hermeshq.models.app_settings import AppSettings
@@ -182,6 +187,27 @@ async def _build_provision_response(
             has_favicon=public_read.has_favicon,
         )
 
+    cloud_container_config: DesktopCloudContainerConfig | None = None
+    if mode == "headmaster_remote":
+        if not hasattr(request.app.state, "container_supervisor"):
+            raise HTTPException(status_code=503, detail="Cloud runtime supervisor is not available")
+        try:
+            container = await request.app.state.container_supervisor.ensure_user_runtime(
+                db,
+                user,
+                agent=assignment,
+                runtime_env=runtime_env,
+            )
+            await db.commit()
+            cloud_container_config = DesktopCloudContainerConfig(
+                endpoint_url=request.app.state.container_supervisor.public_endpoint_url(container),
+                container_id=container.id,
+                api_server_key=container.api_server_key,
+            )
+        except ContainerSupervisorError as exc:
+            await db.rollback()
+            raise HTTPException(status_code=502, detail=f"Cloud runtime provision failed: {exc}") from exc
+
     return DesktopProvisionResponse(
         mode=mode,
         hermeshq_url=server_url,
@@ -191,6 +217,7 @@ async def _build_provision_response(
             validate_url=f"{server_url}/api/desktop/runtime/validate",
             ttl_seconds=DESKTOP_RUNTIME_TTL_SECONDS,
         ),
+        cloud_container_config=cloud_container_config,
         system_prompt_override=system_prompt_override,
         session_namespace=session_namespace,
         honcho_base_url=honcho_base_url,

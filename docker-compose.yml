@@ -34,6 +34,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: hermeshq-backend
+    user: root
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,9 +70,13 @@ services:
       # Set to the public-facing URL, e.g. "https://hq.gcaplabs.com"
       # Containers are proxied through nginx at /runtime/{container-name}/ — no ports exposed.
       CONTAINER_HOST_URL: ${CONTAINER_HOST_URL:-}
+      RUNTIME_CONTAINER_IMAGE: ${RUNTIME_CONTAINER_IMAGE:-headmaster-hermes-runtime:latest}
+      RUNTIME_CONTAINER_NETWORK: ${RUNTIME_CONTAINER_NETWORK:-hermes_runtime}
+      RUNTIME_CONTAINER_IDLE_TTL_SECONDS: ${RUNTIME_CONTAINER_IDLE_TTL_SECONDS:-3600}
       OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
     volumes:
       - hermeshq_workspaces:/app/workspaces
+      - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     expose:

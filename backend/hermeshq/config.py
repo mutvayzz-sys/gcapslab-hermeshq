@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Public-facing host used to build container endpoint URLs sent to the desktop app.
     # E.g. "http://165.x.x.x" or "https://vps.example.com". Falls back to public_base_url then localhost.
     container_host_url: str | None = None
+    runtime_container_image: str = "headmaster-hermes-runtime:latest"
+    runtime_container_network: str = "hermes_runtime"
+    runtime_container_idle_ttl_seconds: int = 3600
     open_signup: bool = False
 
     admin_username: str = "admin"

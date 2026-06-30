@@ -22,3 +22,11 @@ class Organization(TimestampMixin, Base):
     nous_base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     users = relationship("User", back_populates="organization")
+
+    @property
+    def has_honcho_jwt_secret(self) -> bool:
+        return bool(self.honcho_jwt_secret)
+
+    @property
+    def has_nous_api_key(self) -> bool:
+        return bool(self.nous_api_key)

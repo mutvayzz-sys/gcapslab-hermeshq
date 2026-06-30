@@ -24,6 +24,7 @@ from hermeshq.routers import (
     auth,
     backup,
     comms,
+    containers,
     dashboard,
     desktop_runtime,
     hermes_versions,
@@ -58,6 +59,7 @@ from hermeshq.services.agent_api_gateway import AgentApiGatewaySupervisor
 from hermeshq.services.agent_identity import derive_agent_identity
 from hermeshq.services.agent_supervisor import AgentSupervisor
 from hermeshq.services.comms_router import CommsRouter
+from hermeshq.services.container_supervisor import RuntimeContainerSupervisor
 from hermeshq.services.enterprise_gateway_manager import EnterpriseGatewayManager
 from hermeshq.services.gateway_supervisor import GatewaySupervisor
 from hermeshq.services.hermes_installation import HermesInstallationManager
@@ -228,6 +230,7 @@ async def lifespan(app: FastAPI):
     app.state.google_chat_gateways = app.state.enterprise_gateways.google_chat_gateways
     app.state.kapso_gateways = app.state.enterprise_gateways.kapso_gateways
     app.state.comms_router = CommsRouter(AsyncSessionLocal, app.state.event_broker)
+    app.state.container_supervisor = RuntimeContainerSupervisor(settings)
 
     async def log_terminal_activity(agent_id: str, event_type: str, message: str, details: dict) -> None:
         async with AsyncSessionLocal() as session:
@@ -352,6 +355,7 @@ app.include_router(runtime_ledger.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
 app.include_router(desktop_runtime.router, prefix=settings.api_prefix)
 app.include_router(comms.router, prefix=settings.api_prefix)
+app.include_router(containers.router, prefix=settings.api_prefix)
 app.include_router(internal_agents.router, prefix=settings.api_prefix)
 app.include_router(internal_control.router, prefix=settings.api_prefix)
 app.include_router(secrets.router, prefix=settings.api_prefix)

@@ -16,6 +16,7 @@ from hermeshq.models.oidc_provider import OidcProvider
 from hermeshq.models.organization import Organization
 from hermeshq.models.password_reset import PasswordResetToken
 from hermeshq.models.provider import ProviderDefinition
+from hermeshq.models.runtime_container import RuntimeContainer
 from hermeshq.models.scheduled_task import ScheduledTask
 from hermeshq.models.secret import Secret
 from hermeshq.models.task import Task
@@ -44,6 +45,7 @@ __all__ = [
     "Organization",
     "PasswordResetToken",
     "ProviderDefinition",
+    "RuntimeContainer",
     "ScheduledTask",
     "Secret",
     "Task",

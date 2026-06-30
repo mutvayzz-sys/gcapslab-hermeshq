@@ -212,6 +212,34 @@ HERMESHQ_HOST=your-server-ip-or-dns curl -fsSL https://raw.githubusercontent.com
 docker compose up --build -d
 ```
 
+For Headmaster cloud runtime beta, build the Hermes runtime image first so
+`RUNTIME_CONTAINER_IMAGE` points at the latest local image:
+
+```bash
+RUNTIME_CONTAINER_IMAGE=headmaster-hermes-runtime:latest bash scripts/build-runtime-image.sh
+docker compose up --build -d
+```
+
+From the Windows development machine, deploy directly to the remote Docker
+context configured as `macmini`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy-remote.ps1 -Context macmini -Smoke
+```
+
+Useful variants:
+
+```powershell
+# Rebuild the runtime image from scratch and redeploy the stack
+powershell -ExecutionPolicy Bypass -File scripts\deploy-remote.ps1 -Context macmini -NoCacheRuntime -Smoke
+
+# Recreate the stack without rebuilding the runtime image
+powershell -ExecutionPolicy Bypass -File scripts\deploy-remote.ps1 -Context macmini -SkipRuntimeImage
+
+# Show stack + managed runtime containers
+powershell -ExecutionPolicy Bypass -File scripts\remote-status.ps1 -Context macmini
+```
+
 Default URLs:
 
 - frontend: `http://localhost:3420`

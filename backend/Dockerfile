@@ -51,6 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     gnupg \
+    docker.io \
+    docker-cli \
     libfreetype6 \
     libjpeg-dev \
     && mkdir -p /etc/apt/keyrings \
