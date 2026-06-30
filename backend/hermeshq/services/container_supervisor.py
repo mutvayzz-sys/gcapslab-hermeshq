@@ -6,6 +6,7 @@ import hmac
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 from sqlalchemy import select
@@ -143,6 +144,7 @@ class RuntimeContainerSupervisor:
             await self._docker("rm", "-f", container.container_name)
         except ContainerSupervisorError as exc:
             logger.warning("Docker remove failed for %s: %s", container.container_name, exc)
+        self._remove_traefik_file_route(container)
         container.status = "removed"
         container.stopped_at = datetime.now(UTC)
         await db.flush()
@@ -230,7 +232,8 @@ class RuntimeContainerSupervisor:
             "--label",
             f"hermeshq.user_id={user.id}",
         ]
-        if self.settings.run_domain:
+        use_file_provider = bool(self.settings.runtime_traefik_dynamic_config_path)
+        if self.settings.run_domain and not use_file_provider:
             router_name = f"hm-{container.id[:12]}"
             host = f"{router_name}.{self.settings.run_domain.strip('.')}"
             inject_id_middleware = f"{router_name}-inject-id"
@@ -263,6 +266,72 @@ class RuntimeContainerSupervisor:
             args.extend(["-e", f"{key}={value}"])
         args.append(container.image)
         await self._docker(*args)
+        if self.settings.run_domain and use_file_provider:
+            await self._write_traefik_file_route(container)
+
+    async def _container_ip(self, container: RuntimeContainer) -> str:
+        template = f'{{{{with index .NetworkSettings.Networks "{self.settings.runtime_container_network}"}}}}{{{{.IPAddress}}}}{{{{end}}}}'
+        ip = await self._docker("inspect", "-f", template, container.container_name)
+        ip = ip.strip()
+        if not ip:
+            raise ContainerSupervisorError(f"Could not resolve container IP for {container.container_name}")
+        return ip
+
+    async def _write_traefik_file_route(self, container: RuntimeContainer) -> None:
+        config_path = self.settings.runtime_traefik_dynamic_config_path
+        if not config_path or not self.settings.run_domain:
+            return
+        ip = await self._container_ip(container)
+        router_name = f"hm-{container.id[:12]}"
+        host = f"{router_name}.{self.settings.run_domain.strip('.')}"
+        route = f"""
+http:
+  routers:
+    {router_name}:
+      rule: Host(`{host}`)
+      entryPoints:
+        - websecure
+      service: {router_name}
+      middlewares:
+        - {router_name}-inject-id
+        - {router_name}-forward-auth
+      tls: {{}}
+  services:
+    {router_name}:
+      loadBalancer:
+        servers:
+          - url: http://{ip}:3737
+  middlewares:
+    {router_name}-inject-id:
+      headers:
+        customRequestHeaders:
+          X-Headmaster-Container-Id: "{container.id}"
+    {router_name}-forward-auth:
+      forwardAuth:
+        address: "{self.settings.forward_auth_url}"
+        trustForwardHeader: true
+"""
+        self._upsert_traefik_route_block(config_path, router_name, route)
+
+    def _remove_traefik_file_route(self, container: RuntimeContainer) -> None:
+        config_path = self.settings.runtime_traefik_dynamic_config_path
+        if not config_path:
+            return
+        router_name = f"hm-{container.id[:12]}"
+        self._upsert_traefik_route_block(config_path, router_name, "")
+
+    def _upsert_traefik_route_block(self, config_path: str, router_name: str, route: str) -> None:
+        path = Path(config_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text() if path.exists() else ""
+        start = f"# BEGIN headmaster {router_name}"
+        end = f"# END headmaster {router_name}"
+        before, marker, rest = existing.partition(start)
+        if marker:
+            _, _, after = rest.partition(end)
+            existing = before.rstrip() + "\n" + after.lstrip()
+        block = f"{start}\n{route.strip()}\n{end}\n" if route.strip() else ""
+        path.write_text((existing.rstrip() + "\n\n" + block).strip() + "\n")
 
     async def _docker(self, *args: str) -> str:
         proc = await asyncio.create_subprocess_exec(

@@ -82,10 +82,12 @@ services:
       RUNTIME_CONTAINER_PIDS_LIMIT: ${RUNTIME_CONTAINER_PIDS_LIMIT:-512}
       RUNTIME_CONTAINER_SHM_SIZE: ${RUNTIME_CONTAINER_SHM_SIZE:-1g}
       RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE: ${RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE:-headmaster-forward-auth@docker}
+      RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH: ${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH:-}
       OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
     volumes:
       - hermeshq_workspaces:/app/workspaces
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_HOST_PATH:-/tmp/headmaster-runtimes.yml}:${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH:-/tmp/headmaster-runtimes.yml}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     expose:

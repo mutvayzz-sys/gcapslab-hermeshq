@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     runtime_container_pids_limit: int = 512
     runtime_container_shm_size: str = "1g"
     runtime_container_traefik_middleware: str = "headmaster-forward-auth@docker"
+    runtime_traefik_dynamic_config_path: str | None = None
     runtime_container_image: str = "headmaster-hermes-runtime:latest"
     runtime_container_network: str = "hermes_runtime"
     runtime_container_idle_ttl_seconds: int = 3600

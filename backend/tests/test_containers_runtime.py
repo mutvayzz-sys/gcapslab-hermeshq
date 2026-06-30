@@ -45,6 +45,7 @@ async def test_run_container_uses_latest_configured_image_and_private_network(mo
         runtime_container_pids_limit=512,
         runtime_container_shm_size="1g",
         runtime_container_traefik_middleware="headmaster-forward-auth@docker",
+        runtime_traefik_dynamic_config_path=None,
         forward_auth_url="http://127.0.0.1:18081/",
         forward_auth_hmac_secret="test-secret",
         forward_auth_token_ttl_seconds=86400,
@@ -105,6 +106,7 @@ async def test_run_container_adds_traefik_labels_when_run_domain_is_configured(m
         runtime_container_pids_limit=512,
         runtime_container_shm_size="1g",
         runtime_container_traefik_middleware="headmaster-forward-auth@docker",
+        runtime_traefik_dynamic_config_path=None,
         forward_auth_url="http://127.0.0.1:18081/",
         forward_auth_hmac_secret="test-secret",
         forward_auth_token_ttl_seconds=86400,
@@ -143,3 +145,53 @@ async def test_run_container_adds_traefik_labels_when_run_domain_is_configured(m
     )
     assert "traefik.http.middlewares.hm-abcdef123456-forward-auth.forwardauth.address=http://127.0.0.1:18081/" in args
     assert "traefik.http.routers.hm-abcdef123456.middlewares=hm-abcdef123456-inject-id,hm-abcdef123456-forward-auth" in args
+
+
+@pytest.mark.asyncio
+async def test_run_container_can_write_traefik_file_provider_route(monkeypatch, tmp_path) -> None:
+    dynamic_config = tmp_path / "headmaster-runtimes.yml"
+    settings = SimpleNamespace(
+        runtime_container_image="headmaster-hermes-runtime:latest",
+        runtime_container_network="hermes_runtime",
+        runtime_container_cpu="2",
+        runtime_container_memory="4g",
+        runtime_container_pids_limit=512,
+        runtime_container_shm_size="1g",
+        runtime_container_traefik_middleware="headmaster-forward-auth@docker",
+        runtime_traefik_dynamic_config_path=str(dynamic_config),
+        forward_auth_url="http://127.0.0.1:18081/",
+        forward_auth_hmac_secret="test-secret",
+        forward_auth_token_ttl_seconds=86400,
+        container_host_url=None,
+        public_base_url="https://hq.gcaplabs.com",
+        run_domain="run.gcaplabs.com",
+    )
+    supervisor = RuntimeContainerSupervisor(settings)
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_docker(*args: str) -> str:
+        calls.append(args)
+        if args[:2] == ("inspect", "-f"):
+            return "172.20.0.7"
+        return "container-id"
+
+    monkeypatch.setattr(supervisor, "_docker", fake_docker)
+    user = User(id="user-12345678", username="beta", display_name="Beta", password_hash="x", role="beta_user")
+    container = RuntimeContainer(
+        id="abcdef1234567890",
+        user_id=user.id,
+        container_name="hermes-user1234-abcd1234",
+        image=settings.runtime_container_image,
+        endpoint_path="/",
+        api_server_key="secret-key",
+    )
+
+    await supervisor._run_container(container, user, None, {})
+
+    run_args = calls[0]
+    assert "traefik.enable=true" not in run_args
+    written = dynamic_config.read_text()
+    assert "Host(`hm-abcdef123456.run.gcaplabs.com`)" in written
+    assert "url: http://172.20.0.7:3737" in written
+    assert "X-Headmaster-Container-Id: \"abcdef1234567890\"" in written
+    assert "address: \"http://127.0.0.1:18081/\"" in written
