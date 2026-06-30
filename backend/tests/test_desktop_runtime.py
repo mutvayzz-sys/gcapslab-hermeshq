@@ -4,6 +4,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from hermeshq.core.combined_auth import get_authenticated_user
 from hermeshq.core.security import get_current_user
 from hermeshq.database import get_db_session
 from hermeshq.routers.desktop_runtime import router
@@ -27,6 +28,7 @@ def _client_for_user(user: SimpleNamespace | None = None) -> TestClient:
     app.include_router(router, prefix="/api")
     app.dependency_overrides[get_db_session] = _fake_db_session
     if user is not None:
+        app.dependency_overrides[get_authenticated_user] = lambda: user
         app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)
 
@@ -43,7 +45,7 @@ def test_provision_requires_auth() -> None:
 
 
 def test_inactive_user_cannot_provision() -> None:
-    from hermeshq.core.security import get_current_user as auth_dependency
+    from hermeshq.core.combined_auth import get_authenticated_user as auth_dependency
 
     app = FastAPI()
     app.include_router(router, prefix="/api")

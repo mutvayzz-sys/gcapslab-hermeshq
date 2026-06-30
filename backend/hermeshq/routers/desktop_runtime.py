@@ -21,6 +21,7 @@ from hermeshq.schemas.desktop_runtime import (
     DesktopRuntimeValidateRequest,
     DesktopRuntimeValidateResponse,
 )
+from hermeshq.core.combined_auth import get_authenticated_user
 from hermeshq.services.container_supervisor import ContainerSupervisorError
 from hermeshq.services.desktop_runtime import (
     DESKTOP_RUNTIME_TTL_SECONDS,
@@ -248,7 +249,7 @@ async def _build_provision_response(
 async def provision_desktop_runtime(
     payload: DesktopProvisionRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_authenticated_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
     response = await _build_provision_response(current_user, request, db)
@@ -268,7 +269,7 @@ async def provision_desktop_runtime(
 @router.get("/provision/current", response_model=DesktopProvisionResponse)
 async def get_current_desktop_provision(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_authenticated_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
     return await _build_provision_response(current_user, request, db)
@@ -277,7 +278,7 @@ async def get_current_desktop_provision(
 @router.post("/runtime/validate", response_model=DesktopRuntimeValidateResponse)
 async def validate_desktop_runtime(
     payload: DesktopRuntimeValidateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_authenticated_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopRuntimeValidateResponse:
     # Verify the user is active — inactive users get no provision
