@@ -62,7 +62,7 @@ services:
       WORKSPACES_ROOT: ${WORKSPACES_ROOT:-/app/workspaces}
       BRANDING_ROOT: ${BRANDING_ROOT:-/app/workspaces/_branding}
       PTY_SHELL: ${PTY_SHELL:-/bin/sh}
-      CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend","https://hq.gcaplabs.com"]}'
+      CORS_ORIGINS: '${CORS_ORIGINS_JSON:-["http://localhost:3420","http://frontend","https://hq.gcaplabs.com","https://console.gcaplabs.com","http://localhost:3000"]}'
       CONCURRENCY_SEMAPHORE: ${CONCURRENCY_SEMAPHORE:-8}
       HQ_BOOTSTRAP_TIMEOUT: ${HQ_BOOTSTRAP_TIMEOUT:-30}
       HQ_BOOTSTRAP_RETRIES: ${HQ_BOOTSTRAP_RETRIES:-2}
@@ -84,6 +84,15 @@ services:
       RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE: ${RUNTIME_CONTAINER_TRAEFIK_MIDDLEWARE:-headmaster-forward-auth@docker}
       RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH: ${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH:-}
       OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_PROVIDER: ${KIMI_PROVIDER:-kimi-coding}
+      KIMI_MODEL: ${KIMI_MODEL:-kimi-k2.7-code}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-https://api.kimi.com/coding}
+      KIMI_API_MODE: ${KIMI_API_MODE:-anthropic_messages}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       - hermeshq_workspaces:/app/workspaces
       - /var/run/docker.sock:/var/run/docker.sock

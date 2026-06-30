@@ -100,7 +100,7 @@ async def _build_provision_response(
                 org.honcho_jwt_secret,
                 algorithm="HS256",
             )
-        nous_api_key = org.nous_api_key or None
+        nous_api_key = None  # legacy — replaced by kimi-code runtime_env injection
 
     # Provider catalog + default model: ship the enabled ProviderDefinition
     # rows so the desktop can populate its model selector from HermesHQ
@@ -167,8 +167,17 @@ async def _build_provision_response(
                     key_value = None
         if key_value:
             runtime_env[assignment.api_key_ref] = key_value
-    if nous_api_key:
-        runtime_env["NOUS_API_KEY"] = nous_api_key
+    # Inject kimi-code model credential (replaces legacy nous_api_key).
+    # These env vars tell the per-user container's Hermes profile to use
+    # kimi-k2.7-code via the kimi-coding provider.
+    from hermeshq.config import get_settings as _get_settings
+    _s = _get_settings()
+    if _s.kimi_api_key:
+        runtime_env["KIMI_API_KEY"] = _s.kimi_api_key
+        runtime_env["HERMES_DEFAULT_PROVIDER"] = _s.kimi_provider
+        runtime_env["HERMES_DEFAULT_MODEL"] = _s.kimi_model
+        runtime_env["HERMES_DEFAULT_BASE_URL"] = _s.kimi_base_url
+        runtime_env["HERMES_DEFAULT_API_MODE"] = _s.kimi_api_mode
 
     # App settings (branding/theme) from AppSettings table
     from hermeshq.models.app_settings import AppSettings

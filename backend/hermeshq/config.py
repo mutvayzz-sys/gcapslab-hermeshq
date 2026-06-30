@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     runtime_container_idle_ttl_seconds: int = 3600
     open_signup: bool = False
 
+    # Kimi-code model credential — replaces the legacy per-org nous_api_key.
+    # Injected into the per-user runtime container env so its Hermes profile
+    # authenticates with the kimi-k2.7-code model.
+    kimi_api_key: str | None = None
+    kimi_provider: str = "kimi-coding"
+    kimi_model: str = "kimi-k2.7-code"
+    kimi_base_url: str = "https://api.kimi.com/coding"
+    kimi_api_mode: str = "anthropic_messages"
+
     admin_username: str = "admin"
     admin_password: str = ""
     admin_display_name: str = "Hermes Operator"
