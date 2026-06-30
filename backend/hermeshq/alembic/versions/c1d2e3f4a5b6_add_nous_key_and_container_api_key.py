@@ -33,7 +33,12 @@ def upgrade() -> None:
         op.add_column("organizations", sa.Column("nous_api_key", sa.String(255), nullable=True))
     if not _column_exists("organizations", "nous_base_url"):
         op.add_column("organizations", sa.Column("nous_base_url", sa.String(512), nullable=True))
-    if not _column_exists("containers", "api_server_key"):
+    # containers table may not exist yet — it's created by a later migration
+    # (d2e3f4a5b6c7 drops it, e3f4a5b6c7d8 recreates it as runtime_containers).
+    # Skip the api_server_key column if the table doesn't exist.
+    bind = op.get_bind()
+    insp = inspect(bind)
+    if insp.has_table("containers") and not _column_exists("containers", "api_server_key"):
         op.add_column("containers", sa.Column("api_server_key", sa.String(128), nullable=True))
 
 
