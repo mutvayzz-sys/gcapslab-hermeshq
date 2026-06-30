@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     oidc_provider_login_url_google: str | None = None
     oidc_provider_login_url_microsoft: str | None = None
 
+    # Supabase asymmetric JWT verification — verify user JWTs against the public JWKS.
+    # No shared secret needed (unlike the legacy HS256 local admin auth).
+    supabase_jwks_url: str | None = None
+
     resend_api_key: str | None = None
     from_email: str | None = None
     from_name: str | None = None
