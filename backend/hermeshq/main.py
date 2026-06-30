@@ -12,6 +12,24 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
+# Initialize Sentry before any other code if DSN is configured.
+# Wrapped in try/except so sentry-sdk is optional.
+import os as _os
+if _os.environ.get("SENTRY_DSN"):
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_os.environ["SENTRY_DSN"],
+            integrations=[FastApiIntegration(), StarletteIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logging.getLogger(__name__).info("Sentry initialized for HermesHQ backend")
+    except ImportError:
+        logging.getLogger(__name__).warning("SENTRY_DSN set but sentry-sdk not installed; skipping")
+
 from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker, EventSubscription
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
