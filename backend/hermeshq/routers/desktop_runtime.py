@@ -261,13 +261,32 @@ async def provision_desktop_runtime(
     current_user: User = Depends(get_authenticated_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DesktopProvisionResponse:
-    response = await _build_provision_response(current_user, request, db)
+    # Admin-only: provision for a target user instead of the caller.
+    # Used by the gcap-console to provision on behalf of its end users.
+    target_user: User = current_user
+    if payload.target_user_id and payload.target_user_id != str(current_user.id):
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admin can provision for another user",
+            )
+        result = await db.execute(
+            select(User).where(User.id == payload.target_user_id)
+        )
+        target_user = result.scalar_one_or_none()
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Target user not found",
+            )
+
+    response = await _build_provision_response(target_user, request, db)
     await _audit_log(
         db,
         current_user,
         "desktop.provision",
         "desktop_runtime",
-        current_user.id,
+        target_user.id,
         None,
         {"mode": response.mode, "capabilities": response.capabilities},
         {"client": payload.client, "version": payload.version, "platform": payload.platform},

@@ -6,6 +6,9 @@ class DesktopProvisionRequest(BaseModel):
     version: str = Field(min_length=1, max_length=32)
     platform: str = Field(min_length=1, max_length=32)
     mode: str | None = Field(default=None, max_length=32)
+    # Admin-only: provision for a specific user instead of the caller.
+    # Used by the gcap-console to provision on behalf of its end users.
+    target_user_id: str | None = Field(default=None, max_length=128)
 
 
 class DesktopRuntimeValidateRequest(BaseModel):
