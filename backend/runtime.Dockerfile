@@ -34,13 +34,17 @@ RUN npm ci
 COPY third_party/agent37/gateway/ ./
 RUN npm run build && npm prune --omit=dev
 
-COPY backend/runtime-entrypoint.sh /opt/runtime-entrypoint.sh
-
+# Only /home/hermes needs hermes ownership — nothing writes under /opt at runtime,
+# and the pip/npm-installed trees are world-readable. Chowning the multi-GB venv
+# made rebuilds take tens of minutes; scope it to /home/hermes instead.
 RUN useradd --create-home --shell /bin/bash hermes \
     && mkdir -p /home/hermes/.hermes /home/hermes/.agent37-gateway /home/hermes/workspace \
     && printf 'model:\n  provider: nous-api\n  base_url: "https://inference-api.nousresearch.com/v1"\nweb:\n  use_gateway: true\nimage_gen:\n  use_gateway: true\n' > /home/hermes/.hermes/config.yaml \
-    && chmod +x /opt/runtime-entrypoint.sh \
-    && chown -R hermes:hermes /home/hermes /opt/hermes-agent /opt/hermes-venv /opt/agent37-gateway
+    && chown -R hermes:hermes /home/hermes
+
+# Entrypoint copied last so editing it never re-runs the steps above.
+COPY --chown=hermes:hermes backend/runtime-entrypoint.sh /opt/runtime-entrypoint.sh
+RUN chmod +x /opt/runtime-entrypoint.sh
 
 USER hermes
 WORKDIR /home/hermes/workspace
