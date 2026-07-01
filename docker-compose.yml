@@ -96,7 +96,10 @@ services:
     volumes:
       - hermeshq_workspaces:/app/workspaces
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_HOST_PATH:-/tmp/headmaster-runtimes.yml}:${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH:-/tmp/headmaster-runtimes.yml}
+      # Mount the Traefik dynamic DIRECTORY (not a single file): the supervisor writes
+      # one hm-<id>.yml per instance into it, and Traefik's file provider merges them.
+      # RUNTIME_TRAEFIK_DYNAMIC_CONFIG_PATH must live inside /traefik (e.g. /traefik/headmaster-runtimes.yml).
+      - ${RUNTIME_TRAEFIK_DYNAMIC_CONFIG_HOST_PATH:-/tmp/headmaster-dynamic}:/traefik
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     expose:
