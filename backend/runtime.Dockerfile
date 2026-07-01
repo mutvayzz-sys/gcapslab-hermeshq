@@ -34,9 +34,12 @@ RUN npm ci
 COPY third_party/agent37/gateway/ ./
 RUN npm run build && npm prune --omit=dev
 
+COPY backend/runtime-entrypoint.sh /opt/runtime-entrypoint.sh
+
 RUN useradd --create-home --shell /bin/bash hermes \
     && mkdir -p /home/hermes/.hermes /home/hermes/.agent37-gateway /home/hermes/workspace \
     && printf 'model:\n  provider: nous-api\n  base_url: "https://inference-api.nousresearch.com/v1"\nweb:\n  use_gateway: true\nimage_gen:\n  use_gateway: true\n' > /home/hermes/.hermes/config.yaml \
+    && chmod +x /opt/runtime-entrypoint.sh \
     && chown -R hermes:hermes /home/hermes /opt/hermes-agent /opt/hermes-venv /opt/agent37-gateway
 
 USER hermes
@@ -44,4 +47,5 @@ WORKDIR /home/hermes/workspace
 
 EXPOSE 3737
 
-CMD ["node", "/opt/agent37-gateway/dist/server/server/index.js"]
+# Entrypoint generates config.yaml from the injected provider env, then starts the gateway.
+CMD ["/opt/runtime-entrypoint.sh"]
