@@ -190,7 +190,7 @@ async def test_run_container_can_write_traefik_file_provider_route(monkeypatch, 
 
     run_args = calls[0]
     assert "traefik.enable=true" not in run_args
-    written = dynamic_config.read_text()
+    written = (dynamic_config.parent / "hm-abcdef123456.yml").read_text()
     assert "Host(`hm-abcdef123456.run.gcaplabs.com`)" in written
     assert "url: http://172.20.0.7:3737" in written
     assert "X-Headmaster-Container-Id: \"abcdef1234567890\"" in written

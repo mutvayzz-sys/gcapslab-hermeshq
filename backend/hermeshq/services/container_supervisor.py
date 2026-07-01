@@ -311,27 +311,23 @@ http:
         address: "{self.settings.forward_auth_url}"
         trustForwardHeader: true
 """
-        self._upsert_traefik_route_block(config_path, router_name, route)
+        # Write one file per instance into the dynamic directory. Traefik's file
+        # provider merges files, so per-file `http:` blocks are valid — appending
+        # every route into a single file produces duplicate top-level `http:` keys,
+        # which fails YAML parsing and drops ALL routes.
+        self._route_file_path(config_path, router_name).write_text(route.strip() + "\n")
 
     def _remove_traefik_file_route(self, container: RuntimeContainer) -> None:
         config_path = self.settings.runtime_traefik_dynamic_config_path
         if not config_path:
             return
         router_name = f"hm-{container.id[:12]}"
-        self._upsert_traefik_route_block(config_path, router_name, "")
+        self._route_file_path(config_path, router_name).unlink(missing_ok=True)
 
-    def _upsert_traefik_route_block(self, config_path: str, router_name: str, route: str) -> None:
-        path = Path(config_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing = path.read_text() if path.exists() else ""
-        start = f"# BEGIN headmaster {router_name}"
-        end = f"# END headmaster {router_name}"
-        before, marker, rest = existing.partition(start)
-        if marker:
-            _, _, after = rest.partition(end)
-            existing = before.rstrip() + "\n" + after.lstrip()
-        block = f"{start}\n{route.strip()}\n{end}\n" if route.strip() else ""
-        path.write_text((existing.rstrip() + "\n\n" + block).strip() + "\n")
+    def _route_file_path(self, config_path: str, router_name: str) -> Path:
+        directory = Path(config_path).parent
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{router_name}.yml"
 
     async def _docker(self, *args: str) -> str:
         proc = await asyncio.create_subprocess_exec(
