@@ -41,7 +41,7 @@ async def _runtime_env(request: Request, agent: Agent | None) -> dict[str, str]:
     try:
         env = await request.app.state.installation_manager.build_process_env(agent, include_channels=False)
     except Exception:
-        return {}
+        env = {}
     allowed_prefixes = (
         "API_SERVER_",
         "NOUS_",
@@ -56,7 +56,25 @@ async def _runtime_env(request: Request, agent: Agent | None) -> dict[str, str]:
         "GOOGLE_",
         "AUXILIARY_",
     )
-    return {key: value for key, value in env.items() if key.startswith(allowed_prefixes)}
+    filtered = {key: value for key, value in env.items() if key.startswith(allowed_prefixes)}
+
+    # Inject the default model config (same as desktop_runtime.py provision path).
+    # The runtime entrypoint materializes config.yaml from these env vars at startup.
+    settings = request.app.state.settings
+    kimi_api_key = getattr(settings, "kimi_api_key", None)
+    if kimi_api_key:
+        filtered["KIMI_API_KEY"] = kimi_api_key
+    for attr, env_key in (
+        ("kimi_provider", "HERMES_DEFAULT_PROVIDER"),
+        ("kimi_model", "HERMES_DEFAULT_MODEL"),
+        ("kimi_base_url", "HERMES_DEFAULT_BASE_URL"),
+        ("kimi_api_mode", "HERMES_DEFAULT_API_MODE"),
+    ):
+        val = getattr(settings, attr, None)
+        if val:
+            filtered[env_key] = val
+
+    return filtered
 
 
 async def _get_container(db: AsyncSession, container_id: str) -> RuntimeContainer:
