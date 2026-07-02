@@ -34,7 +34,7 @@ from hermeshq.config import get_settings
 from hermeshq.core.events import EventBroker, EventSubscription
 from hermeshq.core.security import get_accessible_agent_ids, get_websocket_user, hash_password, is_admin
 from hermeshq.database import AsyncSessionLocal, init_database
-from hermeshq.models import ActivityLog, Agent, AppSettings, Node, ProviderDefinition, TerminalSession, User
+from hermeshq.models import ActivityLog, Agent, AgentAssignment, AppSettings, Node, ProviderDefinition, TerminalSession, User
 from hermeshq.routers import (
     agents,
     attachments,
@@ -117,29 +117,75 @@ async def bootstrap_defaults() -> None:
         user_result = await session.execute(select(User).where(User.username == settings.admin_username))
         admin_user = user_result.scalar_one_or_none()
         if not admin_user:
-            session.add(
-                User(
-                    username=settings.admin_username,
-                    display_name=settings.admin_display_name,
-                    password_hash=hash_password(admin_password),
-                    role="admin",
-                    is_active=True,
-                )
+            admin_user = User(
+                username=settings.admin_username,
+                display_name=settings.admin_display_name,
+                password_hash=hash_password(admin_password),
+                role="admin",
+                is_active=True,
             )
+            session.add(admin_user)
+            await session.flush()
         else:
             admin_user.role = "admin"
             admin_user.is_active = True
         node_result = await session.execute(select(Node).where(Node.name == "Local Runtime"))
-        if not node_result.scalar_one_or_none():
-            session.add(
-                Node(
-                    name="Local Runtime",
-                    hostname="localhost",
-                    node_type="local",
-                    status="online",
-                    system_info={"runtime": "local", "mode": "strict"},
+        local_node = node_result.scalar_one_or_none()
+        if not local_node:
+            local_node = Node(
+                name="Local Runtime",
+                hostname="localhost",
+                node_type="local",
+                status="online",
+                system_info={"runtime": "local", "mode": "strict"},
+            )
+            session.add(local_node)
+            await session.flush()
+
+        # Ensure the bootstrap admin has a default agent assignment.
+        # Container provisioning uses the assigned agent to resolve runtime env;
+        # without this, admin force_recreate can create containers with no model config.
+        default_agent_result = await session.execute(select(Agent).where(Agent.slug == "headmaster-default"))
+        default_agent = default_agent_result.scalar_one_or_none()
+        if not default_agent:
+            default_workspace = (settings.workspaces_root / "headmaster-default").resolve()
+            default_workspace.mkdir(parents=True, exist_ok=True)
+            default_agent = Agent(
+                node_id=local_node.id,
+                name="Headmaster Default",
+                friendly_name="Headmaster Default",
+                slug="headmaster-default",
+                description="Default Headmaster runtime agent for desktop and cloud container provisioning.",
+                status="stopped",
+                run_mode="hybrid",
+                runtime_profile="standard",
+                model=settings.kimi_model,
+                use_provider_default=True,
+                provider=settings.kimi_provider,
+                base_url=settings.kimi_base_url,
+                workspace_path=str(default_workspace),
+                working_directory=str(default_workspace),
+                is_system_agent=True,
+                system_scope="default",
+            )
+            session.add(default_agent)
+            await session.flush()
+
+        if admin_user:
+            assignment_result = await session.execute(
+                select(AgentAssignment).where(
+                    AgentAssignment.user_id == admin_user.id,
+                    AgentAssignment.agent_id == default_agent.id,
                 )
             )
+            if not assignment_result.scalar_one_or_none():
+                session.add(
+                    AgentAssignment(
+                        user_id=admin_user.id,
+                        agent_id=default_agent.id,
+                        assigned_by=admin_user.id,
+                    )
+                )
         settings_row = await session.get(AppSettings, "default")
         if not settings_row:
             settings_row = AppSettings(id="default")
