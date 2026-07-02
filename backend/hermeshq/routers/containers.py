@@ -36,12 +36,21 @@ async def _assigned_agent(db: AsyncSession, user: User, requested_agent_id: str 
 
 
 async def _runtime_env(request: Request, agent: Agent | None) -> dict[str, str]:
-    if not agent:
-        return {}
-    try:
-        env = await request.app.state.installation_manager.build_process_env(agent, include_channels=False)
-    except Exception:
-        env = {}
+    """Build the runtime env for a container.
+
+    The kimi-code model config is injected unconditionally (same as
+    desktop_runtime.py) so containers work even when the user has no
+    agent assignment (e.g. admin).
+    """
+    from hermeshq.config import get_settings as _get_settings
+    _s = _get_settings()
+
+    env: dict[str, str] = {}
+    if agent:
+        try:
+            env = await request.app.state.installation_manager.build_process_env(agent, include_channels=False)
+        except Exception:
+            env = {}
     allowed_prefixes = (
         "API_SERVER_",
         "NOUS_",
@@ -58,21 +67,14 @@ async def _runtime_env(request: Request, agent: Agent | None) -> dict[str, str]:
     )
     filtered = {key: value for key, value in env.items() if key.startswith(allowed_prefixes)}
 
-    # Inject the default model config (same as desktop_runtime.py provision path).
-    # The runtime entrypoint materializes config.yaml from these env vars at startup.
-    settings = request.app.state.settings
-    kimi_api_key = getattr(settings, "kimi_api_key", None)
-    if kimi_api_key:
-        filtered["KIMI_API_KEY"] = kimi_api_key
-    for attr, env_key in (
-        ("kimi_provider", "HERMES_DEFAULT_PROVIDER"),
-        ("kimi_model", "HERMES_DEFAULT_MODEL"),
-        ("kimi_base_url", "HERMES_DEFAULT_BASE_URL"),
-        ("kimi_api_mode", "HERMES_DEFAULT_API_MODE"),
-    ):
-        val = getattr(settings, attr, None)
-        if val:
-            filtered[env_key] = val
+    # Inject kimi-code model config unconditionally — the runtime entrypoint
+    # materializes config.yaml from these env vars at startup.
+    if _s.kimi_api_key:
+        filtered["KIMI_API_KEY"] = _s.kimi_api_key
+        filtered["HERMES_DEFAULT_PROVIDER"] = _s.kimi_provider
+        filtered["HERMES_DEFAULT_MODEL"] = _s.kimi_model
+        filtered["HERMES_DEFAULT_BASE_URL"] = _s.kimi_base_url
+        filtered["HERMES_DEFAULT_API_MODE"] = _s.kimi_api_mode
 
     return filtered
 
