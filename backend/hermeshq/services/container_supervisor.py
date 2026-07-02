@@ -177,6 +177,17 @@ class RuntimeContainerSupervisor:
         )
         return result.scalar_one_or_none()
 
+    def _data_volume_name(self, user: User) -> str:
+        # One persistent named volume per user, keyed by the full (untruncated) user id so it
+        # can never collide the way the truncated container-name suffix could. Docker creates the
+        # volume automatically on first `docker run -v`, and `remove()` only does `docker rm -f`
+        # (no `-v`/`--volumes`), so this volume survives container recreation/removal by design —
+        # a fresh container mounting the same volume picks up the prior config.yaml, state.db
+        # (chat history), auth.json (credential pool), and workspace/ untouched. It is intentionally
+        # NOT deleted anywhere in this class; only an explicit user-data-deletion path should ever
+        # run `docker volume rm` on it.
+        return f"hermes-home-{user.id}"
+
     def _new_container(self, user: User, agent: Agent | None) -> RuntimeContainer:
         suffix = secrets.token_hex(4)
         safe_user = user.id.replace("-", "")[:8]
@@ -215,6 +226,8 @@ class RuntimeContainerSupervisor:
             "-d",
             "--name",
             container.container_name,
+            "-v",
+            f"{self._data_volume_name(user)}:/home/hermes",
             "--network",
             self.settings.runtime_container_network,
             "--cpus",
