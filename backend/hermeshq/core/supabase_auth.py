@@ -1,4 +1,4 @@
-"""Supabase JWT verification — asymmetric key (RS256) via public JWKS.
+"""Supabase JWT verification — asymmetric key (RS256 or ES256) via public JWKS.
 
 Separate from the local HS256 admin auth in core/security.py.
 Supabase is the single identity source of truth for end users; HermesHQ verifies
@@ -101,13 +101,15 @@ async def verify_supabase_token(token: str, db: AsyncSession) -> User | None:
         logger.warning("Supabase JWKS returned no keys from %s", jwks_url)
         return None
 
-    # Try each key until one validates. Supabase JWTs are RS256.
+    # Try each key until one validates. Supabase signing keys can be RS256 (RSA) or
+    # ES256 (EC, the current default for new projects) — use each key's own declared
+    # `alg` rather than assuming RS256, or verification silently fails for every key.
     for key in keys:
         try:
             payload = jwt.decode(
                 token,
                 key,
-                algorithms=["RS256"],
+                algorithms=[key.get("alg", "RS256")],
                 audience="authenticated",  # Supabase access tokens use "authenticated"
             )
             email = payload.get("email")

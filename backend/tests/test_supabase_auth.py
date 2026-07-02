@@ -87,6 +87,38 @@ async def test_verify_supabase_token_invalid_jwt_returns_none(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_verify_supabase_token_uses_each_keys_own_algorithm(monkeypatch):
+    """Regression: must decode with the JWKS key's own `alg` (e.g. ES256), not a
+    hardcoded RS256 — Supabase projects created after the ES256 default switch use
+    EC signing keys, and a hardcoded RS256 makes every key fail to validate."""
+    monkeypatch.setattr("hermeshq.core.supabase_auth.get_settings", _fake_settings)
+
+    async def _es256_jwks(url):
+        return [{"kty": "EC", "crv": "P-256", "alg": "ES256", "kid": "test", "x": "fake", "y": "fake"}]
+
+    monkeypatch.setattr("hermeshq.core.supabase_auth._fetch_supabase_jwks", _es256_jwks)
+
+    seen_algorithms = []
+
+    def _capture_decode(token, key, **kwargs):
+        seen_algorithms.append(kwargs.get("algorithms"))
+        return {"email": "es256@gcaplabs.com"}
+
+    monkeypatch.setattr("hermeshq.core.supabase_auth.jwt.decode", _capture_decode)
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = SimpleNamespace(email="es256@gcaplabs.com", is_active=True)
+    db.execute = AsyncMock(return_value=execute_result)
+
+    result = await verify_supabase_token("fake-token", db=db)
+
+    assert seen_algorithms == [["ES256"]]
+    assert result is not None
+
+
+@pytest.mark.asyncio
 async def test_verify_supabase_token_existing_active_user_returns_user(monkeypatch):
     """A JWT whose email matches an existing active User returns that row as-is."""
     _patch_jwt_success(monkeypatch, {"email": "existing@gcaplabs.com"})
