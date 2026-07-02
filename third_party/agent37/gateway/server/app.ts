@@ -6,6 +6,7 @@ import { responsesRouter } from './routes/responses.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { modelsRouter } from './routes/models.js';
 import { filesRouter } from './routes/files.js';
+import { compatibilityApiRouter } from './routes/api.js';
 import { getAppVersion } from './version.js';
 import { GatewayError } from './errors.js';
 
@@ -49,6 +50,7 @@ app.use('/v1/responses', responsesRouter);
 app.use('/v1/sessions', sessionsRouter);
 app.use('/v1/models', modelsRouter);
 app.use('/v1/files', filesRouter);
+app.use('/api', compatibilityApiRouter);
 
 // Unknown route → documented JSON error body.
 app.use((req: Request, res: Response) => {

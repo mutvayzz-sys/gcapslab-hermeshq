@@ -56,22 +56,28 @@ function resolveAgentDirFromHermesCli(): string | undefined {
 function resolvePython(): string {
   if (process.env.HERMES_PYTHON) return expandHomePrefix(process.env.HERMES_PYTHON);
 
+  // venv layout differs by platform: POSIX venvs put the interpreter under
+  // `venv/bin/`, Windows venvs (created by the same `python -m venv`) put it
+  // under `venv/Scripts/python.exe`. Production always runs Linux; the
+  // Windows variant only matters for local dev/test on this repo.
+  const venvSubpath = process.platform === 'win32' ? 'venv/Scripts/python.exe' : 'venv/bin/python';
+
   const candidates: string[] = [];
   if (process.env.HERMES_AGENT_DIR) {
-    candidates.push(join(expandHomePrefix(process.env.HERMES_AGENT_DIR), 'venv/bin/python'));
+    candidates.push(join(expandHomePrefix(process.env.HERMES_AGENT_DIR), venvSubpath));
   }
-  candidates.push(join(resolveHermesHome(), 'hermes-agent/venv/bin/python'));
+  candidates.push(join(resolveHermesHome(), 'hermes-agent', venvSubpath));
 
   const found = candidates.find((candidate) => existsSync(candidate));
   if (found) return found;
 
   const cliAgentDir = resolveAgentDirFromHermesCli();
   if (cliAgentDir) {
-    const venvPython = join(cliAgentDir, 'venv/bin/python');
+    const venvPython = join(cliAgentDir, venvSubpath);
     if (existsSync(venvPython)) return venvPython;
   }
 
-  return 'python3';
+  return process.platform === 'win32' ? 'python' : 'python3';
 }
 
 function resolveWorkerScript(): string {
@@ -245,12 +251,14 @@ class HermesWorkerClient {
     });
   }
 
-  async request<T extends WorkerResult>(input: WorkerRequest['type'] | WorkerRequestInput, timeoutMs?: number): Promise<T> {
+  async request<T extends WorkerResult>(
+    input: WorkerRequest['type'] | WorkerRequestInput,
+    timeoutMs?: number
+  ): Promise<T> {
     await this.start();
     const id = randomUUID();
-    const request = typeof input === 'string'
-      ? { id, type: input } as WorkerRequest
-      : { ...input, id } as WorkerRequest;
+    const request =
+      typeof input === 'string' ? ({ id, type: input } as WorkerRequest) : ({ ...input, id } as WorkerRequest);
     return await this.sendRequest<T>(request, timeoutMs);
   }
 
@@ -415,11 +423,7 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
     await this.client.stop();
   }
 
-  async *chatStream(
-    sessionId: string,
-    message: string,
-    options?: AgentRunOptions,
-  ): AsyncIterable<StreamEvent> {
+  async *chatStream(sessionId: string, message: string, options?: AgentRunOptions): AsyncIterable<StreamEvent> {
     for await (const event of this.client.stream({
       type: 'chat',
       sessionId,
@@ -468,12 +472,15 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
   }
 
   async interruptChat(sessionId: string, reason?: string): Promise<boolean> {
-    const result = await this.client.request<{ interrupted: boolean }>({
-      type: 'chat.interrupt',
-      sessionId,
-      taskId: sessionId,
-      reason,
-    }, WORKER_INTERRUPT_TIMEOUT_MS);
+    const result = await this.client.request<{ interrupted: boolean }>(
+      {
+        type: 'chat.interrupt',
+        sessionId,
+        taskId: sessionId,
+        reason,
+      },
+      WORKER_INTERRUPT_TIMEOUT_MS
+    );
     return result.interrupted;
   }
 
@@ -545,11 +552,7 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
     return result.goal;
   }
 
-  async setGoal(
-    sessionId: string,
-    goal: string,
-    options?: { maxTurns?: number | null },
-  ): Promise<GoalStateSnapshot> {
+  async setGoal(sessionId: string, goal: string, options?: { maxTurns?: number | null }): Promise<GoalStateSnapshot> {
     const result = await this.client.request<{ goal: GoalStateSnapshot | null }>({
       type: 'goal.set',
       sessionId,
