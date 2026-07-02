@@ -57,23 +57,6 @@ export function buildOidcLoginUrl(provider?: string, desktop?: boolean) {
   return `${base}/auth/oidc/login${qs ? `?${qs}` : ''}`;
 }
 
-export interface RegisterRequest {
-  username: string;
-  password: string;
-  email?: string;
-  display_name?: string;
-}
-
-export interface RegisterResponse {
-  message: string;
-  username: string;
-}
-
-export async function register(payload: RegisterRequest): Promise<RegisterResponse> {
-  const { data } = await apiClient.post<RegisterResponse>('/auth/register', payload);
-  return data;
-}
-
 export function buildOidcLogoutUrl() {
   const base = resolveApiBase();
   return `${base}/auth/oidc/logout`;

@@ -25,7 +25,6 @@ import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { MfaVerifyPage } from './pages/MfaVerifyPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { RegisterPage } from './pages/RegisterPage';
 import { DesktopOAuthSuccessPage } from './pages/DesktopOAuthSuccessPage';
 import { ManualPage } from './pages/ManualPage';
 import { MyAccountPage } from './pages/MyAccountPage';
@@ -111,7 +110,6 @@ export default function App() {
         <ErrorBoundary>
           <Routes>
             <Route path='/login' element={<LoginPage />} />
-            <Route path='/register' element={<RegisterPage />} />
             <Route path='/desktop-oauth-success' element={<DesktopOAuthSuccessPage />} />
             <Route path='/forgot-password' element={<ForgotPasswordPage />} />
             <Route path='/reset-password' element={<ResetPasswordPage />} />
