@@ -9,7 +9,7 @@ from hermeshq.database import get_db_session
 from hermeshq.models.agent import Agent
 from hermeshq.models.agent_assignment import AgentAssignment
 from hermeshq.models.runtime_container import RuntimeContainer
-from hermeshq.models.organization import Organization
+
 from hermeshq.models.user import User
 from hermeshq.schemas.container import (
     RuntimeContainerHealthRead,
@@ -139,10 +139,6 @@ async def provision_container(
         raise HTTPException(status_code=404, detail="User not found")
     agent = await _assigned_agent(db, target_user, payload.agent_id)
     env = await _runtime_env(request, agent)
-    if target_user.organization_id:
-        org = await db.get(Organization, target_user.organization_id)
-        if org and org.nous_api_key:
-            env["NOUS_API_KEY"] = org.nous_api_key
     try:
         container = await request.app.state.container_supervisor.ensure_user_runtime(
             db,
