@@ -6,6 +6,7 @@ import type { AgentModelGroup, AgentType, HermesMessage } from '../../shared/typ
 import { agentFromQuery, getAdapter } from '../agent.js';
 import { gatewayErrorFromWorker, validationError } from '../errors.js';
 import { resolveGatewayHome, resolveHermesHome, expandHomePrefix } from '../paths.js';
+import { listMcpServers, upsertMcpServer, removeMcpServer, toggleMcpServer, getMcpServer, type HermesMcpServerEntry } from '../mcpConfigStore.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -523,21 +524,35 @@ apiRouter.put('/skills/toggle', (req, res) => {
   });
 });
 
-apiRouter.get('/mcp/servers', (_req, res) => {
-  res.json({ servers: readStore().mcpServers });
+apiRouter.get('/mcp/servers', async (_req, res, next) => {
+  try {
+    res.json({ servers: await listMcpServers() });
+  } catch (err) { next(err); }
 });
 
-apiRouter.post('/mcp/servers', (req, res) => {
-  const body = (req.body ?? {}) as JsonObject;
-  const name = String(body.name || body.id || '').trim();
-  if (!name) throw validationError('name is required.', 'name');
-  const store = readStore();
-  const server = { id: name, enabled: true, builtin: false, ...body, name };
-  store.mcpServers = [...store.mcpServers.filter((item) => item.name !== name && item.id !== name), server];
-  writeStore(store);
-  res.json(server);
+apiRouter.post('/mcp/servers', async (req, res, next) => {
+  try {
+    const body = (req.body ?? {}) as JsonObject;
+    const name = String(body.name || body.id || '').trim();
+    if (!name) throw validationError('name is required.', 'name');
+    // The desktop sends a transport: { type, url, headers? } shape. Extract the
+    // Hermes config.yaml entry fields from it.
+    const transport = body.transport as { url?: string; headers?: Record<string, string>; type?: string } | undefined;
+    const url = String(body.url || transport?.url || '').trim();
+    if (!url) throw validationError('url is required (body.url or body.transport.url).', 'url');
+    const entry: HermesMcpServerEntry = {
+      url,
+      enabled: body.enabled !== false,
+      ...(transport?.headers || body.headers ? { headers: (transport?.headers || body.headers) as Record<string, string> } : {}),
+      ...(transport?.type && transport.type !== 'http' ? { transport: transport.type } : {}),
+    };
+    const server = await upsertMcpServer(name, entry);
+    res.json(server);
+  } catch (err) { next(err); }
 });
 
+// TODO: /mcp/servers/import still uses the old api-compat.json store. Migrate
+// to mcpConfigStore if the desktop's import flow is ever exercised.
 apiRouter.post('/mcp/servers/import', (req, res) => {
   const incoming = Array.isArray((req.body as { servers?: unknown } | undefined)?.servers)
     ? (req.body as { servers: JsonObject[] }).servers
@@ -554,35 +569,43 @@ apiRouter.post('/mcp/servers/import', (req, res) => {
   res.json(imported);
 });
 
-apiRouter.put('/mcp/servers/:id', (req, res) => {
-  const store = readStore();
-  const index = store.mcpServers.findIndex((item) => item.id === req.params.id || item.name === req.params.id);
-  if (index < 0) {
-    res.status(404).json({ error: { code: 'not_found', message: 'MCP server not found.' } });
-    return;
-  }
-  store.mcpServers[index] = { ...store.mcpServers[index], ...(req.body as JsonObject) };
-  writeStore(store);
-  res.json(store.mcpServers[index]);
+apiRouter.put('/mcp/servers/:id', async (req, res, next) => {
+  try {
+    const existing = await getMcpServer(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: { code: 'not_found', message: 'MCP server not found.' } });
+      return;
+    }
+    const body = (req.body ?? {}) as JsonObject;
+    const transport = body.transport as { url?: string; headers?: Record<string, string>; type?: string } | undefined;
+    const url = String(body.url || transport?.url || existing.transport.url).trim();
+    const entry: HermesMcpServerEntry = {
+      url,
+      enabled: body.enabled !== undefined ? Boolean(body.enabled) : existing.enabled,
+      ...(transport?.headers || body.headers || existing.transport.headers ? { headers: ((transport?.headers || body.headers || existing.transport.headers) as Record<string, string>) } : {}),
+      ...(transport?.type && transport.type !== 'http' ? { transport: transport.type } : {}),
+    };
+    const server = await upsertMcpServer(req.params.id, entry);
+    res.json(server);
+  } catch (err) { next(err); }
 });
 
-apiRouter.post('/mcp/servers/:id/toggle', (req, res) => {
-  const store = readStore();
-  const index = store.mcpServers.findIndex((item) => item.id === req.params.id || item.name === req.params.id);
-  if (index < 0) {
-    res.status(404).json({ error: { code: 'not_found', message: 'MCP server not found.' } });
-    return;
-  }
-  store.mcpServers[index] = { ...store.mcpServers[index], enabled: store.mcpServers[index].enabled === false };
-  writeStore(store);
-  res.json(store.mcpServers[index]);
+apiRouter.post('/mcp/servers/:id/toggle', async (req, res, next) => {
+  try {
+    const server = await toggleMcpServer(req.params.id);
+    if (!server) {
+      res.status(404).json({ error: { code: 'not_found', message: 'MCP server not found.' } });
+      return;
+    }
+    res.json(server);
+  } catch (err) { next(err); }
 });
 
-apiRouter.delete('/mcp/servers/:id', (req, res) => {
-  const store = readStore();
-  store.mcpServers = store.mcpServers.filter((item) => item.id !== req.params.id && item.name !== req.params.id);
-  writeStore(store);
-  res.status(204).end();
+apiRouter.delete('/mcp/servers/:id', async (req, res, next) => {
+  try {
+    await removeMcpServer(req.params.id);
+    res.status(204).end();
+  } catch (err) { next(err); }
 });
 
 apiRouter.post('/mcp/test-connection', (_req, res) => {

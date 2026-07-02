@@ -197,6 +197,27 @@ test('container compatibility API exposes Headmaster desktop smoke routes', asyn
   ]);
 });
 
+test('/api/mcp/servers POST writes to config.yaml and DELETE removes it', async () => {
+  const created = await jsonOk<{ id: string; name: string; enabled: boolean }>('/api/mcp/servers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'test-mcp',
+      enabled: true,
+      transport: { type: 'http', url: 'https://mcp.example.com/endpoint' },
+    }),
+  });
+  assert.equal(created.name, 'test-mcp');
+  assert.equal(created.enabled, true);
+
+  const { servers } = await jsonOk<{ servers: Array<{ name: string }> }>('/api/mcp/servers');
+  assert.ok(servers.some((s) => s.name === 'test-mcp'));
+
+  await fetch(`${base}/api/mcp/servers/test-mcp`, { method: 'DELETE' });
+  const { servers: after } = await jsonOk<{ servers: Array<{ name: string }> }>('/api/mcp/servers');
+  assert.ok(!after.some((s) => s.name === 'test-mcp'));
+});
+
 test('/v1 primitives still answer after mounting /api', async () => {
   const health = await jsonOk<{ ok: boolean; agent: string; healthy: boolean }>('/v1/health');
   assert.deepEqual(health, { ok: true, agent: 'hermes', healthy: true, hermes: true });
