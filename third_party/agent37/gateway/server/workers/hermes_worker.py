@@ -57,6 +57,14 @@ PENDING_INTERRUPTS: dict[str, str] = {}
 ACTIVE_TASKS_LOCK = threading.Lock()
 DEFAULT_INTERRUPT_REASON = "Stopped by user"
 
+# Interactive (human-in-the-loop) request tracking.
+# When a callback fires inside an agent run, it emits an interactive_request
+# event to stdout and blocks on a threading.Event. The gateway writes back an
+# interactive.respond request to stdin, which resolves the event and unblocks
+# the callback so the agent run can continue.
+PENDING_INTERACTIVE: dict[str, dict[str, Any]] = {}
+PENDING_INTERACTIVE_LOCK = threading.Lock()
+
 ALLOWED_REASONING = {"none", "minimal", "low", "medium", "high", "xhigh"}
 KNOWN_PROVIDER_PREFIXES = {
     "anthropic",
@@ -898,6 +906,107 @@ def _fallback_model(cfg: dict[str, Any]) -> dict[str, Any] | list[dict[str, Any]
     return _normalize_fallback_entry(cfg.get("fallback_model"))
 
 
+INTERACTIVE_TIMEOUT_SECONDS = 300  # 5 min — the agent run blocks until the user responds or this expires.
+
+INTERACTIVE_DEFAULT_TIMEOUT = int(os.environ.get("GATEWAY_INTERACTIVE_TIMEOUT_SECONDS", str(INTERACTIVE_TIMEOUT_SECONDS)))
+
+
+def _make_interactive_callback(
+    request_id_prefix: str,
+    kind: str,
+    request_id_field: str | None = None,
+) -> Callable[..., Any]:
+    """Build a callback that emits an interactive_request event and blocks until
+    the gateway sends back an interactive.respond request with the user's response.
+
+    The callback is called from inside the AIAgent's run_conversation, so it
+    runs on the chat thread. It writes the event to stdout (so the gateway can
+    forward it as an SSE event to the desktop client), then blocks on a
+    threading.Event until the gateway delivers the user's response via stdin.
+    """
+
+    def callback(*args: Any, **kwargs: Any) -> Any:
+        # Generate a unique request id for this interaction.
+        interactive_request_id = f"{request_id_prefix}-{int(time.time() * 1000)}"
+
+        # Build the event payload from the callback's arguments. The shape
+        # depends on the kind:
+        #   approval: (command, description, allow_permanent)
+        #   clarify:  (question, choices)
+        #   sudo:    ()
+        #   secret:  (env_var, prompt)
+        payload: dict[str, Any] = {
+            "kind": kind,
+            "request_id": interactive_request_id,
+        }
+
+        if kind == "approval":
+            command = str(args[0] if len(args) > 0 else kwargs.get("command", ""))
+            description = str(args[1] if len(args) > 1 else kwargs.get("description", command))
+            payload["command"] = command
+            payload["description"] = description
+        elif kind == "clarify":
+            question = str(args[0] if len(args) > 0 else kwargs.get("question", ""))
+            choices = args[1] if len(args) > 1 else kwargs.get("choices", [])
+            if isinstance(choices, (list, tuple)):
+                choices = [str(c) for c in choices]
+            else:
+                choices = []
+            payload["question"] = question
+            payload["choices"] = choices
+        elif kind == "sudo":
+            payload["description"] = "Sudo password required"
+        elif kind == "secret":
+            env_var = str(args[0] if len(args) > 0 else kwargs.get("env_var", ""))
+            prompt = str(args[1] if len(args) > 1 else kwargs.get("prompt", ""))
+            payload["env_var"] = env_var
+            payload["prompt"] = prompt or env_var or "Secret input required"
+
+        # Register the pending request with a threading.Event for blocking.
+        done_event = threading.Event()
+        with PENDING_INTERACTIVE_LOCK:
+            PENDING_INTERACTIVE[interactive_request_id] = {
+                "event": done_event,
+                "response": None,
+            }
+
+        # Emit the interactive_request event to stdout (gateway forwards as SSE).
+        _send({
+            "id": request_id_prefix,
+            "type": "interactive_request",
+            "interactive": payload,
+        })
+
+        # Block until the gateway sends interactive.respond or the timeout expires.
+        if not done_event.wait(timeout=INTERACTIVE_DEFAULT_TIMEOUT):
+            # Timeout — return a safe default so the agent can continue.
+            with PENDING_INTERACTIVE_LOCK:
+                PENDING_INTERACTIVE.pop(interactive_request_id, None)
+            if kind == "approval":
+                return "deny"
+            if kind == "clarify":
+                return ""
+            if kind in ("sudo", "secret"):
+                return ""
+            return None
+
+        # Retrieve the user's response.
+        with PENDING_INTERACTIVE_LOCK:
+            entry = PENDING_INTERACTIVE.pop(interactive_request_id, None)
+        if entry is None:
+            return None
+
+        response_value = entry.get("response")
+        if kind == "approval":
+            # Normalize: the user sends a choice string like 'once', 'session',
+            # 'always', or 'deny'. The AIAgent approval_callback expects the
+            # raw choice or a boolean.
+            return response_value
+        return response_value
+
+    return callback
+
+
 def _parse_reasoning(effort: str | None) -> dict[str, Any] | None:
     if not effort:
         return None
@@ -950,11 +1059,14 @@ def _create_agent(
     if not resolved_base_url:
         resolved_base_url = string_or_none(runtime.get("base_url"))
 
-    def clarify_callback(question: Any, choices: Any = None) -> str:
-        return (
-            "The user is not available for an interactive clarification right now. "
-            "Make a reasonable assumption, proceed, and call out the assumption in the response if it matters."
-        )
+    # Interactive callbacks: each emits an interactive_request event (forwarded
+    # by the gateway as an SSE event to the desktop client) and blocks on a
+    # threading.Event until the gateway delivers the user's response back via
+    # an interactive.respond request on stdin.
+    clarify_callback = _make_interactive_callback(request_id_prefix=session_id, kind="clarify")
+    approval_callback = _make_interactive_callback(request_id_prefix=session_id, kind="approval")
+    sudo_callback = _make_interactive_callback(request_id_prefix=session_id, kind="sudo")
+    secret_callback = _make_interactive_callback(request_id_prefix=session_id, kind="secret")
 
     session_db = None
     if _SessionDB is not None:
@@ -977,6 +1089,9 @@ def _create_agent(
         "enabled_toolsets": _resolve_toolsets(cfg),
         "fallback_model": _fallback_model(cfg),
         "clarify_callback": clarify_callback,
+        "approval_callback": approval_callback,
+        "sudo_callback": sudo_callback,
+        "secret_callback": secret_callback,
     }
     if callbacks:
         agent_kwargs.update(callbacks)
@@ -1469,6 +1584,34 @@ def _submit_chat_request(request_id: str, request: dict[str, Any]) -> None:
     thread.start()
 
 
+def _handle_interactive_respond(request_id: str, request: dict[str, Any]) -> None:
+    """Deliver the user's response to a blocked interactive callback.
+
+    The gateway sends this when the desktop client responds to an
+    interactive_request event. The `requestId` field matches the
+    `request_id` in the interactive_request payload; `response` is the
+    user's answer (choice string, free text, or password).
+    """
+    interactive_request_id = string_or_none(request.get("requestId"))
+    response_value = request.get("response")
+
+    if not interactive_request_id:
+        _result(request_id, {"ok": False, "error": "missing requestId"})
+        return
+
+    with PENDING_INTERACTIVE_LOCK:
+        entry = PENDING_INTERACTIVE.get(interactive_request_id)
+        if entry is None:
+            _result(request_id, {"ok": False, "error": "no pending interactive request with that id"})
+            return
+        entry["response"] = response_value
+        done_event: threading.Event = entry["event"]
+
+    # Unblock the callback thread.
+    done_event.set()
+    _result(request_id, {"ok": True})
+
+
 def _handle_request(request: dict[str, Any]) -> None:
     request_id = str(request.get("id") or "")
     if not request_id:
@@ -1513,6 +1656,8 @@ def _handle_request(request: dict[str, Any]) -> None:
             _submit_background_agent_request(request_id, request, name_prefix="goal", handler=_goal_evaluate)
         elif request_type == "chat.interrupt":
             _result(request_id, _interrupt_active_chat(request))
+        elif request_type == "interactive.respond":
+            _handle_interactive_respond(request_id, request)
         elif request_type == "chat":
             _submit_chat_request(request_id, request)
         else:

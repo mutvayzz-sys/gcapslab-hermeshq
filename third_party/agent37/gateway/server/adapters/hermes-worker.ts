@@ -13,7 +13,7 @@ import type {
   SessionMetadata,
 } from '../../shared/types.js';
 import type { AgentAdapter, AgentRunOptions, GoalCapableAdapter, StreamEvent } from './types.js';
-import type { WorkerEvent, WorkerRequest, WorkerResult, WorkerErrorPayload } from './worker-protocol.js';
+import type { WorkerEvent, WorkerRequest, WorkerResult, WorkerErrorPayload, InteractiveRequestData } from './worker-protocol.js';
 import { expandHomePrefix, resolveHermesHome, resolveWorkspaceDir } from '../paths.js';
 
 const WORKER_READY_TIMEOUT_MS = 10_000;
@@ -463,6 +463,12 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
           break;
         case 'result':
           break;
+        case 'interactive_request':
+          yield {
+            type: 'interactive_request',
+            interactive: event.interactive,
+          };
+          break;
       }
     }
   }
@@ -475,6 +481,20 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
       reason,
     }, WORKER_INTERRUPT_TIMEOUT_MS);
     return result.interrupted;
+  }
+
+  /** Deliver the user's response to a blocked interactive callback in the worker. */
+  async respondInteractive(requestId: string, response: string): Promise<boolean> {
+    try {
+      await this.client.request<{ ok: boolean }>({
+        type: 'interactive.respond',
+        requestId,
+        response,
+      }, WORKER_INTERRUPT_TIMEOUT_MS);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async healthCheck(): Promise<boolean> {

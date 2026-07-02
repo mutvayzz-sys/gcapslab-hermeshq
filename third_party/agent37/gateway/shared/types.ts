@@ -145,7 +145,19 @@ export type ResponseStreamEvent =
   | { event: 'response.tool_call.completed'; data: { tool: string; duration_ms?: number } }
   | { event: 'response.tool_call.failed'; data: { tool: string; error?: string } }
   | { event: 'response.completed'; data: { output_text: string; usage: TurnUsage | null } }
-  | { event: 'response.failed'; data: { error: ApiError } };
+  | { event: 'response.failed'; data: { error: ApiError } }
+  | { event: 'response.interactive.requested'; data: ResponseInteractiveData };
+
+export interface ResponseInteractiveData {
+  kind: 'approval' | 'clarify' | 'sudo' | 'secret';
+  request_id: string;
+  description?: string;
+  question?: string;
+  choices?: string[];
+  command?: string;
+  env_var?: string;
+  prompt?: string;
+}
 
 export type ResponseStreamEventName = ResponseStreamEvent['event'];
 

@@ -29,6 +29,12 @@ export type WorkerRequest =
   | { id: string; type: 'chat.interrupt'; sessionId: string; taskId?: string; reason?: string }
   | {
       id: string;
+      type: 'interactive.respond';
+      requestId: string;
+      response: string;
+    }
+  | {
+      id: string;
       type: 'chat';
       sessionId: string;
       message: string;
@@ -58,6 +64,17 @@ export type WorkerResult =
   | { interrupted: boolean }
   | GoalDecision;
 
+export interface InteractiveRequestData {
+  kind: 'approval' | 'clarify' | 'sudo' | 'secret';
+  request_id: string;
+  description?: string;
+  question?: string;
+  choices?: string[];
+  command?: string;
+  env_var?: string;
+  prompt?: string;
+}
+
 export type WorkerEvent =
   | { id: string; type: 'result'; data: WorkerResult }
   | { id: string; type: 'text_delta'; content?: string }
@@ -78,4 +95,5 @@ export type WorkerEvent =
       usage?: TurnUsage | null;
       interrupted?: boolean;
     }
-  | { id: string; type: 'error'; error: string | WorkerErrorPayload };
+  | { id: string; type: 'error'; error: string | WorkerErrorPayload }
+  | { id: string; type: 'interactive_request'; interactive: InteractiveRequestData };

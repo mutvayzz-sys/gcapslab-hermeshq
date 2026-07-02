@@ -133,6 +133,14 @@ export async function driveResponse(begun: BegunResponse, input: string): Promis
         case 'tool_progress':
           emitToolProgress(responseId, event);
           break;
+        case 'interactive_request':
+          if (event.interactive) {
+            emit(responseId, {
+              event: 'response.interactive.requested',
+              data: event.interactive,
+            });
+          }
+          break;
         case 'done':
           // The worker closes every turn with a trailing `done`, including
           // after an `error` event — a reported failure must stay failed.
@@ -198,6 +206,29 @@ export async function cancelResponse(responseId: string): Promise<ResponseObject
     await getAdapter(response.agent).interruptChat(response.session_id);
   }
   return getResponse(responseId) ?? response;
+}
+
+/**
+ * Deliver the user's response to a pending interactive prompt (approval,
+ * clarify, sudo, secret) on a running turn. The adapter forwards it to the
+ * worker, which unblocks the callback and lets the agent run continue.
+ */
+export async function respondInteractive(
+  responseId: string,
+  requestId: string,
+  response: string,
+): Promise<{ ok: boolean }> {
+  const stored = getResponse(responseId);
+  if (!stored) throw responseNotFound(responseId);
+  if (stored.status !== 'in_progress') {
+    return { ok: false };
+  }
+  const adapter = getAdapter(stored.agent);
+  if (!adapter.respondInteractive) {
+    return { ok: false };
+  }
+  const ok = await adapter.respondInteractive(requestId, response);
+  return { ok };
 }
 
 /** Reconstruct a terminal response's stream from stored state, for reconnects

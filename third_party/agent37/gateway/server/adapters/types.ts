@@ -19,9 +19,20 @@ export interface AgentRunOptions {
   settings?: AgentRunSettings;
 }
 
+export interface InteractiveRequestEventData {
+  kind: 'approval' | 'clarify' | 'sudo' | 'secret';
+  request_id: string;
+  description?: string;
+  question?: string;
+  choices?: string[];
+  command?: string;
+  env_var?: string;
+  prompt?: string;
+}
+
 /** A normalized streaming event from an agent turn. */
 export interface StreamEvent {
-  type: 'text_delta' | 'thinking_delta' | 'tool_progress' | 'done' | 'error';
+  type: 'text_delta' | 'thinking_delta' | 'tool_progress' | 'done' | 'error' | 'interactive_request';
   content?: string;
   error?: string;
   code?: string;
@@ -34,6 +45,7 @@ export interface StreamEvent {
   context?: ContextUsage | null;
   usage?: TurnUsage | null;
   interrupted?: boolean;
+  interactive?: InteractiveRequestEventData;
 }
 
 /**
@@ -52,6 +64,9 @@ export interface AgentAdapter {
 
   /** Stop a running turn for a session. Returns whether anything was stopped. */
   interruptChat(sessionId: string, reason?: string): Promise<boolean>;
+
+  /** Deliver a user's response to a pending interactive callback in the worker. */
+  respondInteractive?(requestId: string, response: string): Promise<boolean>;
 
   /** True when the backend is reachable and ready. */
   healthCheck(): Promise<boolean>;

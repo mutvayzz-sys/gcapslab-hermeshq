@@ -15,6 +15,7 @@ import {
   beginResponse,
   cancelResponse,
   driveResponse,
+  respondInteractive,
   synthesizeStreamEvents,
   type ResponseRequest,
 } from '../responses.js';
@@ -217,6 +218,22 @@ responsesRouter.post('/:id/cancel', async (req, res, next) => {
   try {
     const response = await cancelResponse(req.params.id);
     res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /v1/responses/:id/interactive — respond to an interactive prompt
+// (approval, clarify, sudo, secret) on a running turn.
+responsesRouter.post('/:id/interactive', async (req, res, next) => {
+  try {
+    const requestId = optionalString(req.body?.request_id, 'request_id');
+    const response = optionalString(req.body?.response, 'response');
+    if (!requestId || !response) {
+      return next(validationError('request_id and response are required.', 'body'));
+    }
+    const result = await respondInteractive(req.params.id, requestId, response);
+    res.json(result);
   } catch (error) {
     next(error);
   }
