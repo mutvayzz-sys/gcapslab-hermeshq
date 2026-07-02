@@ -108,7 +108,10 @@ async function jsonOk<T>(path: string, init?: RequestInit): Promise<T> {
 
 test('container compatibility API exposes Headmaster desktop smoke routes', async () => {
   const agents = await jsonOk<Array<{ id: string; available: boolean }>>('/api/agents');
-  assert.deepEqual(agents.map((agent) => [agent.id, agent.available]), [['hermes', true]]);
+  assert.deepEqual(
+    agents.map((agent) => [agent.id, agent.available]),
+    [['hermes', true]]
+  );
 
   const assistants = await jsonOk<Array<{ id: string; models: string[] }>>('/api/assistants');
   assert.deepEqual(assistants, [
@@ -132,7 +135,7 @@ test('container compatibility API exposes Headmaster desktop smoke routes', asyn
     },
   ]);
 
-  assert.deepEqual(await jsonOk('/api/cron/jobs'), { jobs: [] });
+  assert.deepEqual(await jsonOk('/api/cron/jobs'), []);
   assert.deepEqual(await jsonOk('/api/mcp/servers'), { servers: [] });
 
   const skills = await jsonOk<{ skills: unknown[] }>('/api/skills');
@@ -140,7 +143,10 @@ test('container compatibility API exposes Headmaster desktop smoke routes', asyn
   assert.equal((await jsonOk<{ name: string }>('/api/skills/builtin-auto')).name, 'builtin-auto');
 
   const profiles = await jsonOk<{ profiles: Array<{ name: string; model: string }> }>('/api/profiles');
-  assert.deepEqual(profiles.profiles.map((profile) => [profile.name, profile.model]), [['default', 'nous/test-model']]);
+  assert.deepEqual(
+    profiles.profiles.map((profile) => [profile.name, profile.model]),
+    [['default', 'nous/test-model']]
+  );
 
   const providers = await jsonOk<Array<{ slug: string; models: string[] }>>('/api/providers');
   assert.deepEqual(providers, [
@@ -156,7 +162,7 @@ test('container compatibility API exposes Headmaster desktop smoke routes', asyn
   ]);
 
   const modelOptions = await jsonOk<{ default_model: string; providers: unknown[]; options: unknown[] }>(
-    '/api/model/options',
+    '/api/model/options'
   );
   assert.equal(modelOptions.default_model, 'nous/test-model');
   assert.equal(modelOptions.providers.length, 1);
@@ -167,24 +173,28 @@ test('container compatibility API exposes Headmaster desktop smoke routes', asyn
   assert.equal(sessions.sessions[0]?.id, 'session-1');
 
   const messages = await jsonOk<{ session_id: string; messages: Array<{ role: string; text: string }> }>(
-    '/api/sessions/session-1/messages',
+    '/api/sessions/session-1/messages'
   );
   assert.equal(messages.session_id, 'session-1');
-  assert.deepEqual(messages.messages.map((message) => [message.role, message.text]), [
-    ['user', 'make a report'],
-    ['assistant', 'created artifact report.md'],
-  ]);
+  assert.deepEqual(
+    messages.messages.map((message) => [message.role, message.text]),
+    [
+      ['user', 'make a report'],
+      ['assistant', 'created artifact report.md'],
+    ]
+  );
 
-  const artifacts = await jsonOk<{ artifacts: Array<{ id: string }> }>('/api/conversations/session-1/artifacts');
-  assert.deepEqual(artifacts.artifacts.map((artifact) => artifact.id), ['msg-2']);
-  assert.deepEqual(await jsonOk('/api/conversations/session-1/confirmations'), { confirmations: [] });
+  const artifacts = await jsonOk<Array<{ id: string }>>('/api/conversations/session-1/artifacts');
+  assert.deepEqual(
+    artifacts.map((artifact) => artifact.id),
+    ['msg-2']
+  );
+  assert.deepEqual(await jsonOk('/api/conversations/session-1/confirmations'), []);
   assert.deepEqual(await jsonOk('/api/conversations/session-1/mode'), { mode: 'default', initialized: false });
-  assert.deepEqual(await jsonOk('/api/conversations/session-1/slash-commands'), {
-    commands: [
-      { name: '/help', description: 'Show available runtime commands' },
-      { name: '/clear', description: 'Start a fresh context' },
-    ],
-  });
+  assert.deepEqual(await jsonOk('/api/conversations/session-1/slash-commands'), [
+    { command: '/help', description: 'Show available runtime commands' },
+    { command: '/clear', description: 'Start a fresh context' },
+  ]);
 });
 
 test('/v1 primitives still answer after mounting /api', async () => {
@@ -193,5 +203,8 @@ test('/v1 primitives still answer after mounting /api', async () => {
 
   const models = await jsonOk<{ object: string; data: Array<{ id: string }> }>('/v1/models');
   assert.equal(models.object, 'list');
-  assert.deepEqual(models.data.map((model) => model.id), ['nous/test-model']);
+  assert.deepEqual(
+    models.data.map((model) => model.id),
+    ['nous/test-model']
+  );
 });

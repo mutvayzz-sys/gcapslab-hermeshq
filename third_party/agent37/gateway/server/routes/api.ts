@@ -646,7 +646,11 @@ apiRouter.get('/cron/jobs', (req, res) => {
   const jobs = conversationId
     ? readStore().cronJobs.filter((job) => job.conversation_id === conversationId)
     : readStore().cronJobs;
-  res.json({ jobs });
+  // ipcBridge.ts's cronManage.listJobs/listJobsByConversation expect a raw
+  // ICronJob[] from GET /api/cron/jobs, not an { jobs } envelope — wrapping it
+  // broke `.map()` on the desktop client (see cronManage.listJobs in
+  // headmasterUI's ipcBridge.ts).
+  res.json(jobs);
 });
 
 apiRouter.post('/cron/jobs', (req, res) => {
@@ -750,14 +754,18 @@ apiRouter.get('/conversations/:id/artifacts', async (req, res, next) => {
         content: message.content,
         created_at: message.created_at,
       }));
-    res.json({ artifacts });
+    // ipcBridge.ts's chatApi.listArtifacts expects a raw IConversationArtifact[],
+    // not an { artifacts } envelope.
+    res.json(artifacts);
   } catch (error) {
     next(error);
   }
 });
 
 apiRouter.get('/conversations/:id/confirmations', (_req, res) => {
-  res.json({ confirmations: [] });
+  // ipcBridge.ts's getConfirmations expects a raw IConfirmation<unknown>[],
+  // not a { confirmations } envelope.
+  res.json([]);
 });
 
 apiRouter.get('/conversations/:id/mode', (req, res) => {
@@ -774,12 +782,14 @@ apiRouter.put('/conversations/:id/mode', (req, res) => {
 });
 
 apiRouter.get('/conversations/:id/slash-commands', (_req, res) => {
-  res.json({
-    commands: [
-      { name: '/help', description: 'Show available runtime commands' },
-      { name: '/clear', description: 'Start a fresh context' },
-    ],
-  });
+  // ipcBridge.ts's chatApi.getSlashCommands expects a raw AcpSlashCommandApiItem[]
+  // (each item keyed by `command`, not `name`) — not a { commands } envelope.
+  // Getting this wrong throws inside acpMapping's spread/`.map` and takes down
+  // the whole renderer via AppErrorBoundary.
+  res.json([
+    { command: '/help', description: 'Show available runtime commands' },
+    { command: '/clear', description: 'Start a fresh context' },
+  ]);
 });
 
 apiRouter.get('/extensions', (_req, res) => {
