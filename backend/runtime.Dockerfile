@@ -23,7 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
+COPY backend/hermes-agent-patches/ /tmp/hermes-agent-patches/
+
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent \
+    && cd /opt/hermes-agent \
+    && for p in /tmp/hermes-agent-patches/*.patch; do git apply "$p"; done \
     && python3 -m venv /opt/hermes-venv \
     && /opt/hermes-venv/bin/pip install --upgrade pip setuptools wheel \
     && /opt/hermes-venv/bin/pip install -e "/opt/hermes-agent[anthropic]"

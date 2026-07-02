@@ -1084,6 +1084,13 @@ def _warm_agent() -> None:
     _load_config()
 
 
+def _reload_mcp() -> dict[str, Any]:
+    _ensure_imports()
+    from tools.mcp_tool import reload_mcp_from_config
+
+    return reload_mcp_from_config()
+
+
 def _goal_manager(session_id: str) -> Any:
     _ensure_imports()
     if not session_id:
@@ -1489,6 +1496,8 @@ def _handle_request(request: dict[str, Any]) -> None:
             _result(request_id, _set_defaults(request))
         elif request_type == "models.list":
             _result(request_id, _list_models())
+        elif request_type == "mcp.reload":
+            _submit_background_agent_request(request_id, request, name_prefix="mcp-reload", handler=lambda _request: _reload_mcp())
         elif request_type == "sessions.list":
             _result(request_id, list_sessions())
         elif request_type == "session.messages.get":

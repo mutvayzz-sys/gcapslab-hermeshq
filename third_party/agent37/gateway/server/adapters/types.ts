@@ -80,6 +80,17 @@ export interface AgentAdapter {
 
   /** The backend's current default model/provider/reasoning. */
   getDefaults(): Promise<AgentDefaults>;
+
+  /** Refresh any long-lived MCP registry from the backend's current config. */
+  reloadMcp?(): Promise<ReloadMcpResult>;
+}
+
+export interface ReloadMcpResult {
+  added: string[];
+  removed: string[];
+  reconnected: string[];
+  tool_count: number;
+  server_count: number;
 }
 
 /** Goal-mode primitives, implemented by the worker and reserved for the

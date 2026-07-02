@@ -12,12 +12,13 @@ import type {
   HermesMessage,
   SessionMetadata,
 } from '../../shared/types.js';
-import type { AgentAdapter, AgentRunOptions, GoalCapableAdapter, StreamEvent } from './types.js';
+import type { AgentAdapter, AgentRunOptions, GoalCapableAdapter, ReloadMcpResult, StreamEvent } from './types.js';
 import type { WorkerEvent, WorkerRequest, WorkerResult, WorkerErrorPayload } from './worker-protocol.js';
 import { expandHomePrefix, resolveHermesHome, resolveWorkspaceDir } from '../paths.js';
 
 const WORKER_READY_TIMEOUT_MS = 10_000;
 const WORKER_INTERRUPT_TIMEOUT_MS = 10_000;
+const MCP_RELOAD_TIMEOUT_MS = 130_000;
 
 type WorkerRequestInput = WorkerRequest extends infer Request
   ? Request extends WorkerRequest
@@ -540,6 +541,10 @@ export class HermesWorkerAdapter implements AgentAdapter, GoalCapableAdapter {
 
   async getDefaults(): Promise<AgentDefaults> {
     return await this.client.request<AgentDefaults>('settings.get');
+  }
+
+  async reloadMcp(): Promise<ReloadMcpResult> {
+    return await this.client.request<ReloadMcpResult>('mcp.reload', MCP_RELOAD_TIMEOUT_MS);
   }
 
   // --- Goal primitives (reserved for the goal-mode fast-follow) -------------

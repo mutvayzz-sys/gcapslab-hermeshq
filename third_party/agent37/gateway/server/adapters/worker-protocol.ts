@@ -15,6 +15,7 @@ export type WorkerRequest =
   | { id: string; type: 'settings.get' }
   | { id: string; type: 'settings.set'; provider?: string | null; model?: string | null; reasoningEffort?: string | null }
   | { id: string; type: 'models.list' }
+  | { id: string; type: 'mcp.reload' }
   | { id: string; type: 'sessions.list' }
   | { id: string; type: 'session.messages.get'; sessionId: string; taskId?: string }
   | { id: string; type: 'session.get'; sessionId: string }
@@ -48,6 +49,7 @@ export type WorkerResult =
   | { ok: boolean; agentDir?: string | null; python?: string | null }
   | AgentDefaults
   | AgentModelsResponse
+  | { added: string[]; removed: string[]; reconnected: string[]; tool_count: number; server_count: number }
   | { sessions: Record<string, unknown>[] }
   | { messages: HermesMessage[] }
   | { session: SessionMetadata | null }

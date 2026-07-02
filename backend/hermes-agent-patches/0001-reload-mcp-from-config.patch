@@ -1,0 +1,33 @@
+--- a/tools/mcp_tool.py
++++ b/tools/mcp_tool.py
+@@ -4436,6 +4436,30 @@
+     return tool_names
+ 
+ 
++def reload_mcp_from_config() -> dict:
++    """Refresh the MCP server registry from the current config.yaml.
++
++    Returns a summary of what changed. This function only mutates the process-global
++    MCP registry; callers with their own agent/session caches must refresh those separately.
++    """
++    with _lock:
++        old_servers = set(_servers.keys())
++    shutdown_mcp_servers()
++    new_tools = discover_mcp_tools()
++    with _lock:
++        connected_servers = set(_servers.keys())
++    added = connected_servers - old_servers
++    removed = old_servers - connected_servers
++    reconnected = connected_servers & old_servers
++    return {
++        "added": sorted(added),
++        "removed": sorted(removed),
++        "reconnected": sorted(reconnected),
++        "tool_count": len(new_tools),
++        "server_count": len(connected_servers),
++    }
++
++
+ def is_mcp_tool_parallel_safe(tool_name: str) -> bool:
+     """Check if an MCP tool belongs to a server that supports parallel tool calls.
+ 

@@ -551,22 +551,31 @@ apiRouter.post('/mcp/servers', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// TODO: /mcp/servers/import still uses the old api-compat.json store. Migrate
-// to mcpConfigStore if the desktop's import flow is ever exercised.
-apiRouter.post('/mcp/servers/import', (req, res) => {
-  const incoming = Array.isArray((req.body as { servers?: unknown } | undefined)?.servers)
-    ? (req.body as { servers: JsonObject[] }).servers
-    : [];
-  const store = readStore();
-  const imported = incoming.map((item) => ({
-    id: String(item.name || item.id),
-    enabled: true,
-    builtin: false,
-    ...item,
-  }));
-  store.mcpServers = [...store.mcpServers, ...imported];
-  writeStore(store);
-  res.json(imported);
+apiRouter.post('/mcp/servers/import', async (req, res, next) => {
+  try {
+    const incoming = Array.isArray((req.body as { servers?: unknown } | undefined)?.servers)
+      ? (req.body as { servers: JsonObject[] }).servers
+      : [];
+    const imported = [];
+    for (const item of incoming) {
+      const name = String(item.name || item.id || '').trim();
+      if (!name) continue;
+
+      const transport = item.transport as { url?: string; headers?: Record<string, string>; type?: string } | undefined;
+      const url = String(item.url || transport?.url || '').trim();
+      if (!url) continue;
+
+      const entry: HermesMcpServerEntry = {
+        url,
+        enabled: item.enabled !== false,
+        ...(transport?.headers || item.headers ? { headers: (transport?.headers || item.headers) as Record<string, string> } : {}),
+        ...(transport?.type && transport.type !== 'http' ? { transport: transport.type } : {}),
+      };
+
+      imported.push(await upsertMcpServer(name, entry));
+    }
+    res.json(imported);
+  } catch (err) { next(err); }
 });
 
 apiRouter.put('/mcp/servers/:id', async (req, res, next) => {
@@ -610,6 +619,17 @@ apiRouter.delete('/mcp/servers/:id', async (req, res, next) => {
 
 apiRouter.post('/mcp/test-connection', (_req, res) => {
   res.json({ ok: true, success: true });
+});
+
+apiRouter.post('/mcp/reload', async (req, res, next) => {
+  try {
+    const adapter = getAdapter(selectedAgent(req));
+    if (typeof adapter.reloadMcp !== 'function') {
+      res.status(501).json({ error: { code: 'unsupported', message: 'MCP reload is not supported by this adapter.' } });
+      return;
+    }
+    res.json(await adapter.reloadMcp());
+  } catch (err) { next(err); }
 });
 
 apiRouter.get('/mcp/catalog', (_req, res) => {

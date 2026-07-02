@@ -84,6 +84,15 @@ const fakeAdapter: AgentAdapter = {
       showReasoning: true,
     };
   },
+  async reloadMcp() {
+    return {
+      added: ['composio'],
+      removed: [],
+      reconnected: [],
+      tool_count: 3,
+      server_count: 1,
+    };
+  },
 };
 
 let server: TestServer | undefined;
@@ -216,6 +225,51 @@ test('/api/mcp/servers POST writes to config.yaml and DELETE removes it', async 
   await fetch(`${base}/api/mcp/servers/test-mcp`, { method: 'DELETE' });
   const { servers: after } = await jsonOk<{ servers: Array<{ name: string }> }>('/api/mcp/servers');
   assert.ok(!after.some((s) => s.name === 'test-mcp'));
+});
+
+
+test('/api/mcp/servers/import persists imported servers to config.yaml', async () => {
+  const imported = await jsonOk<Array<{ id: string; enabled: boolean }>>('/api/mcp/servers/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      servers: [
+        {
+          name: 'imported-composio',
+          enabled: true,
+          transport: {
+            type: 'http',
+            url: 'https://backend.composio.dev/v3/mcp/server?user_id=user-1',
+            headers: { 'x-api-key': 'test-key' },
+          },
+        },
+      ],
+    }),
+  });
+
+  assert.ok(imported.some((server) => server.id === 'imported-composio' && server.enabled));
+
+  const { listMcpServers } = await import('../server/mcpConfigStore.js');
+  const servers = await listMcpServers();
+  assert.ok(
+    servers.some(
+      (server) =>
+        server.id === 'imported-composio' &&
+        server.transport.url === 'https://backend.composio.dev/v3/mcp/server?user_id=user-1' &&
+        server.transport.headers?.['x-api-key'] === 'test-key'
+    )
+  );
+
+  await fetch(`${base}/api/mcp/servers/imported-composio`, { method: 'DELETE' });
+});
+
+test('/api/mcp/reload returns worker reload summary', async () => {
+  const summary = await jsonOk<{ added: string[]; tool_count: number; server_count: number }>('/api/mcp/reload', {
+    method: 'POST',
+  });
+  assert.deepEqual(summary.added, ['composio']);
+  assert.equal(summary.tool_count, 3);
+  assert.equal(summary.server_count, 1);
 });
 
 test('/v1 primitives still answer after mounting /api', async () => {
