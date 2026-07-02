@@ -27,6 +27,8 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64)
+    email: str | None = Field(default=None, max_length=255)
     display_name: str | None = Field(default=None, min_length=1, max_length=128)
     password: str | None = Field(default=None, min_length=8, max_length=256)
     role: str | None = Field(default=None, pattern="^(admin|user)$")
@@ -51,6 +53,7 @@ class UserUpdate(BaseModel):
 class UserManagedRead(ORMModel):
     id: str
     username: str
+    email: str | None = None
     display_name: str
     role: str
     is_active: bool

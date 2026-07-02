@@ -77,6 +77,7 @@ def _serialize_user(request: Request, user: User, assigned_agent_ids: list[str])
     return UserManagedRead(
         id=user.id,
         username=user.username,
+        email=user.email,
         display_name=user.display_name,
         role=user.role,
         is_active=user.is_active,
@@ -149,8 +150,19 @@ async def update_user(
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if user.username == current_user.username and payload.role == "user":
+    is_self = user.id == current_user.id
+    if is_self and payload.role == "user":
         raise HTTPException(status_code=400, detail="You cannot demote the current admin session")
+    if payload.username is not None and payload.username != user.username:
+        existing = await db.execute(select(User).where(User.username == payload.username))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Username already exists")
+        user.username = payload.username
+    if payload.email is not None and payload.email != user.email:
+        existing_email = await db.execute(select(User).where(User.email == payload.email))
+        if existing_email.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Email already registered")
+        user.email = payload.email
     if payload.display_name is not None:
         user.display_name = payload.display_name
     if payload.password is not None:
@@ -158,7 +170,7 @@ async def update_user(
     if payload.role is not None:
         user.role = payload.role
     if payload.is_active is not None:
-        if user.username == current_user.username and not payload.is_active:
+        if is_self and not payload.is_active:
             raise HTTPException(status_code=400, detail="You cannot deactivate the current admin session")
         user.is_active = payload.is_active
     if payload.assigned_agent_ids is not None:
