@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent \
     && python3 -m venv /opt/hermes-venv \
     && /opt/hermes-venv/bin/pip install --upgrade pip setuptools wheel \
-    && /opt/hermes-venv/bin/pip install -e /opt/hermes-agent
+    && /opt/hermes-venv/bin/pip install -e "/opt/hermes-agent[anthropic]"
 
 WORKDIR /opt/agent37-gateway
 COPY third_party/agent37/gateway/package*.json ./
